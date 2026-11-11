@@ -81,3 +81,11 @@ cargo test --workspace --locked --jobs 1 --lib --tests --no-fail-fast -- --skip 
 
 Edit `[editor.ai-completion]` in the normal config and use `:config-reload`.
 Existing terminal sessions may need to be reopened to inherit the updated PATH.
+
+## Publication
+
+Feature commit `47590452` was fast-forwarded to `master` and pushed to
+`https://github.com/KevinShuo/helix.git`. The remote `master` reference matched the
+local feature commit after publication. This record is committed separately after
+the verified rollout; the installed executable was built from the same feature
+source before the commits were created.

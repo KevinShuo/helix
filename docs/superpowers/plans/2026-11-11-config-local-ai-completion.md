@@ -63,7 +63,7 @@ user config/themes/PATH and the Scoop Helix package (backed up).
   the selected `gruvbox_dark_soft -> gruvbox` theme inheritance chain.
 - [x] Verify the new build, uninstall Scoop Helix and add `target/release` to user PATH.
 - [x] Apply the Q6_K settings to the normal user config and verify theme preservation.
-- [ ] Commit and push the verified changes to `KevinShuo/helix`.
+- [x] Commit and push the verified changes to `KevinShuo/helix`.
 
 ## Execution record
 
@@ -94,3 +94,6 @@ user config/themes/PATH and the Scoop Helix package (backed up).
   `gruvbox_dark_soft`, and the normal editor advertises the Q6_K model on port 19240.
   Python/C++/Rust parser and query health checks pass; closing the editor releases
   its server. Existing settings and both inherited theme files compare unchanged.
+- Published feature commit `47590452` to `origin/master`; the remote reference was
+  checked after the push. The installed executable was built and tested from the
+  same source tree before committing.
