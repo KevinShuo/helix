@@ -315,34 +315,36 @@ fn diag_picker(
     .truncate_start(false)
 }
 
-pub fn symbol_picker(cx: &mut Context) {
-    fn nested_to_flat(
-        list: &mut Vec<SymbolInformationItem>,
-        file: &lsp::TextDocumentIdentifier,
-        uri: &Uri,
-        symbol: lsp::DocumentSymbol,
-        offset_encoding: OffsetEncoding,
-    ) {
-        #[allow(deprecated)]
-        list.push(SymbolInformationItem {
-            symbol: lsp::SymbolInformation {
-                name: symbol.name,
-                kind: symbol.kind,
-                tags: symbol.tags,
-                deprecated: symbol.deprecated,
-                location: lsp::Location::new(file.uri.clone(), symbol.selection_range),
-                container_name: None,
-            },
-            location: Location {
-                uri: uri.clone(),
-                range: symbol.selection_range,
-                offset_encoding,
-            },
-        });
-        for child in symbol.children.into_iter().flatten() {
-            nested_to_flat(list, file, uri, child, offset_encoding);
-        }
+fn nested_to_flat(
+    list: &mut Vec<SymbolInformationItem>,
+    file: &lsp::TextDocumentIdentifier,
+    uri: &Uri,
+    symbol: lsp::DocumentSymbol,
+    offset_encoding: OffsetEncoding,
+    parent: Option<&str>,
+) {
+    let name = symbol.name.clone();
+    #[allow(deprecated)]
+    list.push(SymbolInformationItem {
+        symbol: lsp::SymbolInformation {
+            name: symbol.name,
+            kind: symbol.kind,
+            tags: symbol.tags,
+            deprecated: symbol.deprecated,
+            location: lsp::Location::new(file.uri.clone(), symbol.selection_range),
+            container_name: parent.map(str::to_owned),
+        },
+        location: Location {
+            uri: uri.clone(),
+            range: symbol.selection_range,
+            offset_encoding,
+        },
+    });
+    for child in symbol.children.into_iter().flatten() {
+        nested_to_flat(list, file, uri, child, offset_encoding, Some(&name));
     }
+}
+pub fn symbol_picker(cx: &mut Context) {
     let doc = doc!(cx.editor);
 
     let mut seen_language_servers = HashSet::new();
@@ -386,6 +388,7 @@ pub fn symbol_picker(cx: &mut Context) {
                                 &doc_uri,
                                 symbol,
                                 offset_encoding,
+                                None,
                             )
                         }
                         flat_symbols
@@ -447,6 +450,44 @@ pub fn symbol_picker(cx: &mut Context) {
 
         Ok(Callback::EditorCompositor(Box::new(call)))
     });
+}
+
+#[cfg(test)]
+mod function_hint_symbol_tests {
+    use super::*;
+
+    #[test]
+    fn hierarchical_symbols_preserve_picker_container_names() {
+        let file = lsp::TextDocumentIdentifier::new(
+            lsp::Url::from_file_path(std::env::temp_dir().join("symbols.py")).unwrap(),
+        );
+        let uri = Uri::try_from(&file.uri).unwrap();
+        let mut symbols = Vec::new();
+        for parent in ["First", "Second"] {
+            let symbol: lsp::DocumentSymbol = serde_json::from_value(serde_json::json!({
+                "name": parent, "kind": 5,
+                "range": {"start": {"line": 0, "character": 0}, "end": {"line": 2, "character": 0}},
+                "selectionRange": {"start": {"line": 0, "character": 6}, "end": {"line": 0, "character": 12}},
+                "children": [{"name": "read", "kind": 6,
+                    "range": {"start": {"line": 1, "character": 0}, "end": {"line": 2, "character": 0}},
+                    "selectionRange": {"start": {"line": 1, "character": 8}, "end": {"line": 1, "character": 12}}
+                }]
+            })).unwrap();
+            nested_to_flat(
+                &mut symbols,
+                &file,
+                &uri,
+                symbol,
+                OffsetEncoding::Utf16,
+                None,
+            );
+        }
+        assert_eq!(symbols[1].symbol.name, "read");
+        assert_eq!(symbols[1].symbol.container_name.as_deref(), Some("First"));
+        assert_eq!(symbols[3].symbol.name, "read");
+        assert_eq!(symbols[3].symbol.container_name.as_deref(), Some("Second"));
+        assert_eq!(symbols[1].location.range.start, lsp::Position::new(1, 8));
+    }
 }
 
 pub fn workspace_symbol_picker(cx: &mut Context) {

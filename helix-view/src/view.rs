@@ -502,6 +502,32 @@ impl View {
         };
         let config = doc.config.load();
 
+        if let Some(hints) = doc.function_hints.get(&self.id).filter(|hints| {
+            hints.request.version == doc.version()
+                && hints.request.generation == crate::function_hints::generation()
+        }) {
+            let style = |scope| {
+                theme.and_then(|theme| {
+                    theme
+                        .find_highlight_exact(scope)
+                        .or_else(|| theme.find_highlight_exact("ui.virtual.function-hint"))
+                        .or_else(|| theme.find_highlight("ui.virtual.inlay-hint"))
+                })
+            };
+            if config.function_hints.references {
+                text_annotations.add_inline_annotations(
+                    &hints.references,
+                    style("ui.virtual.function-hint.references"),
+                );
+            }
+            if config.function_hints.git_author {
+                text_annotations.add_inline_annotations(
+                    &hints.authors,
+                    style("ui.virtual.function-hint.author"),
+                );
+            }
+        }
+
         if config.lsp.display_color_swatches {
             if let Some(DocumentColorSwatches {
                 color_swatches,

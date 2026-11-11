@@ -321,6 +321,8 @@ pub struct Config {
     pub auto_completion: bool,
     /// Independent inline suggestions from an OpenAI-compatible model.
     pub ai_completion: crate::ai_completion::AiCompletionConfig,
+    /// Function reference counts and latest Git authors beside declarations.
+    pub function_hints: crate::function_hints::FunctionHintsConfig,
     /// Enable filepath completion.
     /// Show files and directories if an existing path at the cursor was recognized,
     /// either absolute or relative to the current opened document or current working directory (if the buffer is not yet saved).
@@ -1193,6 +1195,7 @@ impl Default for Config {
             auto_pairs: AutoPairConfig::default(),
             auto_completion: true,
             ai_completion: crate::ai_completion::AiCompletionConfig::default(),
+            function_hints: crate::function_hints::FunctionHintsConfig::default(),
             path_completion: true,
             word_completion: WordCompletion::default(),
             auto_format: true,

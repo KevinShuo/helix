@@ -4,6 +4,7 @@
 - [`[editor.clipboard-provider]` Section](#editorclipboard-provider-section)
 - [`[editor.statusline]` Section](#editorstatusline-section)
 - [`[editor.lsp]` Section](#editorlsp-section)
+- [`[editor.function-hints]` Section](#editorfunction-hints-section)
 - [`[editor.cursor-shape]` Section](#editorcursor-shape-section)
 - [`[editor.file-picker]` Section](#editorfile-picker-section)
 - [`[editor.file-explorer]` Section](#editorfile-explorer-section)
@@ -180,6 +181,46 @@ The following statusline elements can be configured:
 [^1]: By default, a progress spinner is shown in the statusline beside the file path.
 
 [^2]: You may also have to activate them in the language server config for them to appear, not just in Helix. Inlay hints in Helix are still being improved on and may be a little bit laggy/janky under some circumstances. Please report any bugs you see so we can fix them!
+
+### `[editor.function-hints]` Section
+
+Show reference counts and the latest Git commit author at the end of visible
+function, method and constructor declarations. These are virtual annotations;
+they are never inserted into the file.
+
+```toml
+[editor.function-hints]
+references = true
+git-author = true
+```
+
+| Key | Description | Default |
+| --- | --- | --- |
+| `references` | Show `1 usage` or `N usages`, excluding the declaration itself | `false` |
+| `git-author` | Show the author of the latest commit changing the function | `false` |
+
+Both hints require an active language server providing document symbols.
+Reference counts additionally require reference support and reflect the scope
+indexed by that server. Unsupported or failed requests show no count. Use `gr`
+on the function name to open the existing references picker.
+
+Git authors require a trusted Git workspace, the `git` executable, and a build
+with Git support. The author comes from the most recent commit touching the
+function's full range, including changes that only delete code. `*` marks local
+changes to that function relative to HEAD. New/untracked functions and ambiguous
+unsaved range mappings have no author hint. Servers returning only flat symbol
+locations cannot provide full function ranges, so they show reference counts only.
+Author hints are omitted for Git blobs that are not UTF-8 text.
+
+Requests run in the background after the editor becomes idle outside insert mode,
+for up to 64 visible declarations per view, with at most four reference queries
+in flight per view. Edits invalidate results. While idle, hints refresh every
+15 seconds to pick up external commits and changes indexed by the language server.
+Git queries are limited to 16 MiB files and time out after 15 seconds.
+
+These settings are independent of `editor.lsp.display-inlay-hints`. They can also
+be changed with `:toggle function-hints.references` and
+`:toggle function-hints.git-author`.
 
 ### `[editor.cursor-shape]` Section
 

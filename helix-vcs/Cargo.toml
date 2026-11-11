@@ -24,7 +24,7 @@ anyhow = "1"
 log = "0.4"
 
 [features]
-git = ["gix"]
+git = ["gix", "tokio/process"]
 
 [dev-dependencies]
 tempfile.workspace = true

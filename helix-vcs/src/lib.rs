@@ -16,6 +16,10 @@ mod diff;
 
 pub use diff::{DiffHandle, Hunk};
 
+mod function_authors;
+
+pub use function_authors::{function_authors, FunctionAuthor};
+
 mod status;
 
 pub use status::FileChange;

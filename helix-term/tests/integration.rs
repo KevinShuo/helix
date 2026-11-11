@@ -19,6 +19,8 @@ mod test {
     mod auto_pairs;
     mod command_line;
     mod commands;
+    #[cfg(feature = "git")]
+    mod function_hints;
     mod movement;
     mod splits;
 }

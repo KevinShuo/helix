@@ -72,6 +72,29 @@ pub struct Client {
     req_timeout: u64,
 }
 
+/// Cancels a queued request unless its response has already been consumed.
+struct RequestCancellation {
+    server_tx: UnboundedSender<Payload>,
+    id: Option<jsonrpc::Id>,
+}
+
+impl Drop for RequestCancellation {
+    fn drop(&mut self) {
+        let Some(id) = self.id.take() else {
+            return;
+        };
+        let notification = jsonrpc::Notification {
+            jsonrpc: Some(jsonrpc::Version::V2),
+            method: <lsp::notification::Cancel as lsp::notification::Notification>::METHOD.into(),
+            // Preserve the actual JSON-RPC ID, including numeric IDs larger
+            // than the i32 accepted by lsp::CancelParams.
+            params: Client::value_into_params(serde_json::json!({ "id": id })),
+        };
+        // The transport may already be gone during shutdown.
+        let _ = self.server_tx.send(Payload::Notification(notification));
+    }
+}
+
 impl Client {
     pub fn try_add_doc(
         self: &Arc<Self>,
@@ -447,6 +470,26 @@ impl Client {
         self.call_with_ref::<R>(&params)
     }
 
+    /// Execute a request that is cancelled when its future is dropped or times out.
+    ///
+    /// Like other calls, the request is queued immediately to preserve ordering.
+    /// Dropping the future before its first poll therefore also sends cancellation.
+    pub fn call_cancellable<R: lsp::request::Request>(
+        &self,
+        params: R::Params,
+    ) -> impl Future<Output = Result<R::Result>>
+    where
+        R::Params: serde::Serialize,
+    {
+        Self::call_with_transport::<R>(
+            self.server_tx.clone(),
+            self.next_request_id(),
+            &params,
+            self.req_timeout,
+            true,
+        )
+    }
+
     fn call_with_ref<R: lsp::request::Request>(
         &self,
         params: &R::Params,
@@ -465,9 +508,25 @@ impl Client {
     where
         R::Params: serde::Serialize,
     {
-        let server_tx = self.server_tx.clone();
-        let id = self.next_request_id();
+        Self::call_with_transport::<R>(
+            self.server_tx.clone(),
+            self.next_request_id(),
+            params,
+            timeout_secs,
+            false,
+        )
+    }
 
+    fn call_with_transport<R: lsp::request::Request>(
+        server_tx: UnboundedSender<Payload>,
+        id: jsonrpc::Id,
+        params: &R::Params,
+        timeout_secs: u64,
+        cancellable: bool,
+    ) -> impl Future<Output = Result<R::Result>>
+    where
+        R::Params: serde::Serialize,
+    {
         // It's important that this is not part of the future so that it gets executed right away
         // and the request order stays consistent.
         let rx = serde_json::to_value(params)
@@ -488,14 +547,26 @@ impl Client {
                     .map_err(|e| Error::Other(e.into()))?;
                 Ok(rx)
             });
+        // Construct the guard outside the async block so it is already armed
+        // if the caller drops the future without polling it.
+        let mut cancellation = (cancellable && rx.is_ok()).then(|| RequestCancellation {
+            server_tx,
+            id: Some(id.clone()),
+        });
 
         async move {
             use std::time::Duration;
             use tokio::time::timeout;
             // TODO: delay other calls until initialize success
-            timeout(Duration::from_secs(timeout_secs), rx?.recv())
+            let response = timeout(Duration::from_secs(timeout_secs), rx?.recv())
                 .await
-                .map_err(|_| Error::Timeout(id))? // return Timeout
+                .map_err(|_| Error::Timeout(id))?;
+            // Receiving a response completes the request even when it contains
+            // a server error or fails to deserialize into the expected result.
+            if let Some(cancellation) = &mut cancellation {
+                cancellation.id = None;
+            }
+            response
                 .ok_or(Error::StreamClosed)?
                 .and_then(|value| serde_json::from_value(value).map_err(Into::into))
         }
@@ -739,7 +810,7 @@ impl Client {
                         symbol_kind: Some(lsp::SymbolKindCapability {
                             value_set: Some(lsp::SymbolKind::all()),
                         }),
-                        hierarchical_document_symbol_support: Some(false),
+                        hierarchical_document_symbol_support: Some(true),
                         ..Default::default()
                     }),
                     ..Default::default()
@@ -1812,5 +1883,189 @@ impl Client {
         self.notify::<lsp::notification::DidChangeWatchedFiles>(lsp::DidChangeWatchedFilesParams {
             changes,
         })
+    }
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    use futures_util::poll;
+    use serde_json::json;
+    use tokio::sync::mpsc::{error::TryRecvError, unbounded_channel, Sender};
+
+    fn params() -> lsp::ReferenceParams {
+        lsp::ReferenceParams {
+            text_document_position: lsp::TextDocumentPositionParams {
+                text_document: lsp::TextDocumentIdentifier {
+                    uri: Url::parse("file:///source.rs").unwrap(),
+                },
+                position: lsp::Position::new(3, 4),
+            },
+            context: lsp::ReferenceContext {
+                include_declaration: false,
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        }
+    }
+
+    fn take_request(
+        receiver: &mut UnboundedReceiver<Payload>,
+    ) -> (Sender<Result<Value>>, jsonrpc::MethodCall) {
+        let Payload::Request { chan, value } = receiver.try_recv().unwrap() else {
+            panic!("expected a request before cancellation");
+        };
+        (chan, value)
+    }
+
+    fn assert_cancel(receiver: &mut UnboundedReceiver<Payload>, expected_id: Value) {
+        let Payload::Notification(notification) = receiver.try_recv().unwrap() else {
+            panic!("expected a cancellation notification");
+        };
+        assert_eq!(
+            serde_json::to_value(notification).unwrap(),
+            json!({"jsonrpc": "2.0", "method": "$/cancelRequest", "params": {"id": expected_id}}),
+        );
+        assert_no_payload(receiver);
+    }
+
+    fn assert_no_payload(receiver: &mut UnboundedReceiver<Payload>) {
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(TryRecvError::Empty | TryRecvError::Disconnected)
+        ));
+    }
+
+    #[test]
+    fn dropping_unpolled_future_cancels_the_already_queued_request() {
+        let (server_tx, mut receiver) = unbounded_channel();
+        let id = u64::from(u32::MAX) + 1;
+        let future = Client::call_with_transport::<lsp::request::References>(
+            server_tx,
+            jsonrpc::Id::Num(id),
+            &params(),
+            60,
+            true,
+        );
+        drop(future);
+
+        let (_, request) = take_request(&mut receiver);
+        assert_eq!(request.id, jsonrpc::Id::Num(id));
+        assert_eq!(request.method, "textDocument/references");
+        assert_eq!(
+            Value::from(request.params),
+            json!({
+                "textDocument": {"uri": "file:///source.rs"},
+                "position": {"line": 3, "character": 4},
+                "context": {"includeDeclaration": false},
+            })
+        );
+        assert_cancel(&mut receiver, json!(id));
+    }
+
+    #[tokio::test]
+    async fn dropping_pending_future_cancels_the_same_request() {
+        let (server_tx, mut receiver) = unbounded_channel();
+        let mut future = Box::pin(Client::call_with_transport::<lsp::request::References>(
+            server_tx,
+            jsonrpc::Id::Num(17),
+            &params(),
+            60,
+            true,
+        ));
+        let (_response_tx, request) = take_request(&mut receiver);
+        assert_eq!(request.id, jsonrpc::Id::Num(17));
+        assert!(poll!(future.as_mut()).is_pending());
+        drop(future);
+        assert_cancel(&mut receiver, json!(17));
+    }
+
+    #[tokio::test]
+    async fn timeout_cancels_the_request() {
+        let (server_tx, mut receiver) = unbounded_channel();
+        let future = Client::call_with_transport::<lsp::request::References>(
+            server_tx,
+            jsonrpc::Id::Num(18),
+            &params(),
+            0,
+            true,
+        );
+        let (_response_tx, _) = take_request(&mut receiver);
+        assert!(matches!(
+            future.await,
+            Err(Error::Timeout(jsonrpc::Id::Num(18)))
+        ));
+        assert_cancel(&mut receiver, json!(18));
+    }
+
+    #[tokio::test]
+    async fn successful_response_disarms_cancellation() {
+        let (server_tx, mut receiver) = unbounded_channel();
+        let future = Client::call_with_transport::<lsp::request::References>(
+            server_tx,
+            jsonrpc::Id::Num(19),
+            &params(),
+            60,
+            true,
+        );
+        let (response_tx, _) = take_request(&mut receiver);
+        response_tx.send(Ok(Value::Null)).await.unwrap();
+        assert_eq!(future.await.unwrap(), None);
+        assert_no_payload(&mut receiver);
+    }
+
+    #[tokio::test]
+    async fn error_response_disarms_cancellation() {
+        let (server_tx, mut receiver) = unbounded_channel();
+        let future = Client::call_with_transport::<lsp::request::References>(
+            server_tx,
+            jsonrpc::Id::Num(20),
+            &params(),
+            60,
+            true,
+        );
+        let (response_tx, _) = take_request(&mut receiver);
+        response_tx
+            .send(Err(Error::Rpc(jsonrpc::Error::invalid_params(
+                "invalid location",
+            ))))
+            .await
+            .unwrap();
+        assert!(matches!(future.await, Err(Error::Rpc(_))));
+        assert_no_payload(&mut receiver);
+    }
+
+    #[tokio::test]
+    async fn malformed_response_disarms_cancellation() {
+        let (server_tx, mut receiver) = unbounded_channel();
+        let future = Client::call_with_transport::<lsp::request::References>(
+            server_tx,
+            jsonrpc::Id::Num(21),
+            &params(),
+            60,
+            true,
+        );
+        let (response_tx, _) = take_request(&mut receiver);
+        response_tx.send(Ok(json!(42))).await.unwrap();
+        assert!(matches!(future.await, Err(Error::Parse(_))));
+        assert_no_payload(&mut receiver);
+    }
+
+    #[tokio::test]
+    async fn ordinary_request_timeout_does_not_opt_into_cancellation() {
+        let (server_tx, mut receiver) = unbounded_channel();
+        let future = Client::call_with_transport::<lsp::request::References>(
+            server_tx,
+            jsonrpc::Id::Num(22),
+            &params(),
+            0,
+            false,
+        );
+        let (_response_tx, _) = take_request(&mut receiver);
+        assert!(matches!(
+            future.await,
+            Err(Error::Timeout(jsonrpc::Id::Num(22)))
+        ));
+        assert_no_payload(&mut receiver);
     }
 }
