@@ -516,6 +516,7 @@ impl MappableCommand {
         keep_primary_selection, "Keep primary selection",
         remove_primary_selection, "Remove primary selection",
         completion, "Invoke completion popup",
+        ai_completion_accept, "Accept the entire AI inline completion",
         hover, "Show docs for item under cursor",
         toggle_comments, "Comment/uncomment selections",
         toggle_line_comments, "Line comment/uncomment selections",
@@ -5496,6 +5497,35 @@ pub fn completion(cx: &mut Context) {
         .trigger_completions(cursor, doc.id(), view.id);
 }
 
+pub fn ai_completion_accept(cx: &mut Context) {
+    cx.callback.push(Box::new(|compositor, cx| {
+        if let Some(editor_view) = compositor.find::<ui::EditorView>() {
+            editor_view.accept_ai_completion(cx.editor);
+        }
+    }));
+}
+
+pub(crate) fn insert_ai_completion_text(editor: &mut Editor, text: &str) {
+    if editor.mode() != Mode::Insert {
+        return;
+    }
+    let (view, doc) = current!(editor);
+    if doc.readonly {
+        return;
+    }
+    let Some(cursor) = helix_view::ai_completion::completion_cursor(doc, view.id) else {
+        return;
+    };
+    doc.append_changes_to_history(view);
+    let transaction = Transaction::change(
+        doc.text(),
+        std::iter::once((cursor, cursor, Some(text.into()))),
+    )
+    .with_selection(Selection::point(cursor + text.chars().count()));
+    doc.apply(&transaction, view.id);
+    doc.append_changes_to_history(view);
+}
+
 // comments
 type CommentTransactionFn = fn(
     line_token: Option<&str>,
@@ -6927,14 +6957,7 @@ fn record_macro(cx: &mut Context) {
         keys.pop();
         let s = keys
             .into_iter()
-            .map(|key| {
-                let s = key.to_string();
-                if s.chars().count() == 1 {
-                    s
-                } else {
-                    format!("<{}>", s)
-                }
-            })
+            .map(|event| event.to_string())
             .collect::<String>();
         match cx.editor.registers.write(reg, vec![s]) {
             Ok(_) => cx
@@ -6961,14 +6984,14 @@ fn replay_macro(cx: &mut Context) {
         return;
     }
 
-    let keys: Vec<KeyEvent> = if let Some(keys) = cx
+    let keys = if let Some(keys) = cx
         .editor
         .registers
         .read(reg, cx.editor)
         .filter(|values| values.len() == 1)
         .map(|mut values| values.next().unwrap())
     {
-        match helix_view::input::parse_macro(&keys) {
+        match helix_view::macro_input::parse_macro_events(&keys) {
             Ok(keys) => keys,
             Err(err) => {
                 cx.editor.set_error(format!("Invalid macro: {}", err));
@@ -6987,8 +7010,15 @@ fn replay_macro(cx: &mut Context) {
     let count = cx.count();
     cx.callback.push(Box::new(move |compositor, cx| {
         for _ in 0..count {
-            for &key in keys.iter() {
-                compositor.handle_event(&compositor::Event::Key(key), cx);
+            for event in &keys {
+                match event {
+                    helix_view::macro_input::MacroEvent::Key(key) => {
+                        compositor.handle_event(&compositor::Event::Key(*key), cx);
+                    }
+                    helix_view::macro_input::MacroEvent::Paste(text) => {
+                        compositor.handle_event(&compositor::Event::Paste(text.clone()), cx);
+                    }
+                }
             }
         }
         // The macro under replay is cleared at the end of the callback, not in the

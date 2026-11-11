@@ -4,7 +4,7 @@ use crate::{
     events::{OnModeSwitch, PostCommand},
     handlers::completion::CompletionItem,
     key,
-    keymap::{KeymapResult, Keymaps},
+    keymap::{KeyTrie, KeymapResult, Keymaps},
     ui::{
         document::{render_document, LinePos, TextRenderer},
         statusline,
@@ -44,6 +44,7 @@ pub struct EditorView {
     spinners: ProgressSpinners,
     /// Tracks if the terminal window is focused by reaction to terminal focus events
     terminal_focused: bool,
+    ai_accept_key_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +56,7 @@ pub enum InsertEvent {
     },
     TriggerCompletion,
     RequestCompletion,
+    Literal(String),
 }
 
 impl EditorView {
@@ -67,6 +69,7 @@ impl EditorView {
             completion: None,
             spinners: ProgressSpinners::default(),
             terminal_focused: true,
+            ai_accept_key_count: 0,
         }
     }
 
@@ -154,14 +157,20 @@ impl EditorView {
             if let Some(tabstops) = Self::tabstop_highlights(doc, theme) {
                 overlays.push(tabstops);
             }
-            overlays.push(Self::doc_selection_highlights(
-                editor.mode(),
-                doc,
-                view,
-                theme,
-                &config.cursor_shape,
-                self.terminal_focused,
-            ));
+            if !doc
+                .ai_completion
+                .as_ref()
+                .is_some_and(|s| s.is_valid(doc, view.id))
+            {
+                overlays.push(Self::doc_selection_highlights(
+                    editor.mode(),
+                    doc,
+                    view,
+                    theme,
+                    &config.cursor_shape,
+                    self.terminal_focused,
+                ));
+            }
             if let Some(overlay) = Self::highlight_focused_view_elements(view, doc, theme) {
                 overlays.push(overlay);
             }
@@ -1037,6 +1046,11 @@ impl EditorView {
                     for key in self.last_insert.1.clone() {
                         match key {
                             InsertEvent::Key(key) => self.insert_mode(cxt, key),
+                            InsertEvent::Literal(text) => {
+                                last_savepoint = None;
+                                last_request_savepoint = None;
+                                commands::insert_ai_completion_text(cxt.editor, &text);
+                            }
                             InsertEvent::CompletionApply {
                                 trigger_offset,
                                 changes,
@@ -1155,6 +1169,55 @@ impl EditorView {
             }
         }
         on_next_key
+    }
+
+    pub fn accept_ai_completion(&mut self, editor: &mut Editor) {
+        let key_count = std::mem::take(&mut self.ai_accept_key_count);
+        let suggestion = {
+            let (_, doc) = current!(editor);
+            doc.ai_completion_controller.cancel();
+            doc.ai_completion.take()
+        };
+        // Closing a normal popup must not validate its currently highlighted item.
+        self.clear_completion(editor);
+        let Some(suggestion) = suggestion else {
+            return;
+        };
+        let (view, doc) = current_ref!(editor);
+        if editor.mode() != Mode::Insert || !suggestion.is_valid(doc, view.id) {
+            return;
+        }
+        let text = suggestion.annotation.text.to_string();
+        commands::insert_ai_completion_text(editor, &text);
+        self.last_insert.1.push(InsertEvent::Literal(text.clone()));
+        if editor.macro_replaying.is_empty() {
+            if let Some((_, events)) = &mut editor.macro_recording {
+                events.truncate(events.len().saturating_sub(key_count));
+                events.push(helix_view::macro_input::MacroEvent::Paste(text));
+            }
+        }
+    }
+
+    fn is_ai_accept_key(&self, key: KeyEvent) -> bool {
+        let mut path = self.keymaps.pending().to_vec();
+        path.push(key);
+        let map = self.keymaps.map();
+        let root;
+        let trie = if let Some(sticky) = self.keymaps.sticky() {
+            root = KeyTrie::Node(sticky.clone());
+            &root
+        } else {
+            &map[&Mode::Insert]
+        };
+        match trie.search(&path) {
+            Some(KeyTrie::MappableCommand(command)) => {
+                *command == commands::MappableCommand::ai_completion_accept
+            }
+            Some(KeyTrie::Sequence(commands)) => {
+                commands.contains(&commands::MappableCommand::ai_completion_accept)
+            }
+            _ => false,
+        }
     }
 
     pub fn handle_idle_timeout(&mut self, cx: &mut commands::Context) -> EventResult {
@@ -1466,6 +1529,12 @@ impl Component for EditorView {
                 self.handle_non_key_input(&mut cx);
                 cx.count = cx.editor.count;
                 commands::paste_bracketed_value(&mut cx, contents.clone());
+                if cx.editor.mode() == Mode::Insert {
+                    self.last_insert
+                        .1
+                        .push(InsertEvent::Literal(contents.clone()));
+                    crate::handlers::ai_completion::trigger(cx.editor);
+                }
                 cx.editor.count = None;
 
                 let config = cx.editor.config();
@@ -1487,6 +1556,10 @@ impl Component for EditorView {
                 EventResult::Consumed(None)
             }
             Event::Key(mut key) => {
+                let (previous_doc, previous_version) = {
+                    let (_, doc) = current_ref!(cx.editor);
+                    (doc.id(), doc.version())
+                };
                 cx.editor.reset_idle_timer();
                 canonicalize_key(&mut key);
 
@@ -1494,13 +1567,18 @@ impl Component for EditorView {
                 cx.editor.status_msg = None;
 
                 let mode = cx.editor.mode();
+                let ai_accept = mode == Mode::Insert && self.is_ai_accept_key(key);
 
                 if !self.on_next_key(OnKeyCallbackKind::PseudoPending, &mut cx, key) {
                     match mode {
                         Mode::Insert => {
                             // let completion swallow the event if necessary
                             let mut consumed = false;
-                            if let Some(completion) = &mut self.completion {
+                            if ai_accept {
+                                self.ai_accept_key_count = self.keymaps.pending().len() + 1;
+                                self.insert_mode(&mut cx, key);
+                                consumed = true;
+                            } else if let Some(completion) = &mut self.completion {
                                 let res = {
                                     // use a fake context here
                                     let mut cx = Context {
@@ -1557,6 +1635,13 @@ impl Component for EditorView {
                     _ => self.pseudo_pending.clear(),
                 }
 
+                let (_, doc) = current_ref!(cx.editor);
+                if !ai_accept && doc.id() == previous_doc && doc.version() != previous_version {
+                    cx.callback.push(Box::new(|_, cx| {
+                        crate::handlers::ai_completion::trigger(cx.editor)
+                    }));
+                }
+
                 // appease borrowck
                 let callbacks = take(&mut cx.callback);
 
@@ -1598,6 +1683,7 @@ impl Component for EditorView {
                 EventResult::Consumed(None)
             }
             Event::FocusLost => {
+                crate::handlers::ai_completion::clear(cx.editor);
                 if context.editor.config().auto_save.focus_lost {
                     let options = commands::WriteAllOptions {
                         force: false,
@@ -1738,7 +1824,14 @@ impl Component for EditorView {
         match editor.cursor() {
             // all block cursors are drawn manually
             (pos, CursorKind::Block) => {
-                if self.terminal_focused {
+                let (view, doc) = current_ref!(editor);
+                if doc
+                    .ai_completion
+                    .as_ref()
+                    .is_some_and(|s| s.is_valid(doc, view.id))
+                {
+                    (pos, CursorKind::Block)
+                } else if self.terminal_focused {
                     (pos, CursorKind::Hidden)
                 } else {
                     // use terminal cursor when terminal loses focus

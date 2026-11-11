@@ -15,6 +15,7 @@ mod test {
         Ok(())
     }
 
+    mod ai_completion;
     mod auto_pairs;
     mod command_line;
     mod commands;

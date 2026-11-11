@@ -430,15 +430,18 @@ pub fn char_idx_at_visual_block_offset(
     let mut found_non_virtual_on_row = false;
     let mut last_row = 0;
     for grapheme in &mut formatter {
+        // A click on a completion preview belongs to its insertion point,
+        // including rows containing only virtual completion text.
+        let maps_to_document = !grapheme.is_virtual() || grapheme.source.is_inline_completion();
         match grapheme.visual_pos.row.cmp(&row) {
             Ordering::Equal => {
                 if grapheme.visual_pos.col + grapheme.width() > column {
-                    if !grapheme.is_virtual() {
+                    if maps_to_document {
                         return (grapheme.char_idx, 0);
                     } else if found_non_virtual_on_row {
                         return (last_char_idx, 0);
                     }
-                } else if !grapheme.is_virtual() {
+                } else if maps_to_document {
                     found_non_virtual_on_row = true;
                     last_char_idx = grapheme.char_idx;
                 }
@@ -446,7 +449,7 @@ pub fn char_idx_at_visual_block_offset(
             Ordering::Greater if found_non_virtual_on_row => return (last_char_idx, 0),
             Ordering::Greater => return (last_char_idx, row - last_row),
             Ordering::Less => {
-                if !grapheme.is_virtual() {
+                if maps_to_document {
                     last_row = grapheme.visual_pos.row;
                     last_char_idx = grapheme.char_idx;
                 }

@@ -146,7 +146,7 @@ impl Compositor {
         // push the key event to the recording.
         if let (Event::Key(key), Some((_, keys))) = (event, &mut cx.editor.macro_recording) {
             if cx.editor.macro_replaying.is_empty() {
-                keys.push(*key);
+                keys.push(helix_view::macro_input::MacroEvent::Key(*key));
             }
         }
 

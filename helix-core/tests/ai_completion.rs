@@ -52,3 +52,19 @@ fn ghost_caret_at_end_of_file_and_softwrap() {
         );
     }
 }
+
+#[test]
+fn ghost_clicks_map_to_the_insertion_point() {
+    let text = Rope::from("abZ\n");
+    let suggestion = InlineAnnotation::new(2, "值\nmiddle\nx");
+    let mut annotations = TextAnnotations::default();
+    annotations.add_inline_completion(&suggestion, None);
+    let format = TextFormat::default();
+    for (row, col) in [(0, 2), (0, 3), (1, 0), (1, 4), (1, 40), (2, 0)] {
+        assert_eq!(
+            char_idx_at_visual_offset(text.slice(..), 0, row, col, &format, &annotations),
+            (2, 0),
+            "click at ({row}, {col})"
+        );
+    }
+}

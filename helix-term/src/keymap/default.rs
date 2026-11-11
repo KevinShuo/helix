@@ -394,6 +394,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "C-j" | "ret" => insert_newline,
         "tab" => smart_tab,
         "S-tab" => insert_tab,
+        "S-right" => ai_completion_accept,
 
         "up" => move_visual_line_up,
         "down" => move_visual_line_down,
