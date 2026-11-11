@@ -5,6 +5,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Document, ViewId};
 
+/// Insert-mode carets in Helix may select the adjacent grapheme internally.
+/// Treat that native representation like a point, but not a larger selection.
+pub fn completion_cursor(doc: &Document, view: ViewId) -> Option<usize> {
+    let selection = doc.selection(view);
+    if selection.len() != 1 {
+        return None;
+    }
+    let range = selection.primary();
+    let text = doc.text().slice(..);
+    let cursor = range.cursor(text);
+    (range.is_empty()
+        || (range.from() == cursor
+            && range.to() == helix_core::graphemes::next_grapheme_boundary(text, cursor)))
+    .then_some(cursor)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct AiCompletionConfig {
@@ -47,10 +63,7 @@ impl AiCompletion {
         if self.view != view || self.version != doc.version() || doc.readonly {
             return false;
         }
-        let selection = doc.selection(view);
-        selection.len() == 1
-            && selection.primary().is_empty()
-            && selection.primary().head == self.annotation.char_idx
+        completion_cursor(doc, view) == Some(self.annotation.char_idx)
             && doc.active_snippet.is_none()
     }
 }
