@@ -520,6 +520,62 @@ fn main() {
 }
 ```
 
+### `[editor.ai-completion]` Section
+
+Optional automatic inline completion using an OpenAI-compatible chat completion
+endpoint, including a local llama.cpp/Junie server. This is disabled by default.
+After you pause typing in insert mode, a suggestion appears as grey virtual text.
+`Shift-Right` inserts the entire suggestion in one undo step. Moving the cursor,
+editing, changing buffers, or leaving insert mode discards it. Dot repeat and
+recorded macros replay the accepted text without requesting another suggestion.
+
+The existing LSP, path and word completion menus keep their Tab/Enter behavior.
+Accepting an AI suggestion closes an open completion menu without accepting its
+candidate. Selecting a menu candidate dismisses the AI preview. With no AI
+suggestion, `Shift-Right` inserts nothing and cancels any menu preview.
+
+| Key | Description | Default |
+| --- | --- | --- |
+| `enabled` | Enable automatic AI suggestions | `false` |
+| `endpoint` | Full HTTP(S) chat completions URL | `"http://127.0.0.1:19239/v1/chat/completions"` |
+| `model` | Model name sent to the server | `"Qwen3.8-27B-UD-Q5_K_M"` |
+| `api-key-env` | Optional environment variable containing the bearer token | unset |
+| `debounce-ms` | Pause after editing before a request, capped at 5000 ms | `350` |
+| `timeout-ms` | Request timeout, clamped to 100–120000 ms | `5000` |
+| `max-tokens` | Maximum generated tokens, clamped to 1–512 | `128` |
+| `prefix-chars` | Characters before the cursor sent as context, capped at 64000 | `8000` |
+| `suffix-chars` | Characters after the cursor sent as context, capped at 16000 | `2000` |
+
+```toml
+[editor.ai-completion]
+enabled = true
+endpoint = "http://127.0.0.1:19240/v1/chat/completions"
+model = "Qwen3.8-27B-UD-Q5_K_M"
+timeout-ms = 15000
+# api-key-env = "HELIX_JUNIE_API_KEY"
+```
+
+Only the filename, language and bounded text around the cursor are sent to the
+configured endpoint. Requests disable thinking, use no tools, ignore HTTP proxy
+settings and redirects, and stop when the edit context changes. Connection errors
+silently leave regular editing available; debug logs contain a short error, not
+credentials or model response bodies. Choose context limits that fit your model.
+Selections spanning more than one grapheme, multiple cursors, read-only documents
+and active snippets suppress suggestions.
+
+The theme scope is `ui.virtual.ai-completion`, with a grey fallback. To remap
+acceptance if your terminal does not transmit `Shift-Right`:
+
+```toml
+[keys.insert]
+S-right = "move_char_right"
+F4 = "ai_completion_accept"
+```
+
+For Windows and an existing Junie Local installation, see
+`contrib/helix-junie.md` in the source checkout for a launcher using the installed
+model files.
+
 ### `[editor.word-completion]` Section
 
 Options for controlling completion of words from open buffers.

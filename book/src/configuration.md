@@ -33,3 +33,7 @@ signal to the Helix process, such as by using the command `pkill -USR1 hx`.
 Finally, you can have a `config.toml` and a `languages.toml` local to a project by putting it under a `.helix` directory in your repository.
 Its settings will be merged with the configuration directory and the built-in configuration.
 
+Local-model inline suggestions can be enabled with
+[`[editor.ai-completion]`](./editor.md#editorai-completion-section).
+They appear as grey text and are accepted in full with `Shift-Right` in insert mode.
+

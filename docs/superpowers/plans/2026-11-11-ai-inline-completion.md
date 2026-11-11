@@ -1,6 +1,6 @@
 # Local AI Inline Completion Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Preserve Helix completion and add automatic local-model ghost text accepted in full with Shift+Right.
 
@@ -34,11 +34,11 @@
 
 **Interfaces:** `AiCompletionConfig` (enabled, endpoint, model, api_key_env, debounce_ms, timeout_ms, max_tokens, prefix_chars, suffix_chars); `AiCompletion { view, version, annotation }`; `AiCompletion::is_valid(&Document, ViewId) -> bool`. `Document` owns suggestion and a `TaskController`. `TextAnnotations` exposes a ghost anchor so visual-position calculations stop before ghost text.
 
-- [ ] Write failing config and virtual-position tests: non-default configuration deserializes; inserting grey text leaves real text unchanged; caret stays before multiline Unicode suggestions; clicks after suggestions map to real suffix.
-- [ ] Run targeted `cargo test -p helix-view ai_completion` / `cargo test -p helix-core ghost`; observe missing behavior.
-- [ ] Implement state/config, virtual text with dedicated grey fallback, and consistent coordinate mapping.
-- [ ] Run targeted tests and `cargo check -p helix-term`; expected all pass.
-- [ ] Commit this testable layer locally.
+- [x] Write failing config and virtual-position tests: non-default configuration deserializes; inserting grey text leaves real text unchanged; caret stays before multiline Unicode suggestions; clicks after suggestions map to real suffix.
+- [x] Run targeted `cargo test -p helix-view ai_completion` / `cargo test -p helix-core ghost`; observe missing behavior.
+- [x] Implement state/config, virtual text with dedicated grey fallback, and consistent coordinate mapping.
+- [x] Run targeted tests and `cargo check -p helix-term`; expected all pass.
+- [x] Commit this testable layer locally.
 
 ### Task 2: Bounded asynchronous local-model requests
 
@@ -46,11 +46,11 @@
 
 **Interfaces:** `trigger(&mut Editor)`, `clear(&mut Editor)`, `register_hooks()`; client `complete(&AiCompletionConfig, &CompletionContext) -> Result<Option<String>>`; context contains filename, language, prefix, suffix.
 
-- [ ] Write failing HTTP-boundary tests using a local TCP fixture: request has prefix/suffix and thinking disabled; preserve indentation; strip enclosing fences and duplicate closing suffix; reject tool calls/oversized/error responses.
-- [ ] Run `cargo test -p helix-term ai_completion`; observe expected failures.
-- [ ] Add cancellable debounce/request with timeout, bounded response size, no redirects, no model-owned tools, and sanitized diagnostics. Invalidation covers document/selection/focus/mode/config changes; commit responses only when handle and snapshot are still valid.
-- [ ] Run HTTP tests including cancellation, timeout and superseded requests; expected all pass.
-- [ ] Commit locally.
+- [x] Write failing HTTP-boundary tests using a local TCP fixture: request has prefix/suffix and thinking disabled; preserve indentation; strip enclosing fences and duplicate closing suffix; reject tool calls/oversized/error responses.
+- [x] Run `cargo test -p helix-term ai_completion`; observe expected failures.
+- [x] Add cancellable debounce/request with timeout, bounded response size, no redirects, no model-owned tools, and sanitized diagnostics. Invalidation covers document/selection/focus/mode/config changes; commit responses only when handle and snapshot are still valid.
+- [x] Run HTTP tests including cancellation, timeout and superseded requests; expected all pass.
+- [x] Commit locally.
 
 ### Task 3: Acceptance and existing completion coexistence
 
@@ -58,12 +58,12 @@
 
 **Interfaces:** `ai_completion_accept(&mut commands::Context)`; `EditorView` handles the mapped accept command before popup events and records accepted text as an edit for repeat.
 
-- [ ] Write editor integration tests for automatic ghost display without buffer mutation, `S-right` whole multiline accept, undo, original menu coexistence, no-ghost acceptance no-op, custom remap, stale response rejection and repeat.
-- [ ] Run `cargo integration-test ai_completion`; verify failures before implementation.
-- [ ] Wire command/default mapping and pre-menu dispatch; acceptance uses one transaction and history boundary, cancels generation and clears popup without accepting its selected candidate.
-- [ ] Ensure repeat/macro paths reproduce literal accepted text without model requests; test the actual replay behavior.
-- [ ] Run targeted integration tests plus existing insertion/completion tests; expected all pass.
-- [ ] Commit locally.
+- [x] Write editor integration tests for automatic ghost display without buffer mutation, `S-right` whole multiline accept, undo, original menu coexistence, no-ghost acceptance no-op, custom remap, stale response rejection and repeat.
+- [x] Run `cargo integration-test ai_completion`; verify failures before implementation.
+- [x] Wire command/default mapping and pre-menu dispatch; acceptance uses one transaction and history boundary, cancels generation and clears popup without accepting its selected candidate.
+- [x] Ensure repeat/macro paths reproduce literal accepted text without model requests; test the actual replay behavior.
+- [x] Run targeted integration tests plus existing insertion/completion tests; expected all pass.
+- [x] Commit locally.
 
 ### Task 4: Local setup, validation and documentation
 
