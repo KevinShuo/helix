@@ -23,7 +23,7 @@ use helix_stdx::rope::{RopeGraphemes, RopeSliceExt};
 
 use crate::graphemes::{Grapheme, GraphemeStr};
 use crate::syntax::Highlight;
-use crate::text_annotations::TextAnnotations;
+use crate::text_annotations::{InlineAnnotationMetadata, TextAnnotations};
 use crate::{Position, RopeSlice};
 
 #[derive(Debug, Clone, Copy)]
@@ -36,6 +36,7 @@ pub enum GraphemeSource {
     /// is emitted right by the document formatter
     VirtualText {
         highlight: Option<Highlight>,
+        inline_completion: bool,
     },
 }
 
@@ -43,6 +44,16 @@ impl GraphemeSource {
     /// Returns whether this grapheme is virtual inline text
     pub fn is_virtual(self) -> bool {
         matches!(self, GraphemeSource::VirtualText { .. })
+    }
+
+    pub fn is_inline_completion(self) -> bool {
+        matches!(
+            self,
+            GraphemeSource::VirtualText {
+                inline_completion: true,
+                ..
+            }
+        )
     }
 
     pub fn is_eof(self) -> bool {
@@ -183,7 +194,7 @@ pub struct DocumentFormatter<'t> {
     line_pos: usize,
     exhausted: bool,
 
-    inline_annotation_graphemes: Option<(Graphemes<'t>, Option<Highlight>)>,
+    inline_annotation_graphemes: Option<(Graphemes<'t>, InlineAnnotationMetadata)>,
 
     // softwrap specific
     /// The indentation of the current line
@@ -235,7 +246,7 @@ impl<'t> DocumentFormatter<'t> {
     fn next_inline_annotation_grapheme(
         &mut self,
         char_pos: usize,
-    ) -> Option<(&'t str, Option<Highlight>)> {
+    ) -> Option<(&'t str, InlineAnnotationMetadata)> {
         loop {
             if let Some(&mut (ref mut annotation, highlight)) =
                 self.inline_annotation_graphemes.as_mut()
@@ -260,8 +271,14 @@ impl<'t> DocumentFormatter<'t> {
 
     fn advance_grapheme(&mut self, col: usize, char_pos: usize) -> Option<GraphemeWithSource<'t>> {
         let (grapheme, source) =
-            if let Some((grapheme, highlight)) = self.next_inline_annotation_grapheme(char_pos) {
-                (grapheme.into(), GraphemeSource::VirtualText { highlight })
+            if let Some((grapheme, metadata)) = self.next_inline_annotation_grapheme(char_pos) {
+                (
+                    grapheme.into(),
+                    GraphemeSource::VirtualText {
+                        highlight: metadata.highlight,
+                        inline_completion: metadata.inline_completion,
+                    },
+                )
             } else if let Some(grapheme) = self.graphemes.next() {
                 let codepoints = grapheme.len_chars() as u32;
 
@@ -321,6 +338,7 @@ impl<'t> DocumentFormatter<'t> {
                     self.text_fmt.tab_width,
                     GraphemeSource::VirtualText {
                         highlight: self.text_fmt.wrap_indicator_highlight,
+                        inline_completion: false,
                     },
                 );
                 word_width += grapheme.width();

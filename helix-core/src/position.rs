@@ -160,7 +160,9 @@ pub fn visual_offset_from_block(
 
     while let Some(grapheme) = formatter.next() {
         last_pos = grapheme.visual_pos;
-        if formatter.next_char_pos() > pos {
+        if formatter.next_char_pos() > pos
+            || (grapheme.char_idx == pos && grapheme.source.is_inline_completion())
+        {
             return (grapheme.visual_pos, block_start);
         }
     }
@@ -209,7 +211,10 @@ pub fn visual_offset_from_anchor(
     while let Some(grapheme) = formatter.next() {
         last_pos = grapheme.visual_pos;
 
-        if formatter.next_char_pos() > pos {
+        if found_pos.is_none()
+            && (formatter.next_char_pos() > pos
+                || (grapheme.char_idx == pos && grapheme.source.is_inline_completion()))
+        {
             if let Some(anchor_line) = anchor_line {
                 last_pos.row -= anchor_line;
                 return Ok((last_pos, block_start));
@@ -217,7 +222,10 @@ pub fn visual_offset_from_anchor(
                 found_pos = Some(last_pos);
             }
         }
-        if formatter.next_char_pos() > anchor && anchor_line.is_none() {
+        if anchor_line.is_none()
+            && (formatter.next_char_pos() > anchor
+                || (grapheme.char_idx == anchor && grapheme.source.is_inline_completion()))
+        {
             if let Some(mut found_pos) = found_pos {
                 return if found_pos.row == last_pos.row {
                     found_pos.row = 0;

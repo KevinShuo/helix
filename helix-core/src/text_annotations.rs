@@ -276,9 +276,15 @@ impl<T: ?Sized> Drop for RawBox<T> {
 /// Also commonly called virtual text.
 #[derive(Default)]
 pub struct TextAnnotations<'a> {
-    inline_annotations: Vec<Layer<'a, InlineAnnotation, Option<Highlight>>>,
+    inline_annotations: Vec<Layer<'a, InlineAnnotation, InlineAnnotationMetadata>>,
     overlays: Vec<Layer<'a, Overlay, Option<Highlight>>>,
     line_annotations: Vec<(Cell<usize>, RawBox<dyn LineAnnotation + 'a>)>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct InlineAnnotationMetadata {
+    pub highlight: Option<Highlight>,
+    pub inline_completion: bool,
 }
 
 impl Debug for TextAnnotations<'_> {
@@ -332,7 +338,37 @@ impl<'a> TextAnnotations<'a> {
         highlight: Option<Highlight>,
     ) -> &mut Self {
         if !layer.is_empty() {
-            self.inline_annotations.push((layer, highlight).into());
+            self.inline_annotations.push(
+                (
+                    layer,
+                    InlineAnnotationMetadata {
+                        highlight,
+                        inline_completion: false,
+                    },
+                )
+                    .into(),
+            );
+        }
+        self
+    }
+
+    /// Add the preview at a caret without changing the document.
+    pub fn add_inline_completion(
+        &mut self,
+        annotation: &'a InlineAnnotation,
+        highlight: Option<Highlight>,
+    ) -> &mut Self {
+        if !annotation.text.is_empty() {
+            self.inline_annotations.push(
+                (
+                    std::slice::from_ref(annotation),
+                    InlineAnnotationMetadata {
+                        highlight,
+                        inline_completion: true,
+                    },
+                )
+                    .into(),
+            );
         }
         self
     }
@@ -373,7 +409,7 @@ impl<'a> TextAnnotations<'a> {
     pub(crate) fn next_inline_annotation_at(
         &self,
         char_idx: usize,
-    ) -> Option<(&InlineAnnotation, Option<Highlight>)> {
+    ) -> Option<(&InlineAnnotation, InlineAnnotationMetadata)> {
         self.inline_annotations.iter().find_map(|layer| {
             let annotation = layer.consume(char_idx, |annot| annot.char_idx)?;
             Some((annotation, layer.metadata))

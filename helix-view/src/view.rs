@@ -462,6 +462,15 @@ impl View {
     ) -> TextAnnotations<'a> {
         let mut text_annotations = TextAnnotations::default();
 
+        if let Some(suggestion) = doc
+            .ai_completion
+            .as_ref()
+            .filter(|s| s.is_valid(doc, self.id))
+        {
+            let style = theme.and_then(|t| t.find_highlight_exact("ui.virtual.ai-completion"));
+            text_annotations.add_inline_completion(&suggestion.annotation, style);
+        }
+
         if let Some(labels) = doc.jump_labels.get(&self.id) {
             let style = theme.and_then(|t| t.find_highlight("ui.virtual.jump-label"));
             text_annotations.add_overlay(labels, style);

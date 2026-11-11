@@ -139,10 +139,16 @@ pub fn render_text(
             overlay_highlighter.advance();
         }
 
-        let grapheme_style = if let GraphemeSource::VirtualText { highlight } = grapheme.source {
+        let grapheme_style = if let GraphemeSource::VirtualText {
+            highlight,
+            inline_completion,
+        } = grapheme.source
+        {
             let mut style = renderer.text_style;
             if let Some(highlight) = highlight {
                 style = style.patch(theme.highlight(highlight));
+            } else if inline_completion {
+                style = style.fg(helix_view::graphics::Color::Gray);
             }
             GraphemeStyle {
                 syntax_style: style,

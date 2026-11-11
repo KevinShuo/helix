@@ -218,6 +218,8 @@ pub struct Document {
 
     /// Annotations for LSP document color swatches
     pub color_swatches: Option<DocumentColorSwatches>,
+    pub ai_completion: Option<crate::ai_completion::AiCompletion>,
+    pub ai_completion_controller: TaskController,
     /// Cached LSP document links for navigation (e.g. goto_file).
     pub document_links: Vec<DocumentLink>,
     // NOTE: ideally this would live on the handler for color swatches. This is blocked on a
@@ -768,6 +770,8 @@ impl Document {
             document_highlights: HashMap::new(),
             code_action_hints: HashSet::new(),
             color_swatches: None,
+            ai_completion: None,
+            ai_completion_controller: TaskController::new(),
             document_links: Vec::new(),
             color_swatch_controller: TaskController::new(),
             document_highlight_controllers: HashMap::new(),
