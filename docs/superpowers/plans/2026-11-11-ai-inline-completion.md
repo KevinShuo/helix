@@ -69,11 +69,11 @@
 
 **Files:** update `book/src/configuration.md`, `book/src/themes.md`, generated keymap/command docs as needed; add `contrib/helix-junie.ps1` and example AI config if useful.
 
-- [ ] Document configurable provider, grey style, acceptance/remapping and supported scope; provide a launcher that reads existing Junie credentials into this process only and runs the locally built editor.
-- [ ] Start existing local Junie service for a bounded synthetic completion; inspect model routes and confirm per-request thinking override and latency. Do not change Junie's persistent inference settings.
-- [ ] Run `cargo fmt --check`, relevant unit suites, integration suites and a release build; report every failure or unavailable environment check accurately.
-- [ ] Run a fresh whole-change code review, fix important findings with regression coverage, and verify again where changes require it.
-- [ ] Deliver local binary/config/launcher instructions and actual validation results. Do not push.
+- [x] Document configurable provider, grey style, acceptance/remapping and supported scope; provide a launcher that reads existing Junie credentials into this process only and runs the locally built editor.
+- [x] Start existing local Junie service for a bounded synthetic completion; inspect model routes and confirm per-request thinking override and latency. Do not change Junie's persistent inference settings.
+- [x] Run `cargo fmt --check`, relevant unit suites, integration suites and a release build; report every failure or unavailable environment check accurately.
+- [x] Run a fresh whole-change code review, fix important findings with regression coverage, and verify again where changes require it.
+- [x] Deliver local binary/config/launcher instructions and actual validation results. Do not push.
 
 ## Execution notes
 
