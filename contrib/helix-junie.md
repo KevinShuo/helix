@@ -5,6 +5,62 @@ for the normal completion menu; press **Shift+Right** to accept the entire grey
 suggestion. Escape or cursor movement discards it. AI completion is off in the
 default editor configuration.
 
+## Configure Q6_K in config.toml (recommended)
+
+The editor can now start the installed llama.cpp runtime directly. Add the
+following to `%APPDATA%\helix\config.toml`, then launch this checkout's rebuilt
+`target\release\hx.exe` normally:
+
+```toml
+[editor.ai-completion]
+enabled = true
+model = "Qwen2.5-Coder-7B-Instruct-Q6_K"
+model-path = 'C:\Users\wangshuo\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf'
+server-path = 'C:\Users\wangshuo\.local\share\junie-local\versions\0.3.5\runtime\llama.cpp-b11081\llama-server.exe'
+endpoint = "http://127.0.0.1:19240/v1/chat/completions"
+prompt-mode = "line"
+debounce-ms = 200
+timeout-ms = 5000
+max-tokens = 48
+prefix-chars = 3000
+suffix-chars = 500
+context-size = 4096
+gpu-layers = 99
+```
+
+The model loads in the background. Helix owns this server and releases it when
+you exit or disable AI completion. Set `enabled = false` and use `:config-reload`
+to turn it off; change `model-path` and `model` to select different weights.
+Adjust `server-path` if Junie is upgraded. The executable can also be omitted
+when `llama-server` is on PATH. No PowerShell startup command is needed.
+
+Logs are under `%LOCALAPPDATA%\helix\ai-completion\server-PID-PORT.log`.
+External servers with the requested alias are reused and left running; another
+model occupying the port is reported instead. The standalone launcher below is
+an alternative for externally managed servers; do not use its default Q5 model
+on the same port as this Q6 configuration.
+
+### Keep themes when using a Windows source build
+
+The checkout includes themes under `runtime/themes`; the executable also needs
+runtime files when launched outside Cargo. After a normal build, copy the runtime
+beside the executable:
+
+```powershell
+cargo build --release --locked -p helix-term
+Copy-Item .\runtime .\target\release -Recurse -Force
+```
+
+If you are replacing a Scoop installation, preserve its complete `runtime`
+directory before uninstalling it. It contains themes, queries and compiled
+grammars. Copy that runtime to `target\release\runtime`; user themes under
+`%APPDATA%\helix\themes` take priority. A theme's `inherits` parent must also be
+preserved. Keep the existing `theme` entry in your user `config.toml`.
+
+Add the absolute `target\release` directory to your user PATH and open a new
+terminal. `where.exe hx` should show the new `target\release\hx.exe` first.
+Run `hx --health python` (or your language) to check runtime discovery.
+
 ## Start with Qwen2.5-Coder 7B Instruct
 
 Requires PowerShell 7, a built `target/release/hx.exe`, and the existing Junie

@@ -42,3 +42,50 @@ prompt-mode = "line"
         AiCompletionPromptMode::Line
     );
 }
+
+#[test]
+fn ai_completion_configures_a_local_gguf_with_windows_paths() {
+    let config: Config = toml::from_str(
+        r#"
+[ai-completion]
+enabled = true
+model = "Qwen2.5-Coder-7B-Instruct-Q6_K"
+model-path = 'C:\Users\wangshuo\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf'
+server-path = 'C:\Program Files\llama.cpp\llama-server.exe'
+endpoint = "http://127.0.0.1:19240/v1/chat/completions"
+prompt-mode = "line"
+context-size = 4096
+gpu-layers = 99
+startup-timeout-ms = 120000
+"#,
+    )
+    .expect("a local GGUF must be configurable without the PowerShell launcher");
+    let settings = toml::Value::try_from(&config.ai_completion).unwrap();
+    assert_eq!(
+        settings["model-path"].as_str(),
+        Some(
+            r"C:\Users\wangshuo\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf"
+        )
+    );
+    assert_eq!(
+        settings["server-path"].as_str(),
+        Some(r"C:\Program Files\llama.cpp\llama-server.exe")
+    );
+    assert!(config.ai_completion.enabled);
+    assert!(config.auto_completion);
+    assert!(config.path_completion);
+}
+
+#[test]
+fn ai_completion_can_disable_a_configured_local_model() {
+    let config: Config = toml::from_str(
+        r#"
+[ai-completion]
+enabled = false
+model-path = 'missing-model.gguf'
+"#,
+    )
+    .expect("a disabled provider must retain its local model setting");
+    assert!(!config.ai_completion.enabled);
+    assert!(config.auto_completion);
+}

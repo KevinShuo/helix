@@ -270,8 +270,14 @@ fn model_config(endpoint: String) -> helix_term::config::Config {
 }
 
 async fn wait_for_preview(app: &mut Application) {
+    let config = &app.editor.config().ai_completion;
+    let startup_ms = if config.model_path.is_some() {
+        config.startup_timeout_ms.clamp(100, 600_000)
+    } else {
+        0
+    };
     let until = tokio::time::Instant::now()
-        + std::time::Duration::from_millis(app.editor.config().ai_completion.timeout_ms + 2000);
+        + std::time::Duration::from_millis(startup_ms + config.timeout_ms + 2000);
     loop {
         idle(app).await;
         if current_ref!(app.editor).1.ai_completion.is_some() {
@@ -299,6 +305,56 @@ async fn ai_completion_automatically_requests_and_displays_without_editing() -> 
     keys(&mut app, "<S-right>").await?;
     assert_eq!(text(&app), "x + 1\n");
     server.await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_disabled_local_model_keeps_editing_available() -> anyhow::Result<()> {
+    let mut config = test_config();
+    config.editor.ai_completion.model_path = Some("missing-model.gguf".into());
+    config.editor.ai_completion.server_path = "missing-llama-server".into();
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("#[|\n]#")
+        .build()?;
+    keys(&mut app, "ix").await?;
+    idle(&mut app).await;
+    assert_eq!(text(&app), "x\n");
+    assert!(current_ref!(app.editor).1.ai_completion.is_none());
+    assert!(app
+        .editor
+        .status_msg
+        .as_ref()
+        .is_none_or(|(message, _)| !message.contains("AI completion")));
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_missing_local_model_reports_error_without_blocking_editing(
+) -> anyhow::Result<()> {
+    let directory = tempfile::tempdir()?;
+    let mut config = test_config();
+    config.editor.ai_completion.enabled = true;
+    config.editor.ai_completion.model_path = Some(directory.path().join("missing.gguf"));
+    config.editor.ai_completion.debounce_ms = 1;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("#[|\n]#")
+        .build()?;
+    idle(&mut app).await;
+    let message = &app
+        .editor
+        .status_msg
+        .as_ref()
+        .expect("startup error should be visible")
+        .0;
+    assert!(message.contains("model not found"), "{message}");
+    keys(&mut app, "ix").await?;
+    idle(&mut app).await;
+    assert_eq!(text(&app), "x\n");
+    assert!(current_ref!(app.editor).1.ai_completion.is_none());
     app.close().await;
     Ok(())
 }
@@ -496,6 +552,87 @@ async fn ai_completion_live_local_model() -> anyhow::Result<()> {
     );
     app.close().await;
     Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "requires HELIX_TEST_AI_MODEL_PATH and HELIX_TEST_AI_SERVER_PATH"]
+async fn ai_completion_live_managed_local_model() -> anyhow::Result<()> {
+    use helix_view::editor::ConfigEvent;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let address = listener.local_addr()?;
+    drop(listener);
+    let mut config = model_config(format!("http://{address}/v1/chat/completions"));
+    config.editor.ai_completion.model_path =
+        Some(std::env::var("HELIX_TEST_AI_MODEL_PATH")?.into());
+    config.editor.ai_completion.server_path = std::env::var("HELIX_TEST_AI_SERVER_PATH")?.into();
+    config.editor.ai_completion.model = "helix-managed-test-model".into();
+    config.editor.ai_completion.prompt_mode = AiCompletionPromptMode::Line;
+    config.editor.ai_completion.timeout_ms = 15000;
+    config.editor.ai_completion.max_tokens = 48;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("items = [1, 2, 3]\ntotal =#[|\n]#")
+        .build()?;
+    keys(&mut app, "i ").await?;
+    wait_for_preview(&mut app).await;
+    let suggestion = current_ref!(app.editor)
+        .1
+        .ai_completion
+        .as_ref()
+        .unwrap()
+        .annotation
+        .text
+        .to_string();
+    assert_eq!(text(&app), "items = [1, 2, 3]\ntotal = \n");
+    keys(&mut app, "<S-right>").await?;
+    assert_eq!(
+        text(&app),
+        format!("items = [1, 2, 3]\ntotal = {suggestion}\n")
+    );
+    println!("Managed local model preview and acceptance: {suggestion:?}");
+
+    let mut editor_config = (*app.editor.config()).clone();
+    editor_config.ai_completion.enabled = false;
+    app.handle_config_events(ConfigEvent::Update(Box::new(editor_config.clone())));
+    assert!(current_ref!(app.editor).1.ai_completion.is_none());
+    wait_for_local_port_release(address).await;
+
+    // Re-enable, then cancel during model loading or immediately after readiness.
+    editor_config.ai_completion.enabled = true;
+    app.handle_config_events(ConfigEvent::Update(Box::new(editor_config.clone())));
+    tokio::time::timeout(std::time::Duration::from_secs(120), async {
+        loop {
+            if std::net::TcpListener::bind(address).is_err() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await?;
+    editor_config.ai_completion.enabled = false;
+    app.handle_config_events(ConfigEvent::Update(Box::new(editor_config.clone())));
+    wait_for_local_port_release(address).await;
+
+    editor_config.ai_completion.enabled = true;
+    app.handle_config_events(ConfigEvent::Update(Box::new(editor_config)));
+    keys(&mut app, "<esc>ototal = ").await?;
+    wait_for_preview(&mut app).await;
+    assert!(app.close().await.is_empty());
+    wait_for_local_port_release(address).await;
+    Ok(())
+}
+
+async fn wait_for_local_port_release(address: std::net::SocketAddr) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if std::net::TcpListener::bind(address).is_ok() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the owned local AI server did not release its port");
 }
 
 #[tokio::test(flavor = "multi_thread")]

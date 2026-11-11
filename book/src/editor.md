@@ -580,6 +580,11 @@ suggestion, `Shift-Right` inserts nothing and cancels any menu preview.
 | `enabled` | Enable automatic AI suggestions | `false` |
 | `endpoint` | Full HTTP(S) chat completions URL | `"http://127.0.0.1:19239/v1/chat/completions"` |
 | `model` | Model name sent to the server | `"Qwen3.8-27B-UD-Q5_K_M"` |
+| `model-path` | Optional local GGUF file; when set, Helix starts and manages llama.cpp | unset |
+| `server-path` | llama.cpp server executable, used with `model-path` | `"llama-server"` (on PATH) |
+| `context-size` | Local server context in tokens, clamped to 512–131072 | `4096` |
+| `gpu-layers` | Local server GPU layers, capped at 999; use `0` for CPU inference | `99` |
+| `startup-timeout-ms` | Local model loading timeout, clamped to 100–600000 ms | `120000` |
 | `prompt-mode` | `insertion` requests missing code directly; `line` requests a complete current line and extracts only the missing part, rejecting responses that change the typed prefix or omit the existing line suffix | `"insertion"` |
 | `api-key-env` | Optional environment variable containing the bearer token | unset |
 | `debounce-ms` | Pause after editing before a request, capped at 5000 ms | `350` |
@@ -596,6 +601,44 @@ model = "Qwen3.8-27B-UD-Q5_K_M"
 timeout-ms = 15000
 # api-key-env = "HELIX_JUNIE_API_KEY"
 ```
+
+To load a GGUF directly, configure its path and the installed llama.cpp executable
+in your normal `config.toml`. For example, on Windows (single-quoted TOML strings
+preserve backslashes):
+
+```toml
+[editor.ai-completion]
+enabled = true
+model = "Qwen2.5-Coder-7B-Instruct-Q6_K"
+model-path = 'C:\Users\wangshuo\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf'
+server-path = 'C:\Users\wangshuo\.local\share\junie-local\versions\0.3.5\runtime\llama.cpp-b11081\llama-server.exe'
+endpoint = "http://127.0.0.1:19240/v1/chat/completions"
+prompt-mode = "line"
+debounce-ms = 200
+timeout-ms = 5000
+max-tokens = 48
+prefix-chars = 3000
+suffix-chars = 500
+```
+
+Start `hx` normally; a separate launcher is unnecessary. Loading runs in the
+background, so editing remains available while the first model loads. Paths
+support `~` and environment variables. `model` is the alias assigned to the local
+server; `model-path` selects the actual weights. Adjust `server-path` for your
+installation, or omit it if `llama-server` is on PATH.
+
+Managed local servers require an `http://127.0.0.1:PORT/v1/chat/completions`
+endpoint. They use one request slot, Flash Attention and F16 KV cache. A running
+server is reused only if it advertises the configured model alias. An occupied
+port serving another model is reported without stopping that service. Startup
+failures appear in the status line; process output is saved as
+`ai-completion/server-PID-PORT.log` under Helix's cache directory.
+
+Set `enabled = false` and run `:config-reload` to stop suggestions and release a
+server started by this editor. Changing the model/server settings restarts the
+owned server; unrelated editor settings do not. Exiting also stops the owned
+server. Reused external servers remain running. With no `model-path`, the
+existing external HTTP endpoint behavior is preserved.
 
 Only the filename, language and bounded text around the cursor are sent to the
 configured endpoint. Requests disable thinking, use no tools, ignore HTTP proxy

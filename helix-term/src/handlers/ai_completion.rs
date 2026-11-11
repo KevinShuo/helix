@@ -1,4 +1,5 @@
 mod client;
+pub(crate) mod server;
 
 use std::time::Duration;
 
@@ -70,6 +71,7 @@ pub fn trigger(editor: &mut Editor) {
     tokio::spawn(async move {
         let future = async {
             tokio::time::sleep(Duration::from_millis(config.debounce_ms.min(5000))).await;
+            server::wait_ready(&config).await?;
             client::complete(&config, &context).await
         };
         let Some(result) = cancelable_future(future, &handle).await else {

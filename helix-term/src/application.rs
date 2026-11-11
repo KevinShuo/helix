@@ -79,6 +79,7 @@ pub struct Application {
     lsp_progress: LspProgressMap,
 
     theme_mode: Option<theme::Mode>,
+    ai_completion_server: handlers::ai_completion::server::LocalServer,
 }
 
 #[cfg(feature = "integration")]
@@ -244,6 +245,8 @@ impl Application {
         ])
         .context("build signal handler")?;
 
+        let ai_completion_server =
+            handlers::ai_completion::server::LocalServer::new(&config.load().editor.ai_completion);
         let app = Self {
             compositor,
             terminal,
@@ -253,6 +256,7 @@ impl Application {
             jobs,
             lsp_progress: LspProgressMap::new(),
             theme_mode,
+            ai_completion_server,
         };
 
         Ok(app)
@@ -405,6 +409,8 @@ impl Application {
         // Update all the relevant members in the editor after updating
         // the configuration.
         self.editor.refresh_config(&old_editor_config);
+        self.ai_completion_server
+            .configure(&self.editor.config().ai_completion);
 
         // reset view position in case softwrap was enabled/disabled
         let scrolloff = self.editor.config().scrolloff;
@@ -563,7 +569,7 @@ impl Application {
                 self.render().await;
             }
             signal::SIGUSR1 => {
-                self.refresh_config();
+                self.handle_config_events(ConfigEvent::Refresh);
                 self.render().await;
             }
             signal::SIGTERM | signal::SIGINT => {
@@ -1340,6 +1346,7 @@ impl Application {
     }
 
     pub async fn close(&mut self) -> Vec<anyhow::Error> {
+        self.ai_completion_server.stop().await;
         // [NOTE] we intentionally do not return early for errors because we
         //        want to try to run as much cleanup as we can, regardless of
         //        errors along the way

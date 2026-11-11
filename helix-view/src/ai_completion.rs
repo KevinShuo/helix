@@ -2,6 +2,7 @@
 
 use helix_core::text_annotations::InlineAnnotation;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 use crate::{Document, ViewId};
 
@@ -27,6 +28,11 @@ pub struct AiCompletionConfig {
     pub enabled: bool,
     pub endpoint: String,
     pub model: String,
+    pub model_path: Option<PathBuf>,
+    pub server_path: PathBuf,
+    pub context_size: u32,
+    pub gpu_layers: u32,
+    pub startup_timeout_ms: u64,
     pub prompt_mode: AiCompletionPromptMode,
     pub api_key_env: Option<String>,
     pub debounce_ms: u64,
@@ -50,6 +56,11 @@ impl Default for AiCompletionConfig {
             enabled: false,
             endpoint: "http://127.0.0.1:19239/v1/chat/completions".into(),
             model: "Qwen3.8-27B-UD-Q5_K_M".into(),
+            model_path: None,
+            server_path: "llama-server".into(),
+            context_size: 4096,
+            gpu_layers: 99,
+            startup_timeout_ms: 120_000,
             prompt_mode: AiCompletionPromptMode::Insertion,
             api_key_env: None,
             debounce_ms: 350,
