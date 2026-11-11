@@ -1,8 +1,7 @@
 # Git tools implementation and validation
 
-User-approved behavior: Space g unchanged; Space v is the Git group; default
-bottom window with z/F11 fullscreen toggle. This record will be finalized after
-the completion checks.
+User-approved behavior is implemented: Space g unchanged; Space v is the Git
+group; default bottom window with z/F11 fullscreen toggle.
 
 ## Decisions and progress
 
@@ -40,11 +39,6 @@ the completion checks.
 - Failing UI tests caught pointer movement stealing editor focus, modifier keys
   confirming checkout, and the missing full-message popup. These cases now have
   direct integration coverage.
-
-## Pending final checks
-
-Complete backend/UI/integration suites, feature-disabled checks, scoped
-formatting, independent review, production build and executable/runtime check.
 
 ## Independent review and follow-up
 
@@ -103,3 +97,34 @@ overriding the intended no-stash behavior. Merge and pull now explicitly pass
 --no-autostash; the final VCS suite passes 39 tests with the two known Windows
 symlink-creation tests excluded. No test invokes network operations against the
 user's repository or configured remote.
+
+## Final verification and local rollout (2026-11-12)
+
+- Feature source is committed as 6abf93f4 on codex/git-tools.
+- Git end-to-end tests: 11 passed. VCS suite: 39 passed, two Windows privilege
+  cases excluded. Workspace checks passed 474 tests before the final additional
+  no-autostash regression, which then passed in the final VCS suite.
+- Scoped rustfmt and git diff --check pass. Feature-disabled compilation passes.
+- The formatter failure passes when the test process PATH starts with
+  C:\Users\wangshuo\scoop\apps\git\current\bin (Git Bash), with no persistent
+  environment changes. The injection-motion test also passes in isolation.
+  The block-end indentation test still fails in isolation at a language-indent
+  assertion. These results are recorded rather than claiming the complete
+  existing integration suite is green.
+- cargo build --release --locked --jobs 2 -p helix-term succeeds with
+  HELIX_DISABLE_AUTO_GRAMMAR_BUILD=1. The initial attempt was blocked by two
+  running old hx processes holding hx.exe open. The old executable was renamed
+  in the same directory, without stopping either process, and the build retried.
+- The installed executable is I:\DEV\helix\target\release\hx.exe and reports
+  helix 25.07.1 (6abf93f4). Its compiled command strings include the new Git log
+  command. The persistent user PATH already contains this release directory.
+- Rust and C++ health checks pass for parser, highlights, textobjects, indent,
+  tags and rainbow queries. Existing runtime assets remain beside the binary.
+- New executable SHA-256:
+  4FBD907A8C0D441446333E66326721A519ED5967FB0DB67B50762F0B8F4E3C3B
+- Backup: I:\DEV\helix\target\release\hx-before-git-tools.exe, reporting the old
+  acf1539b build. Its unchanged SHA-256 is
+  8F57AE5B24F08D2E569AE3FC3B707D7241D2C04CA6F0A77BF091151C405D6B93.
+
+Restart Helix to load the new executable. Space v opens the Git command group;
+Space v g opens the bottom log window, z/F11 expands/restores it, and q closes it.
