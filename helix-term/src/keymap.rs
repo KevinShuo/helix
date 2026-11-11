@@ -499,6 +499,46 @@ mod tests {
     }
 
     #[test]
+    fn git_group_preserves_changed_file_picker() {
+        let maps = default();
+        for mode in [Mode::Normal, Mode::Select] {
+            let root = maps.get(&mode).unwrap();
+            assert_eq!(
+                root.search(&[key!(' '), key!('g')]).unwrap(),
+                &KeyTrie::MappableCommand(MappableCommand::changed_file_picker)
+            );
+            let group = root
+                .search(&[key!(' '), key!('v')])
+                .and_then(KeyTrie::node)
+                .expect("Space v must open the Git group");
+            assert_eq!(group.name, "Git");
+            assert!(!group.is_sticky);
+            for (key, name) in [
+                ('g', "git_log"),
+                ('b', "git_branches"),
+                ('c', "git_status"),
+                ('h', "git_file_history"),
+                ('n', "git_new_branch"),
+                ('f', "git_fetch"),
+                ('p', "git_pull"),
+                ('P', "git_push"),
+            ] {
+                let command = root
+                    .search(&[
+                        key!(' '),
+                        key!('v'),
+                        key.to_string().parse::<KeyEvent>().unwrap(),
+                    ])
+                    .unwrap();
+                match command {
+                    KeyTrie::MappableCommand(command) => assert_eq!(command.name(), name),
+                    _ => panic!("Git entries must resolve to commands"),
+                }
+            }
+        }
+    }
+
+    #[test]
     fn aliased_modes_are_same_in_default_keymap() {
         let keymaps = Keymaps::default().map();
         let root = keymaps.get(&Mode::Normal).unwrap();

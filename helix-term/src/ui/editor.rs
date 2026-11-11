@@ -1653,6 +1653,7 @@ impl Component for EditorView {
                                         editor: cx.editor,
                                         jobs: cx.jobs,
                                         scroll: None,
+                                        editor_area: None,
                                     };
 
                                     if let EventResult::Consumed(callback) =
@@ -1788,7 +1789,7 @@ impl Component for EditorView {
         };
 
         // -1 for commandline and -1 for bufferline
-        let mut editor_area = area.clip_bottom(1);
+        let mut editor_area = cx.editor_area.unwrap_or(area).clip_bottom(1);
         if use_bufferline {
             editor_area = editor_area.clip_top(1);
         }

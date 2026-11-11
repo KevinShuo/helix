@@ -1,10 +1,12 @@
 pub(crate) mod dap;
+mod git;
 pub(crate) mod lsp;
 pub(crate) mod syntax;
 pub(crate) mod typed;
 
 pub use dap::*;
 use futures_util::FutureExt;
+use git::*;
 use helix_event::status;
 use helix_stdx::{
     path::{self, find_paths},
@@ -173,6 +175,7 @@ impl Context<'_> {
             editor: self.editor,
             jobs: self.jobs,
             scroll: None,
+            editor_area: None,
         }
         .block_try_flush_writes()
     }
@@ -254,6 +257,7 @@ impl MappableCommand {
                         editor: cx.editor,
                         jobs: cx.jobs,
                         scroll: None,
+                        editor_area: None,
                     };
                     if let Err(e) =
                         typed::execute_command(&mut cx, command, args, PromptEvent::Validate)
@@ -413,6 +417,14 @@ impl MappableCommand {
         syntax_symbol_picker, "Open symbol picker from syntax information",
         lsp_or_syntax_symbol_picker, "Open symbol picker from LSP or syntax information",
         changed_file_picker, "Open changed file picker",
+        git_log, "Open Git commit graph and log",
+        git_branches, "Open Git branches and tags",
+        git_status, "Open Git working tree changes",
+        git_file_history, "Open current file's Git history",
+        git_new_branch, "Create a Git branch",
+        git_fetch, "Fetch Git remotes",
+        git_pull, "Pull Git changes (fast-forward only)",
+        git_push, "Push current Git branch",
         select_references_to_symbol_under_cursor, "Select symbol references",
         workspace_symbol_picker, "Open workspace symbol picker",
         syntax_workspace_symbol_picker, "Open workspace symbol picker from syntax information",

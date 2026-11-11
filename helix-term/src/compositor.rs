@@ -25,6 +25,8 @@ pub struct Context<'a> {
     pub editor: &'a mut Editor,
     pub scroll: Option<usize>,
     pub jobs: &'a mut Jobs,
+    /// Space available to editor views after persistent tool windows dock.
+    pub editor_area: Option<Rect>,
 }
 
 impl Context<'_> {
@@ -38,6 +40,10 @@ impl Context<'_> {
 }
 
 pub trait Component: Any + AnyComponent {
+    fn editor_area(&self, area: Rect) -> Rect {
+        area
+    }
+
     /// Process input events, return true if handled.
     fn handle_event(&mut self, _event: &Event, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
@@ -182,6 +188,11 @@ impl Compositor {
     }
 
     pub fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
+        cx.editor_area = Some(
+            self.layers
+                .iter()
+                .fold(area, |area, layer| layer.editor_area(area)),
+        );
         for layer in &mut self.layers {
             layer.render(area, surface, cx);
         }

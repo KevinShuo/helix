@@ -20,6 +20,9 @@ mod function_authors;
 
 pub use function_authors::{function_authors, FunctionAuthor};
 
+#[path = "log.rs"]
+pub mod git_tools;
+
 mod status;
 
 pub use status::FileChange;

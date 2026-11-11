@@ -234,6 +234,16 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "d" => diagnostics_picker,
             "D" => workspace_diagnostics_picker,
             "g" => changed_file_picker,
+            "v" => { "Git"
+                "g" => git_log,
+                "b" => git_branches,
+                "c" => git_status,
+                "h" => git_file_history,
+                "n" => git_new_branch,
+                "f" => git_fetch,
+                "p" => git_pull,
+                "P" => git_push,
+            },
             "a" => code_action,
             "'" => last_picker,
             "G" => { "Debug (experimental)" sticky=true

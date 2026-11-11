@@ -92,6 +92,21 @@ fn setup_integration_logging() {
 }
 
 impl Application {
+    #[cfg(feature = "integration")]
+    pub fn test_screen(&self) -> &tui::buffer::Buffer {
+        self.terminal.backend().buffer()
+    }
+
+    #[cfg(feature = "integration")]
+    pub async fn test_resize(&mut self, width: u16, height: u16) -> anyhow::Result<()> {
+        let area = Rect::new(0, 0, width, height);
+        self.terminal.backend_mut().resize(width, height);
+        self.terminal.resize(area)?;
+        self.compositor.resize(area);
+        self.render().await;
+        Ok(())
+    }
+
     pub fn new(
         args: Args,
         config: Config,
@@ -272,6 +287,7 @@ impl Application {
             editor: &mut self.editor,
             jobs: &mut self.jobs,
             scroll: None,
+            editor_area: None,
         };
 
         helix_event::start_frame();
@@ -587,6 +603,7 @@ impl Application {
             editor: &mut self.editor,
             jobs: &mut self.jobs,
             scroll: None,
+            editor_area: None,
         };
         let should_render = self.compositor.handle_event(&Event::IdleTimeout, &mut cx);
         if should_render || self.editor.needs_redraw {
@@ -711,6 +728,7 @@ impl Application {
             editor: &mut self.editor,
             jobs: &mut self.jobs,
             scroll: None,
+            editor_area: None,
         };
         // Handle key events
         let should_redraw = match event.unwrap() {

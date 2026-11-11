@@ -300,6 +300,7 @@ This layer is a kludge of mappings, mostly pickers.
 | `b`     | Open buffer picker                                                      | `buffer_picker`                            |
 | `j`     | Open jumplist picker                                                    | `jumplist_picker`                          |
 | `g`     | Open changed file picker                                                | `changed_file_picker`                      |
+| `v`     | Enter [Git mode](#git-mode)                                              | N/A                                        |
 | `G`     | Debug (experimental)                                                    | N/A                                        |
 | `k`     | Show documentation for item under cursor in a [popup](#popup) (**LSP**) | `hover`                                    |
 | `s`     | Open document symbol picker (**LSP** or **TS**)                         | `lsp_or_syntax_symbol_picker`              |
@@ -323,6 +324,68 @@ This layer is a kludge of mappings, mostly pickers.
 | `?`     | Open command palette                                                    | `command_palette`                          |
 
 > 💡 Global search displays results in a fuzzy picker, use `Space + '` to bring it back up after opening a file.
+
+##### Git mode
+
+Type `Space v` in normal or select mode to open the Git command group.
+`Space g` remains the changed-file picker.
+
+| Key | Description | Command |
+| --- | --- | --- |
+| `g` | Open commit graph and log | `git_log` |
+| `b` | Open branches and tags | `git_branches` |
+| `c` | Open working-tree changes | `git_status` |
+| `h` | Open the current file's history | `git_file_history` |
+| `n` | Create a branch from the selected commit | `git_new_branch` |
+| `f` | Fetch remotes | `git_fetch` |
+| `p` | Pull with fast-forward updates only | `git_pull` |
+| `P` | Push the current branch | `git_push` |
+
+The Git window docks below the editor. Press `z` to expand it to fullscreen and
+back; `F11` is an alias when the terminal forwards that key. Selection, filters,
+and diff position survive this toggle. Narrow terminals show the focused pane.
+
+| Key inside the Git window | Description |
+| --- | --- |
+| `Tab`, `Shift-Tab` | Next/previous pane |
+| `1` / `2` / `3` / `4` | Branches / commits / files / diff |
+| `j`, `k`, arrows | Move in the focused pane |
+| `PageUp`, `PageDown`, `Ctrl-u`, `Ctrl-d` | Scroll by a page |
+| `Home`, `End` | First/last entry |
+| `Enter` | Fold a tree group, apply a branch filter, or focus files/diff |
+| `/` | Search messages or jump to a short/full commit hash; in the branch pane, find a branch/tag |
+| `A` | Filter by author |
+| `D` | Filter by date as `since..until` (either endpoint may be empty) |
+| `p` | Filter by a repository-relative path |
+| `R` | Clear filters |
+| `r`, `F5` | Refresh Git data |
+| `m` | Load 200 more commits, up to 5,000; use filters for longer histories |
+| `s` | Show staged and unstaged working-tree changes against HEAD |
+| `d` | Show full commit message, author, date, refs and parents |
+| `y` | Copy the selected commit's full hash |
+| `o` | Open the selected working file in the editor |
+| `O` | Open the selected commit's file in a scratch split |
+| `h`, `l`, left/right in diff | Scroll the diff horizontally |
+| `a` | Open context actions |
+| `Ctrl-w` | Return focus to the editor's window commands, keeping Git docked |
+| `Space v` | Open the Git command group again |
+| `q`, `Esc` | Close the Git window |
+
+Mouse clicks select branches, commits and files; the wheel moves in the pane
+under the pointer. Choosing a branch only filters history. To check it out,
+select the branch and use `a c`. In the actions menu, `n` creates a branch,
+`m` merges the selected branch into HEAD, `p` cherry-picks the selected commit,
+`f` fetches, `u` pulls and `P` pushes. The confirmation names the source and
+target; press plain `y` to execute or `n`/`Esc` to cancel.
+
+These tools require the Git executable on PATH and a workspace trusted for Git
+(`:trust`). Branch-changing actions refuse unsaved buffers in the repository.
+Pull refuses diverged histories; push uses an explicit current-branch refspec
+and never implicitly pushes other branches or tags. Pull and merge never
+automatically stash local changes. Errors and conflicts are
+reported for resolution. Merge diffs use the first parent; historical deletions
+open the file from its parent commit. Binary files and previews over 16 MiB have
+limited text previews. Git reads have a 20-second timeout, operations 60 seconds.
 
 ##### Popup
 
