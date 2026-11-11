@@ -1,10 +1,88 @@
 # Local AI inline completion validation
 
-Environment: Windows, Rust 1.90.0, existing Junie Local Qwen3.8 27B Q5 model.
-Implementation commit: `06d76288e`. All work remains on local branch
-`codex/ai-inline-completion`; nothing was pushed and remotes were not changed.
+Original implementation environment: Windows, Rust 1.90.0, Junie Local Qwen3.8
+27B Q5 model.
+Implementation commit: `06d76288e`. The results below record local development
+and validation on `codex/ai-inline-completion`, before publication to the
+user-owned fork.
 
-## Results
+## Qwen2.5-Coder 7B configuration follow-up
+
+The launcher now defaults to the user's downloaded
+`Qwen2.5-Coder-7B-Instruct-Q5_K_M.gguf` (5,444,831,200 bytes), a 4096-token
+context, all GPU layers and F16 KV cache. Server logs confirmed 29/29 layers
+offloaded to the RTX 4090. The previous Q4 KV settings produced empty or
+malformed code; changing only the cache type to F16 produced `sum(items)` and
+`return a + b` for the same prompts. Model weights remain Q5_K_M.
+
+The generated session config uses a 200 ms debounce, 5-second timeout, 48 output
+tokens, 3000 prefix characters and 500 suffix characters. Existing user settings
+and key bindings were compared as parsed TOML and preserved exactly; the
+original config's SHA-256 was unchanged after the session. File arguments with
+spaces were preserved, and the model process stopped when the session ended.
+The existing gateway option still defaults to its original 27B model.
+
+Fresh verification passed:
+
+- PowerShell parsing, changed-file rustfmt and `git diff --check`.
+- All 18 AI editor integration tests; the opt-in live test passed separately
+  with `HELIX_TEST_AI_MODEL` set to the new 7B alias.
+- Live editor preview was `sum(items)` and Shift+Right inserted it. The test's
+  input-through-acceptance time was 1.46 seconds, including test event-loop
+  waits; this is not an isolated inference measurement.
+- A cold server start followed by `-Check` returned `return a + b` in 0.08 seconds
+  of HTTP request time. Subsequent short synthetic requests using the editor's
+  prompt returned `sum(items)` in 49 ms and `return a + b` in 51 ms. These times
+  exclude model loading, typing debounce and rendering, and do not predict
+  performance for longer contexts or suggestions.
+
+At this initial 7B configuration stage, only the launcher, documentation and
+live-test model selection changed. The subsequent boundary repair below requires
+the rebuilt editor.
+
+## C++ insertion boundary repair
+
+The user's `while (smallestCarOfNumber...)` screenshot exposed a missing case:
+the Instruct model could return an assignment or an entire statement when asked
+for only an insertion. Live probes using the actual header reproduced the
+problem. Raw FIM and alternate hole prompts with this Instruct checkpoint did
+not reliably respect the suffix either.
+
+The 7B launcher now enables `prompt-mode = "line"`. The model completes the
+current line; the client requires the exact typed prefix and extracts only the
+gap before the existing suffix. Suffix candidates inside an unmatched nested
+call or string are rejected. Later generated lines are discarded, and LF/CRLF
+code fences are normalized consistently. The default `insertion` mode retains
+the original multiline behavior and remains the gateway/27B default.
+
+Fresh checks for the repair:
+
+- 21 `helix-term` library tests passed, including the new boundary and CRLF
+  regressions. The tests failed on the old behavior before implementation.
+- Both AI configuration tests passed, including insertion-mode compatibility.
+- 19 AI editor integration tests passed, covering existing popup completion and
+  a new complete-line-to-gap acceptance case. Two opt-in live tests passed
+  separately against the running 7B server.
+- The actual C++ file was read into a disposable editor fixture. The preview
+  ` <= numberOfCar` was accepted without repeating the identifier or altering
+  the right-hand suffix. The original source file was never opened for writing.
+- An independent reviewer found a rightmost-suffix ambiguity and fenced CRLF
+  mismatch. New regressions reproduced both; the final relevant suites passed
+  after the fixes.
+- Release build passed in 1m17s. The replacement is staged at
+  `target/release/hx.exe`; the running image was renamed and preserved so the
+  user's session did not close. The launcher-generated line-mode TOML preserved
+  all original preferences, the original config hash stayed unchanged, and the
+  new release's C++ health checks passed. Both existing editor and model server
+  processes remained alive. Restarting through the launcher activates the fix.
+
+The C++ preview above is **not** proof of the correct algorithmic condition: it
+does not recover the source's original `== nextCarToOutput` comparison. This
+repair fixes insertion boundaries; the 7B model can still make incorrect code
+guesses. Conservative checks may also omit otherwise valid ambiguous fragments.
+Line mode deliberately suggests only the current line.
+
+## Original 27B implementation results
 
 - Release build passed: `cargo build --release --locked -p helix-term` with
   `HELIX_DISABLE_AUTO_GRAMMAR_BUILD=1`. Output: `target/release/hx.exe`, reporting

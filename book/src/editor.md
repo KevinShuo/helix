@@ -539,6 +539,7 @@ suggestion, `Shift-Right` inserts nothing and cancels any menu preview.
 | `enabled` | Enable automatic AI suggestions | `false` |
 | `endpoint` | Full HTTP(S) chat completions URL | `"http://127.0.0.1:19239/v1/chat/completions"` |
 | `model` | Model name sent to the server | `"Qwen3.8-27B-UD-Q5_K_M"` |
+| `prompt-mode` | `insertion` requests missing code directly; `line` requests a complete current line and extracts only the missing part, rejecting responses that change the typed prefix or omit the existing line suffix | `"insertion"` |
 | `api-key-env` | Optional environment variable containing the bearer token | unset |
 | `debounce-ms` | Pause after editing before a request, capped at 5000 ms | `350` |
 | `timeout-ms` | Request timeout, clamped to 100–120000 ms | `5000` |
@@ -562,6 +563,12 @@ silently leave regular editing available; debug logs contain a short error, not
 credentials or model response bodies. Choose context limits that fit your model.
 Selections spanning more than one grapheme, multiple cursors, read-only documents
 and active snippets suppress suggestions.
+
+`prompt-mode = "line"` can help small chat models that repeat existing code when
+asked for an insertion. It suggests at most the remainder of the current line;
+the default `insertion` mode supports multiline suggestions. Line mode preserves
+the exact text already typed and leaves text to the right of the cursor in place.
+These boundary checks do not verify the suggested code's logic.
 
 The theme scope is `ui.virtual.ai-completion`, with a grey fallback. To remap
 acceptance if your terminal does not transmit `Shift-Right`:

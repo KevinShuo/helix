@@ -1,7 +1,11 @@
 use super::helpers::*;
 use helix_core::text_annotations::InlineAnnotation;
 use helix_term::application::Application;
-use helix_view::{ai_completion::AiCompletion, current, current_ref, input::parse_macro};
+use helix_view::{
+    ai_completion::{AiCompletion, AiCompletionPromptMode},
+    current, current_ref,
+    input::parse_macro,
+};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 async fn keys(app: &mut Application, input: &str) -> anyhow::Result<()> {
@@ -300,6 +304,44 @@ async fn ai_completion_automatically_requests_and_displays_without_editing() -> 
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_line_mode_preserves_typed_code_and_existing_parenthesis(
+) -> anyhow::Result<()> {
+    let (endpoint, _, server) = model_server(
+        0,
+        vec!["while (smallestCarOfNumber == nextCarToOutput) {\n  unrelated();\n}"],
+    )
+    .await;
+    let mut config = model_config(endpoint);
+    config.editor.ai_completion.prompt_mode = AiCompletionPromptMode::Line;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("while (smallestCarOfNumbe#[|)]#\n")
+        .build()?;
+    keys(&mut app, "ir").await?;
+    wait_for_preview(&mut app).await;
+    assert_eq!(text(&app), "while (smallestCarOfNumber)\n");
+    assert_eq!(
+        current_ref!(app.editor)
+            .1
+            .ai_completion
+            .as_ref()
+            .unwrap()
+            .annotation
+            .text
+            .as_str(),
+        " == nextCarToOutput"
+    );
+    keys(&mut app, "<S-right>").await?;
+    assert_eq!(
+        text(&app),
+        "while (smallestCarOfNumber == nextCarToOutput)\n"
+    );
+    server.await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn ai_completion_old_response_cannot_replace_new_response() -> anyhow::Result<()> {
     let (endpoint, mut started, server) = model_server(350, vec!["old", "new"]).await;
     let mut app = AppBuilder::new()
@@ -417,6 +459,12 @@ async fn ai_completion_uses_document_line_endings() -> anyhow::Result<()> {
 #[ignore = "requires HELIX_TEST_AI_ENDPOINT pointing to a running local Qwen server"]
 async fn ai_completion_live_local_model() -> anyhow::Result<()> {
     let mut config = model_config(std::env::var("HELIX_TEST_AI_ENDPOINT")?);
+    if let Ok(model) = std::env::var("HELIX_TEST_AI_MODEL") {
+        config.editor.ai_completion.model = model;
+    }
+    if std::env::var("HELIX_TEST_AI_PROMPT_MODE").as_deref() == Ok("line") {
+        config.editor.ai_completion.prompt_mode = AiCompletionPromptMode::Line;
+    }
     config.editor.ai_completion.timeout_ms = 15000;
     config.editor.ai_completion.max_tokens = 48;
     let mut app = AppBuilder::new()
@@ -446,6 +494,58 @@ async fn ai_completion_live_local_model() -> anyhow::Result<()> {
         suggestion,
         start.elapsed()
     );
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "requires HELIX_TEST_AI_ENDPOINT and HELIX_TEST_AI_CPP_FILE for the reported C++ case"]
+async fn ai_completion_live_cpp_line() -> anyhow::Result<()> {
+    let source = std::fs::read_to_string(std::env::var("HELIX_TEST_AI_CPP_FILE")?)?;
+    let (before, rest) = source
+        .split_once("while (smallestCarOfNumber")
+        .ok_or_else(|| anyhow::anyhow!("C++ fixture must contain the reported while condition"))?;
+    let suffix = &rest[rest
+        .find(')')
+        .ok_or_else(|| anyhow::anyhow!("Missing closing parenthesis"))?..];
+    let input = format!("{before}while (smallestCarOfNumbe#[|)]#{}", &suffix[1..]);
+    let typed = format!("{before}while (smallestCarOfNumber");
+    let mut config = model_config(std::env::var("HELIX_TEST_AI_ENDPOINT")?);
+    if let Ok(model) = std::env::var("HELIX_TEST_AI_MODEL") {
+        config.editor.ai_completion.model = model;
+    }
+    config.editor.ai_completion.prompt_mode = AiCompletionPromptMode::Line;
+    config.editor.ai_completion.timeout_ms = 5000;
+    config.editor.ai_completion.debounce_ms = 200;
+    config.editor.ai_completion.max_tokens = 48;
+    config.editor.ai_completion.prefix_chars = 3000;
+    config.editor.ai_completion.suffix_chars = 500;
+    // Open a disposable copy so neither accepting nor closing can write to the
+    // user's file. Its .hpp name supplies the actual language to the model.
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("stack_track.hpp");
+    std::fs::write(&path, "")?;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(path, None)
+        .with_input_text(input)
+        .build()?;
+    keys(&mut app, "ir").await?;
+    wait_for_preview(&mut app).await;
+    let suggestion = current_ref!(app.editor)
+        .1
+        .ai_completion
+        .as_ref()
+        .unwrap()
+        .annotation
+        .text
+        .to_string();
+    assert!(!suggestion.contains(['\r', '\n']));
+    assert!(!suggestion.contains("smallestCarOfNumber"));
+    assert_eq!(text(&app), format!("{typed}{suffix}"));
+    keys(&mut app, "<S-right>").await?;
+    assert_eq!(text(&app), format!("{typed}{suggestion}{suffix}"));
+    println!("Live C++ line preview and Shift+Right acceptance: {suggestion:?}");
     app.close().await;
     Ok(())
 }

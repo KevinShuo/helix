@@ -1,4 +1,4 @@
-use helix_view::editor::Config;
+use helix_view::{ai_completion::AiCompletionPromptMode, editor::Config};
 
 #[test]
 fn ai_completion_configuration_keeps_regular_completion_enabled() {
@@ -19,4 +19,26 @@ suffix-chars = 2000
     .expect("AI provider configuration must coexist with normal completion");
     assert!(config.auto_completion);
     assert!(config.path_completion);
+    assert_eq!(
+        config.ai_completion.prompt_mode,
+        AiCompletionPromptMode::Insertion
+    );
+}
+
+#[test]
+fn ai_completion_line_mode_coexists_with_regular_completion() {
+    let config: Config = toml::from_str(
+        r#"
+[ai-completion]
+enabled = true
+prompt-mode = "line"
+"#,
+    )
+    .expect("line completion must be an opt-in mode of the existing provider");
+    assert!(config.auto_completion);
+    assert!(config.path_completion);
+    assert_eq!(
+        config.ai_completion.prompt_mode,
+        AiCompletionPromptMode::Line
+    );
 }

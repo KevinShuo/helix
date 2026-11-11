@@ -27,6 +27,7 @@ pub struct AiCompletionConfig {
     pub enabled: bool,
     pub endpoint: String,
     pub model: String,
+    pub prompt_mode: AiCompletionPromptMode,
     pub api_key_env: Option<String>,
     pub debounce_ms: u64,
     pub timeout_ms: u64,
@@ -35,12 +36,21 @@ pub struct AiCompletionConfig {
     pub suffix_chars: usize,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AiCompletionPromptMode {
+    #[default]
+    Insertion,
+    Line,
+}
+
 impl Default for AiCompletionConfig {
     fn default() -> Self {
         Self {
             enabled: false,
             endpoint: "http://127.0.0.1:19239/v1/chat/completions".into(),
             model: "Qwen3.8-27B-UD-Q5_K_M".into(),
+            prompt_mode: AiCompletionPromptMode::Insertion,
             api_key_env: None,
             debounce_ms: 350,
             timeout_ms: 5000,
