@@ -449,3 +449,81 @@ async fn ai_completion_live_local_model() -> anyhow::Result<()> {
     app.close().await;
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_closing_last_view_with_feature_disabled() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new().build()?;
+    keys(&mut app, "<C-w>q").await?;
+    assert!(app.editor.should_close());
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_multi_key_accept_repeats_and_records() -> anyhow::Result<()> {
+    let mut config = test_config();
+    config.keys = toml::from_str("[insert.j]\nk = 'ai_completion_accept'\n")?;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("#[|\n]#")
+        .build()?;
+    keys(&mut app, "Qiab").await?;
+    show(&mut app, "C");
+    keys(&mut app, "jk<esc>Q:new<ret>.").await?;
+    assert_eq!(
+        text(&app),
+        format!("abC{}", helix_core::NATIVE_LINE_ENDING.as_str())
+    );
+    assert_eq!(app.editor.mode(), helix_view::document::Mode::Normal);
+    keys(&mut app, ":new<ret>q").await?;
+    assert_eq!(
+        text(&app),
+        format!("abC{}", helix_core::NATIVE_LINE_ENDING.as_str())
+    );
+    app.close().await;
+    Ok(())
+}
+
+async fn sequence_accept_and_replay(
+    command: &str,
+    tail: &str,
+    expected: &str,
+) -> anyhow::Result<()> {
+    let mut config = test_config();
+    config.keys = toml::from_str(&format!(
+        "[insert]\nF4 = ['ai_completion_accept', '{command}']\n"
+    ))?;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("#[|\n]#")
+        .build()?;
+    keys(&mut app, "Qiab").await?;
+    show(&mut app, "C");
+    keys(&mut app, &format!("<F4>{tail}Q")).await?;
+    assert_eq!(text(&app), format!("{expected}\n"));
+    assert_eq!(app.editor.mode(), helix_view::document::Mode::Normal);
+    keys(&mut app, ":new<ret>.").await?;
+    assert_eq!(
+        text(&app),
+        format!("{expected}{}", helix_core::NATIVE_LINE_ENDING.as_str())
+    );
+    assert_eq!(app.editor.mode(), helix_view::document::Mode::Normal);
+    keys(&mut app, ":new<ret>q").await?;
+    assert_eq!(
+        text(&app),
+        format!("{expected}{}", helix_core::NATIVE_LINE_ENDING.as_str())
+    );
+    assert_eq!(app.editor.mode(), helix_view::document::Mode::Normal);
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_sequence_accept_then_normal_mode() -> anyhow::Result<()> {
+    sequence_accept_and_replay("normal_mode", "", "abC").await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_sequence_accept_then_move() -> anyhow::Result<()> {
+    sequence_accept_and_replay("move_char_left", "X<esc>", "abXC").await
+}

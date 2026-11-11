@@ -44,7 +44,6 @@ pub struct EditorView {
     spinners: ProgressSpinners,
     /// Tracks if the terminal window is focused by reaction to terminal focus events
     terminal_focused: bool,
-    ai_accept_key_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +56,7 @@ pub enum InsertEvent {
     TriggerCompletion,
     RequestCompletion,
     Literal(String),
+    Command(commands::MappableCommand),
 }
 
 impl EditorView {
@@ -69,7 +69,6 @@ impl EditorView {
             completion: None,
             spinners: ProgressSpinners::default(),
             terminal_focused: true,
-            ai_accept_key_count: 0,
         }
     }
 
@@ -945,49 +944,119 @@ impl EditorView {
         cxt: &mut commands::Context,
         event: KeyEvent,
     ) -> Option<KeymapResult> {
-        let mut last_mode = mode;
-        self.pseudo_pending.extend(self.keymaps.pending());
+        let pending = self.keymaps.pending().to_vec();
+        self.pseudo_pending.extend(&pending);
         let key_result = self.keymaps.get(mode, event);
         cxt.editor.autoinfo = self.keymaps.sticky().map(|node| node.infobox());
-
-        let mut execute_command = |command: &commands::MappableCommand| {
-            command.execute(cxt);
-            helix_event::dispatch(PostCommand { command, cx: cxt });
-
-            let current_mode = cxt.editor.mode();
-            if current_mode != last_mode {
-                helix_event::dispatch(OnModeSwitch {
-                    old_mode: last_mode,
-                    new_mode: current_mode,
-                    cx: cxt,
-                });
-
-                // HAXX: if we just entered insert mode from normal, clear key buf
-                // and record the command that got us into this mode.
-                if current_mode == Mode::Insert {
-                    // how we entered insert mode is important, and we should track that so
-                    // we can repeat the side effect.
-                    self.last_insert.0 = command.clone();
-                    self.last_insert.1.clear();
+        let record_commands = mode == Mode::Insert
+            && match &key_result {
+                KeymapResult::Matched(command) => {
+                    *command == commands::MappableCommand::ai_completion_accept
+                }
+                KeymapResult::MatchedSequence(commands) => {
+                    commands.contains(&commands::MappableCommand::ai_completion_accept)
+                }
+                _ => false,
+            };
+        if record_commands {
+            // The final key is not recorded by handle_event. Remove any prefix
+            // keys already recorded while the accept mapping was pending.
+            for key in pending.iter().rev() {
+                if let Some(index) = self.last_insert.1.iter().rposition(
+                    |event| matches!(event, InsertEvent::Key(recorded) if recorded == key),
+                ) {
+                    self.last_insert.1.remove(index);
                 }
             }
-
-            last_mode = current_mode;
-        };
+            if cxt.editor.macro_replaying.is_empty() {
+                if let Some((_, events)) = &mut cxt.editor.macro_recording {
+                    events.truncate(events.len().saturating_sub(pending.len() + 1));
+                }
+            }
+        }
 
         match &key_result {
             KeymapResult::Matched(command) => {
-                execute_command(command);
+                self.execute_command(cxt, command);
             }
             KeymapResult::Pending(node) => cxt.editor.autoinfo = Some(node.infobox()),
             KeymapResult::MatchedSequence(commands) => {
                 for command in commands {
-                    execute_command(command);
+                    if record_commands
+                        && *command != commands::MappableCommand::ai_completion_accept
+                    {
+                        self.last_insert
+                            .1
+                            .push(InsertEvent::Command(command.clone()));
+                        if cxt.editor.macro_replaying.is_empty() {
+                            if let Some((_, events)) = &mut cxt.editor.macro_recording {
+                                events.push(helix_view::macro_input::MacroEvent::Command(
+                                    command.to_string(),
+                                ));
+                            }
+                        }
+                    }
+                    self.execute_command(cxt, command);
+                    if cxt.editor.should_close() {
+                        break;
+                    }
                 }
             }
             KeymapResult::NotFound | KeymapResult::Cancelled(_) => return Some(key_result),
         }
         None
+    }
+
+    fn execute_command(
+        &mut self,
+        cxt: &mut commands::Context,
+        command: &commands::MappableCommand,
+    ) {
+        let old_mode = cxt.editor.mode();
+        if *command == commands::MappableCommand::ai_completion_accept {
+            // This must execute at its position in a command sequence, before
+            // a following movement or mode switch invalidates the preview.
+            self.accept_ai_completion(cxt.editor);
+        } else {
+            command.execute(cxt);
+        }
+        helix_event::dispatch(PostCommand { command, cx: cxt });
+        let new_mode = cxt.editor.mode();
+        if new_mode != old_mode {
+            helix_event::dispatch(OnModeSwitch {
+                old_mode,
+                new_mode,
+                cx: cxt,
+            });
+            if new_mode == Mode::Insert {
+                self.last_insert.0 = command.clone();
+                self.last_insert.1.clear();
+            }
+        }
+    }
+
+    pub(crate) fn replay_macro_command(
+        &mut self,
+        cxt: &mut commands::Context,
+        command: &commands::MappableCommand,
+    ) {
+        if cxt.editor.mode() == Mode::Insert {
+            self.last_insert
+                .1
+                .push(InsertEvent::Command(command.clone()));
+        }
+        self.execute_command(cxt, command);
+        self.on_next_key = cxt.on_next_key_callback.take();
+        if cxt.editor.should_close() {
+            return;
+        }
+        let config = cxt.editor.config();
+        let mode = cxt.editor.mode();
+        let (view, doc) = current!(cxt.editor);
+        view.ensure_cursor_in_view(doc, config.scrolloff);
+        if mode != Mode::Insert {
+            doc.append_changes_to_history(view);
+        }
     }
 
     fn insert_mode(&mut self, cx: &mut commands::Context, event: KeyEvent) {
@@ -1051,6 +1120,7 @@ impl EditorView {
                                 last_request_savepoint = None;
                                 commands::insert_ai_completion_text(cxt.editor, &text);
                             }
+                            InsertEvent::Command(command) => self.execute_command(cxt, &command),
                             InsertEvent::CompletionApply {
                                 trigger_offset,
                                 changes,
@@ -1172,7 +1242,6 @@ impl EditorView {
     }
 
     pub fn accept_ai_completion(&mut self, editor: &mut Editor) {
-        let key_count = std::mem::take(&mut self.ai_accept_key_count);
         let suggestion = {
             let (_, doc) = current!(editor);
             doc.ai_completion_controller.cancel();
@@ -1192,7 +1261,6 @@ impl EditorView {
         self.last_insert.1.push(InsertEvent::Literal(text.clone()));
         if editor.macro_replaying.is_empty() {
             if let Some((_, events)) = &mut editor.macro_recording {
-                events.truncate(events.len().saturating_sub(key_count));
                 events.push(helix_view::macro_input::MacroEvent::Paste(text));
             }
         }
@@ -1575,7 +1643,6 @@ impl Component for EditorView {
                             // let completion swallow the event if necessary
                             let mut consumed = false;
                             if ai_accept {
-                                self.ai_accept_key_count = self.keymaps.pending().len() + 1;
                                 self.insert_mode(&mut cx, key);
                                 consumed = true;
                             } else if let Some(completion) = &mut self.completion {
@@ -1635,6 +1702,11 @@ impl Component for EditorView {
                     _ => self.pseudo_pending.clear(),
                 }
 
+                // A mapped command can remove the last view, including when AI
+                // completion is disabled. Do not inspect its document then.
+                if cx.editor.should_close() {
+                    return EventResult::Ignored(None);
+                }
                 let (_, doc) = current_ref!(cx.editor);
                 if !ai_accept && doc.id() == previous_doc && doc.version() != previous_version {
                     cx.callback.push(Box::new(|_, cx| {

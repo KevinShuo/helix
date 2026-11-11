@@ -7003,20 +7003,53 @@ fn replay_macro(cx: &mut Context) {
         return;
     };
 
+    for event in &keys {
+        if let helix_view::macro_input::MacroEvent::Command(command) = event {
+            if let Err(error) = command.parse::<MappableCommand>() {
+                cx.editor
+                    .set_error(format!("Invalid macro command: {error}"));
+                return;
+            }
+        }
+    }
+
     // Once the macro has been fully validated, it's marked as being under replay
     // to ensure we don't fall into infinite recursion.
     cx.editor.macro_replaying.push(reg);
 
     let count = cx.count();
     cx.callback.push(Box::new(move |compositor, cx| {
-        for _ in 0..count {
+        'replay: for _ in 0..count {
             for event in &keys {
+                if cx.editor.should_close() {
+                    break 'replay;
+                }
                 match event {
                     helix_view::macro_input::MacroEvent::Key(key) => {
                         compositor.handle_event(&compositor::Event::Key(*key), cx);
                     }
                     helix_view::macro_input::MacroEvent::Paste(text) => {
                         compositor.handle_event(&compositor::Event::Paste(text.clone()), cx);
+                    }
+                    helix_view::macro_input::MacroEvent::Command(command) => {
+                        let command = command
+                            .parse::<MappableCommand>()
+                            .expect("validated macro command");
+                        let mut command_cx = Context {
+                            editor: cx.editor,
+                            jobs: cx.jobs,
+                            register: None,
+                            count: None,
+                            callback: Vec::new(),
+                            on_next_key_callback: None,
+                        };
+                        if let Some(editor_view) = compositor.find::<ui::EditorView>() {
+                            editor_view.replay_macro_command(&mut command_cx, &command);
+                        }
+                        let callbacks = command_cx.callback;
+                        for callback in callbacks {
+                            callback(compositor, cx);
+                        }
                     }
                 }
             }
