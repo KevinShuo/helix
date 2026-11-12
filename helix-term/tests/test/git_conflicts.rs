@@ -365,3 +365,48 @@ async fn git_conflicts_closing_other_buffers_restores_saved_tree() -> anyhow::Re
     app.close().await;
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_busy_draft_buffer_close_reports_refusal() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("second.txt"), None)
+        .build()?;
+    let original = current_ref!(app.editor).1.id();
+    let session = enter(&mut app, repo.path()).await?;
+    let draft = current_ref!(app.editor).1.id();
+    let text = current_ref!(app.editor).1.text().to_string();
+    app.editor
+        .documents
+        .get_mut(&draft)
+        .unwrap()
+        .merge_mut()
+        .unwrap()
+        .busy = true;
+
+    keys(&mut app, ":bc!<ret>").await?;
+
+    assert_eq!(app.editor.active_merge(), Some(session));
+    assert_eq!(current_ref!(app.editor).1.id(), draft);
+    assert_eq!(app.editor.documents[&draft].text().to_string(), text);
+    assert!(
+        app.editor.is_err(),
+        "buffer close must report the busy-draft refusal"
+    );
+    assert!(app.editor.get_status().unwrap().0.contains("being applied"));
+
+    app.editor
+        .documents
+        .get_mut(&draft)
+        .unwrap()
+        .merge_mut()
+        .unwrap()
+        .busy = false;
+    keys(&mut app, ":bc!<ret>").await?;
+    assert!(app.editor.active_merge().is_none());
+    assert!(!app.editor.documents.contains_key(&draft));
+    assert_eq!(current_ref!(app.editor).1.id(), original);
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}

@@ -195,16 +195,19 @@ fn buffer_close_by_ids_impl(
 ) -> anyhow::Result<()> {
     cx.block_try_flush_writes()?;
 
-    let (modified_ids, modified_names): (Vec<_>, Vec<_>) = doc_ids
-        .iter()
-        .filter_map(|&doc_id| {
-            if let Err(CloseError::BufferModified(name)) = cx.editor.close_document(doc_id, force) {
-                Some((doc_id, name))
-            } else {
-                None
+    let mut modified_ids = Vec::new();
+    let mut modified_names = Vec::new();
+    for &doc_id in doc_ids {
+        match cx.editor.close_document(doc_id, force) {
+            Ok(()) => (),
+            Err(CloseError::BufferModified(name)) => {
+                modified_ids.push(doc_id);
+                modified_names.push(name);
             }
-        })
-        .unzip();
+            Err(CloseError::SaveError(err)) => return Err(err),
+            Err(CloseError::DoesNotExist) => bail!("Cannot close a non-existent buffer"),
+        }
+    }
 
     if let Some(first) = modified_ids.first() {
         let current = doc!(cx.editor);
