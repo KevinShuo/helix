@@ -1,7 +1,7 @@
 # Configuration
 
-For function folding controls and the optional clickable `fold` gutter, see
-[function folding](editor.md#function-folding).
+For function/class folding controls and the optional clickable `fold` gutter, see
+[function and class folding](editor.md#function-and-class-folding).
 
 To override global configuration parameters, create a `config.toml` file located in your config directory:
 

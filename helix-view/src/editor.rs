@@ -168,9 +168,9 @@ where
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
 pub struct GutterFoldConfig {
-    /// Symbol shown next to lines that start a foldable block. Defaults to `▼`.
+    /// Symbol beside expanded function/class declarations. Defaults to `▾`.
     pub foldable: String,
-    /// Symbol shown next to folded blocks. Defaults to `▶`.
+    /// Symbol beside folded function/class declarations. Defaults to `▸`.
     pub folded: String,
 }
 

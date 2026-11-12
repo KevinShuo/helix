@@ -313,8 +313,8 @@
 | `goto_prev_tabstop` | Goto next snippet placeholder |  |
 | `rotate_selections_first` | Make the first selection your primary one |  |
 | `rotate_selections_last` | Make the last selection your primary one |  |
-| `toggle_fold` | Toggle function fold at cursor | normal: `` za ``, `` Za ``, select: `` za ``, `` Za `` |
-| `fold` | Fold function at cursor | normal: `` zf ``, `` Zf ``, select: `` zf ``, `` Zf `` |
-| `unfold` | Unfold function at cursor | normal: `` zo ``, `` Zo ``, select: `` zo ``, `` Zo `` |
-| `fold_all` | Fold all functions without hiding cursors | normal: `` zM ``, `` ZM ``, select: `` zM ``, `` ZM `` |
-| `unfold_all` | Unfold all functions in this view | normal: `` zR ``, `` ZR ``, select: `` zR ``, `` ZR `` |
+| `toggle_fold` | Toggle function or class fold at cursor | normal: `` za ``, `` Za ``, select: `` za ``, `` Za `` |
+| `fold` | Fold function or class at cursor | normal: `` zf ``, `` Zf ``, select: `` zf ``, `` Zf `` |
+| `unfold` | Unfold function or class at cursor | normal: `` zo ``, `` Zo ``, select: `` zo ``, `` Zo `` |
+| `fold_all` | Fold all functions and classes without hiding cursors | normal: `` zM ``, `` ZM ``, select: `` zM ``, `` ZM `` |
+| `unfold_all` | Unfold all functions and classes in this view | normal: `` zR ``, `` ZR ``, select: `` zR ``, `` ZR `` |

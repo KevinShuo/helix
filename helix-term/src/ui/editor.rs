@@ -1431,17 +1431,15 @@ impl EditorView {
                         hit
                     });
                     if gutter == Some(helix_view::editor::GutterType::Fold) {
-                        if let Some(pos) =
-                            view.pos_at_visual_coords(doc, coords.row as u16, 0, true)
+                        if let Some((line, true)) = view.gutter_line_at_visual_row(doc, coords.row)
                         {
-                            let line = doc.text().char_to_line(pos);
-                            let changed = commands::toggle_fold_at_line(doc, view_id, line);
-                            if !changed {
-                                cxt.editor.set_status(
-                                    "No foldable function here, or another cursor is inside",
-                                );
+                            if let Some(changed) = commands::toggle_fold_at_line(doc, view_id, line)
+                            {
+                                if !changed {
+                                    cxt.editor.set_status("Fold contains another cursor");
+                                }
+                                cxt.editor.ensure_cursor_in_view(view_id);
                             }
-                            cxt.editor.ensure_cursor_in_view(view_id);
                         }
                         return EventResult::Consumed(None);
                     }

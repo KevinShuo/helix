@@ -49,18 +49,18 @@ fn cpp_preserves_signature_initializers_and_closing_suffix() {
             "class Foo {\n Foo(int n)\n : value(n) {\n   value++;\n }\n int value;\n};\n"
         )
         .len(),
-        1
+        2
     );
 }
 
 #[test]
-fn functions_only_nested_and_no_indent_fallback() {
+fn definitions_only_nested_and_no_indent_fallback() {
     let result = candidates(
         "python",
         "class A:\n def outer(self):\n  def inner():\n   pass\n  if True:\n   inner()\n",
     );
-    assert_eq!(result.len(), 2);
-    assert_eq!(result[1], ("def inner():".into(), "\n   pass".into()));
+    assert_eq!(result.len(), 3);
+    assert_eq!(result[2], ("def inner():".into(), "\n   pass".into()));
     assert!(candidates("cpp", "auto f = []() {\n return 1;\n};\n").is_empty());
 }
 
@@ -68,6 +68,59 @@ fn functions_only_nested_and_no_indent_fallback() {
 fn skips_single_line_empty_and_invalid_functions() {
     assert!(candidates("python", "def a(): pass\ndef b():\n").is_empty());
     assert!(candidates("cpp", "void a() {}\nvoid b() {\n}\nvoid c() {\n").is_empty());
+}
+
+#[test]
+fn python_classes_preserve_decorators_bases_and_nested_methods() {
+    let result = candidates(
+        "python",
+        "@decorator\nclass Widget(\n    Base,\n):\n    def render(self):\n        hidden()\n\nnext_call()\n",
+    );
+    assert_eq!(
+        result,
+        [
+            (
+                "class Widget(\n    Base,\n):".into(),
+                "\n    def render(self):\n        hidden()".into()
+            ),
+            ("def render(self):".into(), "\n        hidden()".into()),
+        ]
+    );
+}
+
+#[test]
+fn cpp_classes_and_structs_preserve_bases_closing_braces_and_suffixes() {
+    let result = candidates(
+        "cpp",
+        "template<class T>\nclass Box\n    : public Base<T> {\npublic:\n    T value;\n}; // suffix\nstruct Pair {\n    int first;\n    int second;\n};\n",
+    );
+    assert_eq!(
+        result,
+        [
+            (
+                "class Box\n    : public Base<T> {".into(),
+                "\npublic:\n    T value;\n".into()
+            ),
+            (
+                "struct Pair {".into(),
+                "\n    int first;\n    int second;\n".into()
+            ),
+        ]
+    );
+    assert_eq!(
+        candidates("c", "struct Pair {\n    int first;\n};\n").len(),
+        1
+    );
+}
+
+#[test]
+fn skips_empty_single_line_and_incomplete_classes() {
+    assert!(candidates("python", "class A: pass\nclass B:\n").is_empty());
+    assert!(candidates(
+        "cpp",
+        "class A;\nclass B { int x; };\nstruct C {\n};\nclass D {\n"
+    )
+    .is_empty());
 }
 
 #[test]

@@ -19,25 +19,26 @@ fn change_fold(cx: &mut Context, toggle: bool) {
         return;
     }
     let Some(candidate) = doc.fold_candidate_at(pos).cloned() else {
-        cx.editor.set_status("No foldable function at cursor");
+        cx.editor
+            .set_status("No foldable function or class at cursor");
         return;
     };
     if !doc.close_fold(view_id, candidate, true) {
-        cx.editor.set_status("Function contains another cursor");
+        cx.editor.set_status("Fold contains another cursor");
     }
 }
 
-pub(crate) fn toggle_fold_at_line(doc: &mut Document, view: ViewId, line: usize) -> bool {
-    let pos = doc.text().line_to_char(line);
-    if doc.unfold_at(view, pos) {
-        return true;
-    }
+pub(crate) fn toggle_fold_at_line(doc: &mut Document, view: ViewId, line: usize) -> Option<bool> {
     let candidate = doc
         .fold_candidates()
         .iter()
-        .find(|fold| doc.text().char_to_line(fold.range.start) == line)
-        .cloned();
-    candidate.is_some_and(|candidate| doc.close_fold(view, candidate, true))
+        .find(|fold| fold.header_line(doc.text().slice(..)) == line)?
+        .clone();
+    Some(if doc.folds(view).contains(&candidate.range) {
+        doc.unfold_at(view, candidate.range.start)
+    } else {
+        doc.close_fold(view, candidate, true)
+    })
 }
 
 pub(super) fn unfold(cx: &mut Context) {

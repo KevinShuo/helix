@@ -181,7 +181,10 @@ impl LanguageData {
                         )
                     })
                     .ok()
-                    .filter(|query| query.get_capture("fold.function").is_some())
+                    .filter(|query| {
+                        query.get_capture("fold.function").is_some()
+                            || query.get_capture("fold.class").is_some()
+                    })
             })
             .as_ref()
     }

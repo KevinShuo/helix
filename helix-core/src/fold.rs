@@ -1,4 +1,4 @@
-//! Function candidates are source coordinates, independent of closed view state.
+//! Function and class candidates use source coordinates, independent of view state.
 
 use std::ops::Range;
 
@@ -16,6 +16,13 @@ pub struct FoldCandidate {
     pub function: Range<usize>,
 }
 
+impl FoldCandidate {
+    /// The definition's first line, excluding decorator/template wrappers.
+    pub fn header_line(&self, text: RopeSlice) -> usize {
+        text.char_to_line(self.function.start)
+    }
+}
+
 pub fn function_candidates(
     text: RopeSlice,
     syntax: &Syntax,
@@ -27,13 +34,13 @@ pub fn function_candidates(
         let QueryIterEvent::Match(mat) = event else {
             continue;
         };
-        let Some(capture) = loader
-            .fold_query(query.current_language())
-            .and_then(|query| query.get_capture("fold.function"))
-        else {
+        let Some(fold_query) = loader.fold_query(query.current_language()) else {
             continue;
         };
-        if mat.capture != capture {
+        if !["fold.function", "fold.class"]
+            .into_iter()
+            .any(|capture| fold_query.get_capture(capture) == Some(mat.capture))
+        {
             continue;
         }
         let node = mat.node;
@@ -44,10 +51,12 @@ pub fn function_candidates(
         {
             continue;
         }
-        let Some(body) = node
-            .children()
-            .find(|child| matches!(child.kind(), "block" | "compound_statement"))
-        else {
+        let Some(body) = node.children().find(|child| {
+            matches!(
+                child.kind(),
+                "block" | "compound_statement" | "field_declaration_list"
+            )
+        }) else {
             continue;
         };
         let (start, end) = if body.kind() == "block" {

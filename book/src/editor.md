@@ -15,7 +15,7 @@
 - [`[editor.whitespace]` Section](#editorwhitespace-section)
 - [`[editor.indent-guides]` Section](#editorindent-guides-section)
 - [`[editor.gutters]` Section](#editorgutters-section)
-  - [Function folding](#function-folding)
+  - [Function and class folding](#function-and-class-folding)
   - [`[editor.gutters.line-numbers]` Section](#editorguttersline-numbers-section)
   - [`[editor.gutters.diagnostics]` Section](#editorguttersdiagnostics-section)
   - [`[editor.gutters.diff]` Section](#editorguttersdiff-section)
@@ -423,23 +423,25 @@ skip-levels = 1
 
 ### `[editor.gutters]` Section
 
-#### Function folding
+#### Function and class folding
 
-Python, C and C++ functions and methods can be folded with `za` (toggle), `zf`
+Python functions/classes, C functions/structs and C++ functions/classes/structs
+can be folded with `za` (toggle), `zf`
 (close), `zo` (open), `zM` (close all) and `zR` (open all). The same keys work
-inside sticky `Z` mode. Functions start expanded. Tree-sitter grammars and the
+inside sticky `Z` mode. Definitions start expanded. Tree-sitter grammars and the
 matching `folds.scm` queries must be available; other block types, single-line
-functions and indentation fallback are not supported.
+definitions and indentation fallback are not supported.
 
 Folding preserves decorators and complete multiline signatures. The body becomes
 `…`, and C/C++ closing braces remain visible. Fold state belongs to each view and
 survives buffer switching; a new split starts expanded. Directional motions skip
 closed bodies. Search, word motions and navigation into a body reveal it. Folding
 from inside a body moves the primary cursor to the declaration; a second cursor
-inside prevents folding. Fold-all skips functions containing editing cursors.
+inside prevents folding. Fold-all skips definitions containing editing cursors.
+Closing a class preserves any nested method folds for when the class is reopened.
 
 Selections, copying, editing, saving, LSP and undo still operate on the real text.
-Edits affecting a function unfold it; edits elsewhere shift its range and discard
+Edits affecting a definition unfold it; edits elsewhere shift its range and discard
 folds whose syntax is no longer valid. Reload and language changes clear folds.
 Folding itself does not modify the file or create undo entries.
 
@@ -454,8 +456,11 @@ foldable = "▾"
 folded = "▸"
 ```
 
-Use `foldable = "-"` and `folded = "+"` for ASCII symbols. With a multiline
-signature, the arrow appears on the line where the function body begins.
+Use `foldable = "-"` and `folded = "+"` for ASCII symbols. The arrow appears on
+the first declaration line, including when the signature spans multiple lines;
+decorators and template wrappers stay above it. Click `▾` to fold and `▸` to
+expand. Mouse support (`editor.mouse`, enabled by default) must be enabled.
+Blank rows in this gutter do nothing.
 Function reference/author hints remain visible at declarations; hidden nested
 hints and diagnostics are omitted. Changing folds clears any pending AI preview.
 
@@ -649,8 +654,8 @@ preserve backslashes):
 [editor.ai-completion]
 enabled = true
 model = "Qwen2.5-Coder-7B-Instruct-Q6_K"
-model-path = 'C:\Users\wangshuo\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf'
-server-path = 'C:\Users\wangshuo\.local\share\junie-local\versions\0.3.5\runtime\llama.cpp-b11081\llama-server.exe'
+model-path = '${USERPROFILE}\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf'
+server-path = '${USERPROFILE}\.local\share\junie-local\versions\0.3.5\runtime\llama.cpp-b11081\llama-server.exe'
 endpoint = "http://127.0.0.1:19240/v1/chat/completions"
 prompt-mode = "line"
 debounce-ms = 200
@@ -662,9 +667,13 @@ suffix-chars = 500
 
 Start `hx` normally; a separate launcher is unnecessary. Loading runs in the
 background, so editing remains available while the first model loads. Paths
-support `~` and environment variables. `model` is the alias assigned to the local
-server; `model-path` selects the actual weights. Adjust `server-path` for your
-installation, or omit it if `llama-server` is on PATH.
+support `~`, `$VAR` and `${VAR}` expansion, including on Windows.
+`${USERPROFILE}` uses the current Windows user's home directory, so this example
+does not need a different username on each computer. `~/.local/share/...` is
+another supported form. Use an existing environment variable: an unset variable
+expands to an empty string. `model` is the alias assigned to the local server;
+`model-path` selects the actual weights. Adjust `server-path` if your installed
+Junie/llama.cpp version differs, or omit it if `llama-server` is on PATH.
 
 Managed local servers require an `http://127.0.0.1:PORT/v1/chat/completions`
 endpoint. They use one request slot, Flash Attention and F16 KV cache. A running

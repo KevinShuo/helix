@@ -99,7 +99,7 @@ fn fold_width(view: &View) -> usize {
 }
 
 /// Shows a symbol (`▸` by default) for folded lines and another one (`▾` by default)
-/// for lines that start a foldable function body.
+/// for function/class declaration lines that can be folded.
 pub fn fold<'doc>(
     _editor: &'doc Editor,
     doc: &'doc Document,
@@ -134,18 +134,13 @@ pub fn fold<'doc>(
             if !first_visual_line {
                 return None;
             }
-            let line_start = text.line_to_char(line);
-            let line_end = helix_core::line_ending::line_end_char_index(&text, line);
-            if folds
+            let candidate = candidates
                 .iter()
-                .any(|fold| line_start <= fold.start && fold.start <= line_end)
-            {
+                .find(|candidate| candidate.header_line(text) == line)?;
+            if folds.contains(&candidate.range) {
                 pad(out, &folded_symbol);
                 return Some(folded_style);
             }
-            candidates
-                .iter()
-                .find(|candidate| text.char_to_line(candidate.range.start) == line)?;
             pad(out, &foldable_symbol);
             Some(foldable_style)
         },

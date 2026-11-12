@@ -32,6 +32,137 @@ fn screen(app: &helix_term::application::Application) -> String {
         .join("\n")
 }
 
+async fn click(
+    app: &mut helix_term::application::Application,
+    row: u16,
+    column: u16,
+) -> anyhow::Result<()> {
+    #[cfg(windows)]
+    let event = crossterm::event::Event::Mouse(crossterm::event::MouseEvent {
+        kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+        column,
+        row,
+        modifiers: crossterm::event::KeyModifiers::NONE,
+    });
+    #[cfg(not(windows))]
+    let event = termina::event::Event::Mouse(termina::event::MouseEvent {
+        kind: termina::event::MouseEventKind::Down(termina::event::MouseButton::Left),
+        column,
+        row,
+        modifiers: termina::event::KeyModifiers::NONE,
+    });
+    app.handle_terminal_events(Ok(event)).await;
+    keys(app, "").await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn folding_class_and_method_arrows_toggle_on_declaration_lines() -> anyhow::Result<()> {
+    use helix_view::editor::GutterType;
+    for (extension, source, method_row, class_marker) in [
+        (".py", "@decorator\nclass Widget(\n    Base,\n):\n    def render(self):\n        hidden()\n\nnext_call()\n", 4, "):…"),
+        (".cpp", "template<class T>\nclass Widget\n    : public Base<T>\n{\npublic:\n    void render()\n    {\n        hidden();\n    }\n}; // suffix\n", 5, "{…}; // suffix"),
+    ] {
+        let file = tempfile::Builder::new().suffix(extension).tempfile()?;
+        std::fs::write(file.path(), source)?;
+        let mut config = test_config();
+        config.editor.gutters.layout = vec![GutterType::Fold, GutterType::LineNumbers];
+        let mut app = AppBuilder::new().with_config(config).with_file(file.path(), None).build()?;
+        app.test_resize(80, 20).await?;
+        keys(&mut app, "gg").await?;
+        assert!(screen(&app).lines().nth(1).unwrap().starts_with('▾'), "{}", screen(&app));
+        assert!(!screen(&app).lines().nth(3).unwrap().starts_with('▾'));
+        assert!(screen(&app).lines().nth(method_row).unwrap().starts_with('▾'));
+        click(&mut app, method_row as u16, 0).await?;
+        assert!(!screen(&app).contains("hidden()"));
+        assert!(screen(&app).lines().nth(method_row).unwrap().starts_with('▸'));
+        click(&mut app, 1, 0).await?;
+        assert!(!screen(&app).contains("render("));
+        assert!(screen(&app).contains(class_marker), "{}", screen(&app));
+        assert!(screen(&app).lines().nth(1).unwrap().starts_with('▸'));
+        // Signature continuation rows have no arrow and must not toggle a fold.
+        click(&mut app, 2, 0).await?;
+        assert!(screen(&app).contains(class_marker));
+        click(&mut app, 1, 0).await?;
+        assert!(screen(&app).contains("render("));
+        assert!(!screen(&app).contains("hidden()"));
+        assert!(screen(&app).lines().nth(method_row).unwrap().starts_with('▸'));
+        click(&mut app, method_row as u16, 0).await?;
+        assert!(screen(&app).contains("hidden()"));
+        let (view, doc) = current_ref!(app.editor);
+        assert!(doc.folds(view.id).is_empty());
+        assert!(!doc.is_modified());
+        assert_eq!(doc.text().to_string(), source);
+        keys(&mut app, ":quit-all!<ret>").await?;
+        app.close().await;
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn folding_wrapped_header_only_toggles_on_the_arrow_row() -> anyhow::Result<()> {
+    use helix_view::editor::GutterType;
+    let file = tempfile::Builder::new().suffix(".py").tempfile()?;
+    std::fs::write(
+        file.path(),
+        "def long_function_name(argument_one, argument_two, argument_three):\n    hidden()\n",
+    )?;
+    let mut config = test_config();
+    config.editor.gutters.layout = vec![GutterType::Fold];
+    config.editor.soft_wrap.enable = Some(true);
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(file.path(), None)
+        .build()?;
+    app.test_resize(30, 14).await?;
+    keys(&mut app, "gg").await?;
+    assert!(screen(&app).lines().next().unwrap().starts_with('▾'));
+    assert!(!screen(&app).lines().nth(1).unwrap().starts_with('▾'));
+    click(&mut app, 1, 0).await?;
+    let (view, doc) = current_ref!(app.editor);
+    assert!(doc.folds(view.id).is_empty(), "{}", screen(&app));
+    click(&mut app, 0, 0).await?;
+    assert!(screen(&app).lines().next().unwrap().starts_with('▸'));
+    click(&mut app, 1, 0).await?;
+    let (view, doc) = current_ref!(app.editor);
+    assert_eq!(doc.folds(view.id).len(), 1);
+    click(&mut app, 0, 0).await?;
+    assert!(screen(&app).contains("hidden()"));
+    keys(&mut app, ":quit-all!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn folding_arrow_after_a_folded_class_remains_clickable_when_wrapped() -> anyhow::Result<()> {
+    use helix_view::editor::GutterType;
+    let file = tempfile::Builder::new().suffix(".cpp").tempfile()?;
+    std::fs::write(
+        file.path(),
+        "class A {\n int x;\n}; class LongSecondClassName {\n int y;\n};\n",
+    )?;
+    let mut config = test_config();
+    config.editor.gutters.layout = vec![GutterType::Fold];
+    config.editor.soft_wrap.enable = Some(true);
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(file.path(), None)
+        .build()?;
+    app.test_resize(24, 14).await?;
+    keys(&mut app, "gg").await?;
+    click(&mut app, 0, 0).await?;
+    let second_row = screen(&app)
+        .lines()
+        .position(|line| line.starts_with('▾'))
+        .expect("second class has a visible arrow");
+    click(&mut app, second_row as u16, 0).await?;
+    assert!(!screen(&app).contains("int y;"), "{}", screen(&app));
+    let (view, doc) = current_ref!(app.editor);
+    assert_eq!(doc.folds(view.id).len(), 2);
+    keys(&mut app, ":quit-all!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn folding_hides_inline_diagnostics_at_body_boundary() -> anyhow::Result<()> {
     use helix_core::diagnostic::{Diagnostic, DiagnosticProvider, Severity};

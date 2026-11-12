@@ -713,6 +713,44 @@ impl View {
         )
     }
 
+    /// The source line and first-visual-line flag used by gutter rendering.
+    /// Folded source lines can share a row, so source-line-start coordinates
+    /// alone cannot identify the row on which a gutter symbol is drawn.
+    pub fn gutter_line_at_visual_row(&self, doc: &Document, row: usize) -> Option<(usize, bool)> {
+        use helix_core::doc_formatter::DocumentFormatter;
+        if row >= self.inner_height() {
+            return None;
+        }
+        let text = doc.text().slice(..);
+        let offset = doc.view_offset(self.id);
+        let annotations = self.text_annotations(doc, None);
+        let format = doc.text_format(self.inner_width(doc), None);
+        let anchor_row =
+            visual_offset_from_block(text, offset.anchor, offset.anchor, &format, &annotations)
+                .0
+                .row;
+        let target_row = anchor_row + offset.vertical_offset + row;
+        let mut previous_row = usize::MAX;
+        let mut previous_line = usize::MAX;
+        for grapheme in
+            DocumentFormatter::new_at_prev_checkpoint(text, &format, &annotations, offset.anchor)
+        {
+            if grapheme.visual_pos.row < anchor_row || grapheme.visual_pos.row == previous_row {
+                continue;
+            }
+            if grapheme.visual_pos.row > target_row {
+                return None; // A virtual annotation row has no source gutter.
+            }
+            let first_visual_line = grapheme.line_idx != previous_line;
+            if grapheme.visual_pos.row == target_row {
+                return Some((grapheme.line_idx, first_visual_line));
+            }
+            previous_row = grapheme.visual_pos.row;
+            previous_line = grapheme.line_idx;
+        }
+        None
+    }
+
     pub fn pos_at_visual_coords(
         &self,
         doc: &Document,

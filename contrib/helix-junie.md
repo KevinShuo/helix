@@ -15,8 +15,8 @@ following to `%APPDATA%\helix\config.toml`, then launch this checkout's rebuilt
 [editor.ai-completion]
 enabled = true
 model = "Qwen2.5-Coder-7B-Instruct-Q6_K"
-model-path = 'C:\Users\wangshuo\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf'
-server-path = 'C:\Users\wangshuo\.local\share\junie-local\versions\0.3.5\runtime\llama.cpp-b11081\llama-server.exe'
+model-path = '${USERPROFILE}\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf'
+server-path = '${USERPROFILE}\.local\share\junie-local\versions\0.3.5\runtime\llama.cpp-b11081\llama-server.exe'
 endpoint = "http://127.0.0.1:19240/v1/chat/completions"
 prompt-mode = "line"
 debounce-ms = 200
@@ -27,6 +27,11 @@ suffix-chars = 500
 context-size = 4096
 gpu-layers = 99
 ```
+
+`${USERPROFILE}` expands to the current Windows user's home directory, so the
+same paths work for different usernames. Helix also supports `$VAR`, `${VAR}`
+and `~/.local/share/...` here. Single-quoted TOML strings preserve the backslashes;
+Helix expands the variables when it uses the paths.
 
 The model loads in the background. Helix owns this server and releases it when
 you exit or disable AI completion. Set `enabled = false` and use `:config-reload`
