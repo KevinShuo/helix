@@ -1307,6 +1307,7 @@ pub struct Editor {
     pub mode: Mode,
     pub tree: Tree,
     pub merge_sessions: crate::merge::MergeSessions,
+    pub git_conflict_scan: crate::git_conflicts::ConflictScanState,
     pub next_document_id: DocumentId,
     pub documents: BTreeMap<DocumentId, Document>,
 
@@ -1462,6 +1463,7 @@ impl Editor {
             mode: Mode::Normal,
             tree: Tree::new(area),
             merge_sessions: Default::default(),
+            git_conflict_scan: Default::default(),
             next_document_id: DocumentId::default(),
             documents: BTreeMap::new(),
             saves: HashMap::new(),

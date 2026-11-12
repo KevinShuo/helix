@@ -345,6 +345,8 @@ Type `Space v` in normal or select mode to open the Git command group.
 | `f` | Fetch remotes | `git_fetch` |
 | `p` | Pull with fast-forward updates only | `git_pull` |
 | `P` | Push the current branch | `git_push` |
+| `r` | Open merge conflicts | `git_resolve_conflicts` |
+| `m` | Open actions for the active merge result | `git_merge_menu` |
 
 The Git window docks below the editor. Press `z` to expand it to fullscreen and
 back; `F11` is an alias when the terminal forwards that key. Selection, filters,
@@ -387,10 +389,67 @@ These tools require the Git executable on PATH and a workspace trusted for Git
 (`:trust`). Branch-changing actions refuse unsaved buffers in the repository.
 Pull refuses diverged histories; push uses an explicit current-branch refspec
 and never implicitly pushes other branches or tags. Pull and merge never
-automatically stash local changes. Errors and conflicts are
-reported for resolution. Merge diffs use the first parent; historical deletions
+automatically stash local changes. A merge that leaves conflicts opens the
+conflict list. Merge diffs use the first parent; historical deletions
 open the file from its parent commit. Binary files and previews over 16 MiB have
 limited text previews. Git reads have a 20-second timeout, operations 60 seconds.
+
+###### Resolving merge conflicts
+
+Use `Space v r` to open or refresh the conflict list, including after a merge
+started outside Helix. Select a supported file and press `Enter`. Wide terminals
+show Current, Result and Incoming; smaller terminals show tabs for the same
+draft. The source panes are read-only. Result uses normal Helix editing,
+selection, search and undo/redo. The common ancestor is available as a preview.
+
+In the result's normal mode, use `Space v m` for these actions:
+
+| Key after `Space v m` | Description |
+| --- | --- |
+| `n`, `p` | Next/previous conflict block |
+| `l`, `r` | Use the current/incoming side of this block |
+| `b` | Keep both sides, current first |
+| `v` | Preview the base |
+| `m` | Mark the block, or the whole-file result, reviewed |
+| `a` | Apply the reviewed result and stage only this path |
+| `f` | Return to the file list, keeping the draft |
+| `L`, `R` | Confirm replacing the whole draft with current/incoming |
+| `B` | Confirm rebuilding the draft from the recorded sources |
+| `t` | Retry staging a successfully written result |
+| `F` | Confirm refreshing the draft from current Git and disk state |
+
+Removing conflict markers does not mark a result reviewed. Editing or undoing
+a reviewed block requires review again. Edits that cross block boundaries, and
+working files already edited outside Helix, use whole-file review to preserve
+manual work. Whole-file acceptance or rebuilding from sources requires a
+separate confirmation and changes the draft before any file is written.
+
+`Apply` checks that the working file, index stages and merge identity still
+match the opened snapshot. Another dirty buffer for the same file blocks it.
+If writing succeeds but staging fails, the written result and draft remain,
+with an explicit staging retry. After all files are resolved, use the separate
+`Finish Merge` confirmation to review every staged path and create the merge
+commit. Completing a merge does not push. `Abort Merge` has its own confirmation
+and runs `git merge --abort`; failures keep the current state.
+In the file list, `f` prepares Finish Merge, `a` prepares Abort Merge, and `r`
+refreshes the list. Confirm a prepared operation with `y`, or cancel with `n`.
+
+`:q` returns to the original layout and keeps the draft for this process;
+`:q!` discards that draft. Normal writes, forced writes and save-as cannot
+bypass Apply. Auto-save skips drafts. `:wa` saves ordinary documents and reports
+unapplied drafts; application exit still checks modified drafts. Drafts are
+not retained after restarting Helix.
+
+The first version can apply ordinary merge conflicts in regular UTF-8 files,
+including BOM, LF/CRLF and a missing final newline. Each source and result is
+limited to 2 MiB and 50,000 lines. Binary files, other encodings, mixed newlines,
+symlinks, submodules, deletion/rename decisions, custom merge/filter attributes,
+rebase and cherry-pick conflicts require external resolution. Resolve and stage
+those with Git or another tool, then refresh the list. Focus notifications only
+check the current trusted repository and do not take keyboard focus; terminals
+that do not send focus events require an explicit refresh.
+Merges started externally with an automatic stash must also be completed or
+aborted externally; Helix does not restore that stash through these actions.
 
 ##### Popup
 
