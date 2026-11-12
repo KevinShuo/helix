@@ -23,6 +23,8 @@ pub use function_authors::{function_authors, FunctionAuthor};
 #[path = "log.rs"]
 pub mod git_tools;
 
+pub mod merge;
+
 mod status;
 
 pub use status::FileChange;

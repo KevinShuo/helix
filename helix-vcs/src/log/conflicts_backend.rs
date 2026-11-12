@@ -20,6 +20,190 @@ mod tests {
         assert!(files[0].stages[2].is_none());
         assert!(parse_unmerged(format!("100644 {oid} 0\tx\0").as_bytes()).is_err());
     }
+
+    mod merge {
+        use super::*;
+        use crate::merge::{ConflictChoice, MergeMode, MergeModel};
+
+        async fn candidate(
+            base: Option<&str>,
+            current: &str,
+            incoming: &str,
+            working: &str,
+        ) -> crate::merge::MergeCandidate {
+            let dir = tempfile::tempdir().unwrap();
+            let output = std::process::Command::new("git")
+                .args(["init", "-q"])
+                .arg(dir.path())
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            fs::write(dir.path().join("file"), working).unwrap();
+            let repo = GitRepository::open(dir.path().to_owned(), true)
+                .await
+                .unwrap();
+            let file = GitConflictFile {
+                path: "file".into(),
+                status: if base.is_some() { "UU" } else { "AA" }.into(),
+                stages: [None, None, None],
+            };
+            let operation = ConflictOperation::Merge {
+                head: "a".repeat(40),
+                parents: vec!["b".repeat(40)],
+            };
+            let data = GitConflictData {
+                version: ConflictVersion {
+                    root: repo.root.clone(),
+                    git_dir: repo.git_dir.clone(),
+                    file: file.clone(),
+                    operation: operation.clone(),
+                    working: Some(working.as_bytes().to_vec()),
+                    attributes: Vec::new(),
+                },
+                file,
+                operation,
+                sources: [
+                    base.map(|s| s.as_bytes().to_vec()),
+                    Some(current.as_bytes().to_vec()),
+                    Some(incoming.as_bytes().to_vec()),
+                ],
+                working: Some(working.as_bytes().to_vec()),
+                format: Some(MergeTextFormat::detect(working.as_bytes()).unwrap()),
+                support: ConflictSupport::Text,
+            };
+            let candidate = repo.merge_candidate(&data).await.unwrap();
+            assert_eq!(
+                fs::read(dir.path().join("file")).unwrap(),
+                working.as_bytes()
+            );
+            assert!(!repo.git_dir.join("index").exists());
+            candidate
+        }
+
+        #[tokio::test]
+        async fn merge_git_candidate_matches_standard_markers_without_writes() {
+            let candidate = candidate(
+                Some("before\nvalue=1\nafter\n"),
+                "before\nvalue=2\nafter\n",
+                "before\nvalue=3\nafter\n",
+                "before\n<<<<<<< HEAD\nvalue=2\n=======\nvalue=3\n>>>>>>> topic\nafter\n",
+            )
+            .await;
+            assert!(candidate.matches_working);
+            assert_eq!(candidate.blocks.len(), 1);
+            assert_eq!(candidate.result, "before\nvalue=1\nafter\n");
+        }
+
+        #[tokio::test]
+        async fn merge_eof_without_newline() {
+            let candidate = candidate(
+                Some("before\nbase"),
+                "before\ncurrent",
+                "before\nincoming",
+                "before\n<<<<<<< HEAD\ncurrent\n=======\nincoming\n>>>>>>> topic\n",
+            )
+            .await;
+            assert!(candidate.matches_working);
+            let model = MergeModel::from_candidate(candidate);
+            assert_eq!(model.initial_result(), "before\nbase");
+            for (choice, expected) in [
+                (ConflictChoice::Current, "before\ncurrent"),
+                (ConflictChoice::Incoming, "before\nincoming"),
+                (ConflictChoice::Both, "before\ncurrent\nincoming"),
+            ] {
+                let mut text = model.initial_result().clone();
+                model
+                    .choice(0, choice, text.slice(..))
+                    .unwrap()
+                    .apply(&mut text);
+                assert_eq!(text, expected);
+            }
+        }
+
+        #[tokio::test]
+        async fn merge_more_than_127_blocks() {
+            let (mut base, mut current, mut incoming, mut working) =
+                (String::new(), String::new(), String::new(), String::new());
+            for i in 0..130 {
+                base.push_str(&format!("base-{i}\n"));
+                current.push_str(&format!("current-{i}\n"));
+                incoming.push_str(&format!("incoming-{i}\n"));
+                working.push_str(&format!(
+                    "<<<<<<< HEAD\ncurrent-{i}\n=======\nincoming-{i}\n>>>>>>> topic\n"
+                ));
+                let context = format!("keep-{i}-a\nkeep-{i}-b\nkeep-{i}-c\nkeep-{i}-d\n");
+                for text in [&mut base, &mut current, &mut incoming, &mut working] {
+                    text.push_str(&context);
+                }
+            }
+            let candidate = candidate(Some(&base), &current, &incoming, &working).await;
+            assert_eq!(candidate.blocks.len(), 130);
+            assert!(candidate.matches_working);
+            assert_eq!(candidate.result, base.as_str());
+        }
+
+        #[tokio::test]
+        async fn merge_git_aa_and_literal_marker_lines() {
+            let left = "<<<<<<<<<<<< helix-current\ncurrent\n";
+            let right = "<<<<<<<<<<<< helix-current\nincoming\n";
+            let working = "<<<<<<< HEAD\n<<<<<<<<<<<< helix-current\ncurrent\n=======\n<<<<<<<<<<<< helix-current\nincoming\n>>>>>>> topic\n";
+            let candidate = candidate(None, left, right, working).await;
+            assert!(candidate.matches_working);
+            assert_eq!(candidate.blocks.len(), 1);
+            assert_eq!(candidate.result, "");
+            assert_eq!(candidate.sources.current(), left);
+        }
+
+        #[tokio::test]
+        async fn merge_git_manual_work_falls_back() {
+            let candidate = candidate(
+                Some("base\n"),
+                "current\n",
+                "incoming\n",
+                "manually resolved\n",
+            )
+            .await;
+            assert!(!candidate.matches_working);
+            let model = MergeModel::from_candidate(candidate);
+            assert_eq!(model.initial_result(), "manually resolved\n");
+            assert_eq!(model.mode(), MergeMode::WholeFileReview);
+            assert!(!model.ready_to_apply());
+        }
+
+        #[tokio::test]
+        async fn merge_git_clean_nonconflicting_changes() {
+            let candidate = candidate(
+                Some("left\nkeep\nright\n"),
+                "new-left\nkeep\nright\n",
+                "left\nkeep\nnew-right\n",
+                "new-left\nkeep\nnew-right\n",
+            )
+            .await;
+            assert!(candidate.blocks.is_empty());
+            assert!(candidate.matches_working);
+            assert_eq!(candidate.result, "new-left\nkeep\nnew-right\n");
+        }
+
+        #[tokio::test]
+        async fn merge_git_bom_crlf_candidate_preserves_format() {
+            let base = "\u{feff}before\r\nbase\r\n";
+            let working = "\u{feff}before\r\n<<<<<<< HEAD\r\ncurrent\r\n=======\r\nincoming\r\n>>>>>>> topic\r\n";
+            let candidate = candidate(
+                Some(base),
+                "\u{feff}before\r\ncurrent\r\n",
+                "\u{feff}before\r\nincoming\r\n",
+                working,
+            )
+            .await;
+            assert!(candidate.matches_working);
+            assert_eq!(candidate.result, "before\nbase\n");
+            let format = MergeTextFormat::detect(working.as_bytes()).unwrap();
+            assert_eq!(
+                format.encode(candidate.result.slice(..)).unwrap(),
+                base.as_bytes()
+            );
+        }
+    }
 }
 
 fn read_bounded(path: &Path) -> Result<Option<Vec<u8>>> {
@@ -117,6 +301,83 @@ fn unsupported_attributes(bytes: &[u8]) -> Result<()> {
 }
 
 impl GitRepository {
+    /// Build a draft using only temporary inputs. Neither the index nor the
+    /// working file is changed; stale-snapshot validation belongs to apply.
+    pub async fn merge_candidate(
+        &self,
+        data: &GitConflictData,
+    ) -> Result<crate::merge::MergeCandidate> {
+        use crate::merge::{candidate_from_output, marker_size, MergeSources};
+        ensure!(
+            data.support == ConflictSupport::Text,
+            "This conflict requires external resolution"
+        );
+        let decode = |bytes: &[u8]| MergeTextFormat::detect(bytes)?.decode(bytes);
+        let base = data.sources[0]
+            .as_deref()
+            .map(decode)
+            .transpose()?
+            .unwrap_or_default();
+        let current = decode(
+            data.sources[1]
+                .as_deref()
+                .context("Missing current source")?,
+        )?;
+        let incoming = decode(
+            data.sources[2]
+                .as_deref()
+                .context("Missing incoming source")?,
+        )?;
+        let sources = MergeSources::new(base, current, incoming);
+        let size = marker_size(&sources);
+        let dir = tempfile::tempdir()?;
+        let paths = [
+            dir.path().join("current"),
+            dir.path().join("base"),
+            dir.path().join("incoming"),
+        ];
+        // fs::write closes each handle before Git opens it (including Windows).
+        for (path, text) in
+            paths
+                .iter()
+                .zip([sources.current(), sources.base(), sources.incoming()])
+        {
+            fs::write(path, text.to_string())?;
+        }
+        let mut command = args(&[
+            "merge-file",
+            "--stdout",
+            "--diff3",
+            "-L",
+            "helix-current",
+            "-L",
+            "helix-base",
+            "-L",
+            "helix-incoming",
+        ]);
+        command.push(format!("--marker-size={size}").into());
+        command.push("--".into());
+        command.extend(paths.iter().map(|path| path.as_os_str().to_owned()));
+        let output = self.run(&command, QUERY_TIMEOUT).await?;
+        ensure!(
+            matches!(output.status.code(), Some(0..=127)),
+            "Git merge-file failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        let text = std::str::from_utf8(&output.stdout)
+            .context("Git generated a non-UTF-8 merge result")?;
+        let working = data.working.as_deref().map(decode).transpose()?;
+        let working = working.map(|text| text.to_string());
+        let candidate = candidate_from_output(sources, text, size, working.as_deref())?;
+        ensure!(
+            output.status.success() == candidate.blocks.is_empty(),
+            "Git merge-file output did not match its exit status"
+        );
+        let format = data.format.context("Missing working file text format")?;
+        format.encode(candidate.result.slice(..))?;
+        Ok(candidate)
+    }
+
     async fn conflict_operation(&self, has_unmerged: bool) -> Result<ConflictOperation> {
         if self.git_dir.join("rebase-merge").exists() || self.git_dir.join("rebase-apply").exists()
         {
