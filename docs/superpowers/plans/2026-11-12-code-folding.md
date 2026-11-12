@@ -76,7 +76,11 @@
 
 ## Follow-up authorized rollout
 
-- [ ] Commit only the folding change; temporarily preserve original edits for a clean release build.
-- [ ] Build and verify the Windows release package and matching runtime.
-- [ ] Push the implementation and release tag to KevinShuo/helix and publish GitHub assets.
-- [ ] Uninstall Scoop Helix, add the compiled directory to user PATH, verify hx resolution and retain configuration.
+- [x] Commit only the folding change; temporarily preserve original edits for a clean release build.
+- [x] Build and verify the Windows release package and matching runtime.
+- [x] Push the implementation and release tag to KevinShuo/helix and publish GitHub assets.
+- [x] Uninstall Scoop Helix, add the compiled directory to user PATH, verify hx resolution and retain configuration.
+
+All implementation and rollout steps are complete. See
+[the validation record](../2026-11-12-code-folding-validation.md) for test counts,
+reproduced baseline failures, review findings, artifact hashes and installation.

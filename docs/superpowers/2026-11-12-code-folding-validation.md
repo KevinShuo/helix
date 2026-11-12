@@ -124,8 +124,44 @@ were identified in the final review.
 
 ## Release and local installation
 
-The user subsequently requested a GitHub Release, Git push, removal of the Scoop
-Helix package and adding the compiled directory to the user PATH. Target release
-tag: `code-folding-2026.11.12`; target executable directory:
-`C:\dev\helix\target\release`. Publication and rollout results will be recorded
-after verification.
+The user subsequently authorized a GitHub Release, Git push, removal of **only
+the Scoop Helix package**, and adding the compiled directory to the user PATH.
+
+- Implementation commit: `899a5b51c5cb34c5a95377d8cc5d0046de3b4d54`.
+  Pushed to `KevinShuo/helix` master and `codex/code-folding`, together with the
+  annotated `code-folding-2026.11.12` tag. No force push was used.
+- Temporarily stashed the four original local edits, then reran terminal library
+  tests (41 passed) and folding integrations (7 passed) on the clean committed
+  source. The earlier 42-test library run included an existing uncommitted AI
+  regression test. The release does not incorporate those unrelated local edits.
+- `cargo build --release --locked --jobs 2 -p helix-term` passed in 3m 40s,
+  with the same process-local grammar-fetch workaround described above.
+- Packaged `hx.exe`, runtime queries/themes/tutor, 298 Windows grammar DLLs,
+  license, committed helper scripts, build metadata and Chinese instructions.
+  ZIP integrity verification passed. With `HELIX_RUNTIME` unset, the standalone
+  package passed Python/C++ parser/query health checks and a native ConPTY
+  folding smoke test. Its version is `helix 25.07.1 (899a5b51)`.
+- Published [code-folding-2026.11.12](https://github.com/KevinShuo/helix/releases/tag/code-folding-2026.11.12).
+  The public API confirms the release is not a draft and includes the ZIP,
+  `README.zh-CN.md` and `SHA256SUMS.txt`. Uploaded asset digests match local files.
+- ZIP: `helix-code-folding-2026.11.12-x86_64-windows.zip`, 37,387,428 bytes.
+  SHA-256: `d10118e22721403e7461e5c5be7b4b4b0f07051514456d50528fc413c7f89e23`.
+- Executable SHA-256:
+  `de9d25cee3fcd6dfcbabf2b6fe006133f1b48140a4dc3bb2bb522ba473d27656`.
+- Ran `scoop uninstall helix`: package 25.07.1 and its `hx`/`helix` shims were
+  removed. Scoop itself remains installed.
+- Installed the matching runtime next to `C:\dev\helix\target\release\hx.exe`
+  and prepended `C:\dev\helix\target\release` to the persistent user PATH.
+  A fresh PowerShell process using the machine/user environment resolves `hx`
+  to that executable and reports `helix 25.07.1 (899a5b51)`. Installed Python/C++
+  parser/query health checks pass. Existing terminals may need reopening to
+  inherit the updated PATH.
+- `config.toml` and `languages.toml` hashes are unchanged. The old local release
+  executable, original PATH and configuration backups are in ignored
+  `target/folding-local-backup/`.
+- Restored the four original local edits and compared their diff with the
+  post-pull backup: identical. Removed only the two temporary stashes created
+  for this task; backup patches remain available.
+
+This rollout record is a documentation follow-up to the tagged implementation;
+the release binary and tag remain pinned to the implementation commit above.
