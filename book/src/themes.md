@@ -322,6 +322,8 @@ These scopes are used for theming the editor interface:
 | `ui.debug.breakpoint`             | Breakpoint indicator, found in the gutter                                                      |
 | `ui.debug.active`                 | Indicator for the line at which debugging execution is paused at, found in the gutter          |
 | `ui.gutter`                       | Gutter                                                                                         |
+| `ui.gutter.fold`                  | Expanded function arrow (falls back to `ui.linenr`)                                             |
+| `ui.gutter.fold.folded`           | Closed function arrow (falls back to `ui.linenr.selected`)                                       |
 | `ui.gutter.selected`              | Gutter for the line the cursor is on                                                           |
 | `ui.linenr`                       | Line numbers                                                                                   |
 | `ui.linenr.selected`              | Line number for the line the cursor is on                                                      |
@@ -351,6 +353,7 @@ These scopes are used for theming the editor interface:
 | `ui.virtual.whitespace`           | Visible whitespace characters                                                                  |
 | `ui.virtual.indent-guide`         | Vertical indent width guides                                                                   |
 | `ui.virtual.inlay-hint`           | Default style for inlay hints of all kinds                                                     |
+| `ui.virtual.fold`                 | Fold marker, falling back to `ui.virtual.inlay-hint` and then `comment`                         |
 | `ui.virtual.function-hint`       | Default style for function reference/author hints (falls back to `ui.virtual.inlay-hint`)       |
 | `ui.virtual.function-hint.references` | Function reference counts                                                              |
 | `ui.virtual.function-hint.author` | Latest Git commit author beside a function                                                   |

@@ -1,10 +1,13 @@
 pub(crate) mod dap;
+mod folding;
 mod git;
 pub(crate) mod lsp;
 pub(crate) mod syntax;
 pub(crate) mod typed;
 
 pub use dap::*;
+pub(crate) use folding::toggle_fold_at_line;
+use folding::*;
 use futures_util::FutureExt;
 use git::*;
 use helix_event::status;
@@ -571,6 +574,11 @@ impl MappableCommand {
         align_view_top, "Align view top",
         align_view_center, "Align view center",
         align_view_bottom, "Align view bottom",
+        toggle_fold, "Toggle function fold at cursor",
+        fold, "Fold function at cursor",
+        unfold, "Unfold function at cursor",
+        fold_all, "Fold all functions without hiding cursors",
+        unfold_all, "Unfold all functions in this view",
         scroll_up, "Scroll view up",
         scroll_down, "Scroll view down",
         match_brackets, "Goto matching bracket",

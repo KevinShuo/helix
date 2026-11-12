@@ -46,6 +46,7 @@ fn attach(
     result: HintResult,
 ) {
     if request.version != doc.version()
+        || request.folds != doc.folds(view)
         || request.generation != generation
         || doc.path() != Some(request.path.as_path())
         || request.config != doc.config.load().function_hints
@@ -119,6 +120,7 @@ fn prepare(editor: &Editor, view_id: ViewId) -> Option<PreparedRequest> {
             version: doc.version(),
             generation: generation(),
             visible: start..view.estimate_last_doc_line(doc) + 1,
+            folds: doc.folds(view_id).to_vec(),
             path,
             symbol_server: symbols.id(),
             reference_server: references.map(Client::id),
@@ -215,6 +217,14 @@ async fn request(prepared: PreparedRequest, doc: DocumentId, view: ViewId, handl
         prepared.symbols.offset_encoding(),
         prepared.key.visible.clone(),
     );
+    targets.retain(|target| {
+        lsp_pos_to_pos(
+            &prepared.text,
+            target.selection.start,
+            prepared.symbols.offset_encoding(),
+        )
+        .is_some_and(|pos| !prepared.key.folds.iter().any(|fold| fold.contains(&pos)))
+    });
     targets.truncate(MAX_VISIBLE_FUNCTIONS);
     if targets.is_empty() {
         return;
@@ -420,6 +430,7 @@ mod tests {
             version: doc.version(),
             generation: 7,
             visible: 0..2,
+            folds: Vec::new(),
             path: doc.path().unwrap().to_path_buf(),
             symbol_server: LanguageServerId::default(),
             reference_server: None,

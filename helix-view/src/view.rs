@@ -376,11 +376,56 @@ impl View {
     #[inline]
     pub fn estimate_last_doc_line(&self, doc: &Document) -> usize {
         let doc_text = doc.text().slice(..);
+        if !doc.folds(self.id).is_empty() {
+            return self.visible_text_ranges(doc).last().map_or(0, |range| {
+                doc_text.char_to_line(range.end.saturating_sub(1))
+            });
+        }
         let line = doc_text.char_to_line(doc.view_offset(self.id).anchor.min(doc_text.len_chars()));
         // Saturating subs to make it inclusive zero indexing.
         (line + self.inner_height())
             .min(doc_text.len_lines())
             .saturating_sub(1)
+    }
+
+    /// Actual source spans intersecting this viewport, with hidden bodies omitted.
+    /// Uses the same formatter as rendering, including wrapping and virtual lines.
+    pub fn visible_text_ranges(&self, doc: &Document) -> Vec<std::ops::Range<usize>> {
+        use helix_core::doc_formatter::DocumentFormatter;
+        let text = doc.text().slice(..);
+        let offset = doc.view_offset(self.id);
+        let annotations = self.text_annotations(doc, None);
+        let format = doc.text_format(self.inner_width(doc), None);
+        let start_row =
+            visual_offset_from_block(text, offset.anchor, offset.anchor, &format, &annotations)
+                .0
+                .row
+                + offset.vertical_offset;
+        let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
+        for grapheme in
+            DocumentFormatter::new_at_prev_checkpoint(text, &format, &annotations, offset.anchor)
+        {
+            if grapheme.visual_pos.row >= start_row + self.inner_height() {
+                break;
+            }
+            if grapheme.visual_pos.row < start_row
+                || grapheme.is_virtual()
+                || grapheme.source.is_fold()
+                || grapheme.doc_chars() == 0
+            {
+                continue;
+            }
+            let end = grapheme.char_idx + grapheme.doc_chars();
+            if let Some(last) = ranges
+                .last_mut()
+                .filter(|last| last.end == grapheme.char_idx)
+            {
+                last.end = end;
+            } else {
+                ranges.push(grapheme.char_idx..end);
+            }
+        }
+        ranges
     }
 
     /// Calculates the last non-empty visual line on screen
@@ -461,6 +506,7 @@ impl View {
         theme: Option<&Theme>,
     ) -> TextAnnotations<'a> {
         let mut text_annotations = TextAnnotations::default();
+        text_annotations.add_folds(doc.folds(self.id));
 
         if let Some(suggestion) = doc
             .ai_completion
@@ -506,6 +552,28 @@ impl View {
             hints.request.version == doc.version()
                 && hints.request.generation == crate::function_hints::generation()
         }) {
+            let projected = |annotations: &[helix_core::text_annotations::InlineAnnotation]| {
+                let text = doc.text().slice(..);
+                annotations
+                    .iter()
+                    .filter_map(|annotation| {
+                        let mut annotation = annotation.clone();
+                        if let Some(fold) = doc
+                            .folds(self.id)
+                            .iter()
+                            .find(|fold| fold.contains(&annotation.char_idx))
+                        {
+                            if text.char_to_line(annotation.char_idx)
+                                != text.char_to_line(fold.start)
+                            {
+                                return None;
+                            }
+                            annotation.char_idx = fold.start;
+                        }
+                        Some(annotation)
+                    })
+                    .collect()
+            };
             let style = |scope| {
                 theme.and_then(|theme| {
                     theme
@@ -515,14 +583,14 @@ impl View {
                 })
             };
             if config.function_hints.references {
-                text_annotations.add_inline_annotations(
-                    &hints.references,
+                text_annotations.add_owned_inline_annotations(
+                    projected(&hints.references),
                     style("ui.virtual.function-hint.references"),
                 );
             }
             if config.function_hints.git_author {
-                text_annotations.add_inline_annotations(
-                    &hints.authors,
+                text_annotations.add_owned_inline_annotations(
+                    projected(&hints.authors),
                     style("ui.virtual.function-hint.author"),
                 );
             }
@@ -939,6 +1007,7 @@ mod tests {
             GutterConfig {
                 layout: vec![GutterType::Diagnostics],
                 line_numbers: GutterLineNumbersConfig::default(),
+                ..Default::default()
             },
         );
         view.area = Rect::new(40, 40, 40, 40);
@@ -970,6 +1039,7 @@ mod tests {
             GutterConfig {
                 layout: vec![],
                 line_numbers: GutterLineNumbersConfig::default(),
+                ..Default::default()
             },
         );
         view.area = Rect::new(40, 40, 40, 40);

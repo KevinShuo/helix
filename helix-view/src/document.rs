@@ -19,6 +19,8 @@ use helix_vcs::{DiffHandle, DiffProviderRegistry};
 use std::sync::OnceLock;
 use thiserror;
 
+mod folding;
+
 use ::parking_lot::Mutex;
 use serde::de::{self, Deserialize, Deserializer};
 use serde::Serialize;
@@ -143,6 +145,7 @@ pub struct Document {
     text: Rope,
     selections: HashMap<ViewId, Selection>,
     view_data: HashMap<ViewId, ViewData>,
+    fold_candidates: OnceLock<Vec<helix_core::fold::FoldCandidate>>,
     pub active_snippet: Option<ActiveSnippet>,
 
     /// Inlay hints annotations for the document, by view.
@@ -748,6 +751,7 @@ impl Document {
             function_hints: HashMap::default(),
             inlay_hints_oudated: false,
             view_data: Default::default(),
+            fold_candidates: OnceLock::new(),
             indent_style: DEFAULT_INDENT,
             editor_config: EditorConfig::default(),
             line_ending,
@@ -1306,6 +1310,7 @@ impl Document {
 
         let mut file = std::fs::File::open(&path)?;
         let (rope, ..) = from_reader(&mut file, Some(encoding))?;
+        self.reset_folding();
 
         // Calculate the difference between the buffer and source text, and apply it.
         // This is not considered a modification of the contents of the file regardless
@@ -1371,6 +1376,7 @@ impl Document {
         loader: &syntax::Loader,
     ) {
         self.language = language_config;
+        self.reset_folding();
         self.syntax = self.language.as_ref().and_then(|config| {
             Syntax::new(self.text.slice(..), config.language(), loader)
                 .map_err(|err| {
@@ -1405,6 +1411,7 @@ impl Document {
         // TODO: use a transaction?
         self.selections
             .insert(view_id, selection.ensure_invariants(self.text().slice(..)));
+        self.reveal_folded_cursors(view_id);
         helix_event::dispatch(SelectionDidChange {
             doc: self,
             view: view_id,
@@ -1478,6 +1485,7 @@ impl Document {
                     view_id,
                     selection.clone().ensure_invariants(self.text.slice(..)),
                 );
+                self.reveal_folded_cursors(view_id);
                 helix_event::dispatch(SelectionDidChange {
                     doc: self,
                     view: view_id,
@@ -1488,6 +1496,7 @@ impl Document {
 
         self.modified_since_accessed = true;
         self.version += 1;
+        self.map_folds(changes);
 
         for selection in self.selections.values_mut() {
             *selection = selection
@@ -1496,6 +1505,10 @@ impl Document {
                 .map(transaction.changes())
                 // Ensure all selections across all views still adhere to invariants.
                 .ensure_invariants(self.text.slice(..));
+        }
+
+        for view in self.selections.keys().copied().collect::<Vec<_>>() {
+            self.reveal_folded_cursors(view);
         }
 
         for view_data in self.view_data.values_mut() {
@@ -1534,6 +1547,7 @@ impl Document {
         }
 
         // TODO: all of that should likely just be hooks
+        self.revalidate_folds();
         // start computing the diff in parallel
         if let Some(diff_handle) = &self.diff_handle {
             diff_handle.update_document(self.text.clone(), false);
@@ -1642,6 +1656,7 @@ impl Document {
                 view_id,
                 selection.clone().ensure_invariants(self.text.slice(..)),
             );
+            self.reveal_folded_cursors(view_id);
             helix_event::dispatch(SelectionDidChange {
                 doc: self,
                 view: view_id,
@@ -2505,6 +2520,7 @@ impl Document {
 #[derive(Debug, Default)]
 pub struct ViewData {
     view_position: ViewPosition,
+    folding: folding::FoldState,
 }
 
 #[derive(Clone, Debug)]

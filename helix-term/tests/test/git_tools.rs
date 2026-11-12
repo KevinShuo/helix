@@ -1,5 +1,40 @@
 use super::helpers::*;
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_tools_preserve_function_folding_through_dock_resize_and_fullscreen(
+) -> anyhow::Result<()> {
+    let repo = repository();
+    let path = repo.path().join("fold.cpp");
+    fs::write(&path, "void f() {\n  hidden();\n}\nint tail;\n")?;
+    git(repo.path(), &["add", "fold.cpp"]);
+    git(repo.path(), &["commit", "-m", "Add folding fixture"]);
+    let mut app = AppBuilder::new().with_file(&path, None).build()?;
+    app.test_resize(100, 30).await?;
+    keys(&mut app, "za<space>vg").await?;
+    wait_for(&mut app, "Git · Log").await;
+    let (view, doc) = current_ref!(app.editor);
+    assert_eq!(doc.folds(view.id).len(), 1);
+    app.test_resize(70, 18).await?;
+    keys(&mut app, "z").await?;
+    keys(&mut app, "zq").await?;
+    app.test_resize(100, 30).await?;
+    assert!(screen(&app).contains("void f() {…}"));
+    keys(&mut app, "j").await?;
+    let (view, doc) = current_ref!(app.editor);
+    assert_eq!(
+        doc.text().char_to_line(
+            doc.selection(view.id)
+                .primary()
+                .cursor(doc.text().slice(..))
+        ),
+        3
+    );
+    assert_eq!(doc.folds(view.id).len(), 1);
+    keys(&mut app, ":q!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
 #[path = "git_tools_review.rs"]
 mod review;
 use helix_term::application::Application;

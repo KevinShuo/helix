@@ -15,6 +15,7 @@
 - [`[editor.whitespace]` Section](#editorwhitespace-section)
 - [`[editor.indent-guides]` Section](#editorindent-guides-section)
 - [`[editor.gutters]` Section](#editorgutters-section)
+  - [Function folding](#function-folding)
   - [`[editor.gutters.line-numbers]` Section](#editorguttersline-numbers-section)
   - [`[editor.gutters.diagnostics]` Section](#editorguttersdiagnostics-section)
   - [`[editor.gutters.diff]` Section](#editorguttersdiff-section)
@@ -41,7 +42,7 @@
 | `cursorline` | Highlight all lines with a cursor | `false` |
 | `cursorcolumn` | Highlight all columns with a cursor | `false` |
 | `continue-comments` | if helix should automatically add a line comment token if you create a new line inside a comment. | `true` |
-| `gutters` | Gutters to display: Available are `diagnostics` and `diff` and `line-numbers` and `spacer` and `code-action-hint`, note that `diagnostics` also includes other features like breakpoints, 1-width padding will be inserted if gutters is non-empty | `["diagnostics", "spacer", "line-numbers", "spacer", "diff"]` |
+| `gutters` | Gutters to display: Available are `diagnostics`, `diff`, `line-numbers`, `spacer`, `code-action-hint` and `fold`. `diagnostics` also includes other features like breakpoints. A 1-width padding will be inserted if gutters is non-empty. | `["diagnostics", "spacer", "line-numbers", "spacer", "diff"]` |
 | `auto-completion` | Enable automatic pop up of auto-completion | `true` |
 | `path-completion` | Enable filepath completion. Show files and directories if an existing path at the cursor was recognized, either absolute or relative to the current opened document or current working directory (if the buffer is not yet saved). Defaults to true. | `true` |
 | `auto-format` | Enable automatic formatting on save[^3] | `true` |
@@ -421,6 +422,44 @@ skip-levels = 1
 ```
 
 ### `[editor.gutters]` Section
+
+#### Function folding
+
+Python, C and C++ functions and methods can be folded with `za` (toggle), `zf`
+(close), `zo` (open), `zM` (close all) and `zR` (open all). The same keys work
+inside sticky `Z` mode. Functions start expanded. Tree-sitter grammars and the
+matching `folds.scm` queries must be available; other block types, single-line
+functions and indentation fallback are not supported.
+
+Folding preserves decorators and complete multiline signatures. The body becomes
+`…`, and C/C++ closing braces remain visible. Fold state belongs to each view and
+survives buffer switching; a new split starts expanded. Directional motions skip
+closed bodies. Search, word motions and navigation into a body reveal it. Folding
+from inside a body moves the primary cursor to the declaration; a second cursor
+inside prevents folding. Fold-all skips functions containing editing cursors.
+
+Selections, copying, editing, saving, LSP and undo still operate on the real text.
+Edits affecting a function unfold it; edits elsewhere shift its range and discard
+folds whose syntax is no longer valid. Reload and language changes clear folds.
+Folding itself does not modify the file or create undo entries.
+
+To show clickable fold arrows beside line numbers, opt in to the `fold` gutter:
+
+```toml
+[editor.gutters]
+layout = ["diagnostics", "spacer", "line-numbers", "fold", "spacer", "diff"]
+
+[editor.gutters.fold]
+foldable = "▾"
+folded = "▸"
+```
+
+Use `foldable = "-"` and `folded = "+"` for ASCII symbols. With a multiline
+signature, the arrow appears on the line where the function body begins.
+Function reference/author hints remain visible at declarations; hidden nested
+hints and diagnostics are omitted. Changing folds clears any pending AI preview.
+
+#### Gutter layout
 
 For simplicity, `editor.gutters` accepts an array of gutter types, which will
 use default settings for all gutter components.

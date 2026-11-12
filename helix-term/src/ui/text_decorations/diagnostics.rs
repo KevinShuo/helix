@@ -308,6 +308,11 @@ impl Decoration for InlineDiagnostics<'_> {
         renderer: &mut TextRenderer,
         grapheme: &FormattedGrapheme,
     ) -> usize {
+        if grapheme.source.is_fold() {
+            return self
+                .state
+                .skip_concealed(grapheme.char_idx + grapheme.doc_chars());
+        }
         self.state
             .proccess_anchor(grapheme, renderer.viewport.width, renderer.offset.col)
     }

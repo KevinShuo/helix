@@ -60,6 +60,7 @@ pub struct FunctionHintsRequest {
     pub version: i32,
     pub generation: u64,
     pub visible: Range<usize>,
+    pub folds: Vec<Range<usize>>,
     pub path: PathBuf,
     pub symbol_server: LanguageServerId,
     pub reference_server: Option<LanguageServerId>,
@@ -268,6 +269,7 @@ mod tests {
                     version: doc.version(),
                     generation: generation(),
                     visible: 0..2,
+                    folds: Vec::new(),
                     path: PathBuf::new(),
                     symbol_server: LanguageServerId::default(),
                     reference_server: None,
@@ -312,6 +314,57 @@ mod tests {
             lsp::Position::new(start.0, start.1),
             lsp::Position::new(end.0, end.1),
         )
+    }
+
+    #[tokio::test]
+    async fn folded_function_hints_project_header_and_hide_nested_hints() {
+        let _guard = GENERATION_TEST.lock().await;
+        let mut config = Config::default();
+        config.function_hints = FunctionHintsConfig {
+            references: true,
+            git_author: true,
+        };
+        let config = Arc::new(ArcSwap::from_pointee(config));
+        let loader = helix_core::config::default_lang_loader();
+        let mut doc = Document::from(
+            Rope::from("void f() { call();\n  hidden();\n}\n"),
+            None,
+            config.clone(),
+            Arc::new(ArcSwap::from_pointee(
+                helix_core::config::default_lang_loader(),
+            )),
+        );
+        doc.set_language_by_language_id("cpp", &loader).unwrap();
+        let view = View::new(doc.id(), GutterConfig::default());
+        doc.ensure_view_init(view.id);
+        let start = doc.fold_candidates()[0].range.start;
+        doc.function_hints.insert(
+            view.id,
+            FunctionHints {
+                request: FunctionHintsRequest {
+                    version: doc.version(),
+                    generation: generation(),
+                    visible: 0..4,
+                    folds: Vec::new(),
+                    path: PathBuf::new(),
+                    symbol_server: LanguageServerId::default(),
+                    reference_server: None,
+                    config: config.load().function_hints,
+                },
+                requested_at: Instant::now(),
+                controller: TaskController::new(),
+                references: vec![
+                    InlineAnnotation::new(17, " 2 usages"),
+                    InlineAnnotation::new(28, " HIDDEN"),
+                ],
+                authors: vec![InlineAnnotation::new(17, " author")],
+            },
+        );
+        assert_eq!(start, 10);
+        doc.fold_all(view.id);
+        assert_eq!(rendered_hints(&doc, &view), " 2 usages author");
+        doc.clear_folds(view.id);
+        assert_eq!(rendered_hints(&doc, &view), " 2 usages author HIDDEN");
     }
 
     #[allow(deprecated)]

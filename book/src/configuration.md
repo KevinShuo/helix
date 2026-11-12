@@ -1,5 +1,8 @@
 # Configuration
 
+For function folding controls and the optional clickable `fold` gutter, see
+[function folding](editor.md#function-folding).
+
 To override global configuration parameters, create a `config.toml` file located in your config directory:
 
 - Linux and Mac: `~/.config/helix/config.toml`

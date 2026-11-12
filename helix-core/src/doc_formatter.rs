@@ -31,6 +31,10 @@ pub enum GraphemeSource {
     Document {
         codepoints: u32,
     },
+    /// A visible marker consuming a possibly multi-line source range.
+    Fold {
+        codepoints: usize,
+    },
     /// Inline virtual text can not be highlighted with a `Highlight` iterator
     /// because it's not part of the document. Instead the `Highlight`
     /// is emitted right by the document formatter
@@ -56,6 +60,10 @@ impl GraphemeSource {
         )
     }
 
+    pub fn is_fold(self) -> bool {
+        matches!(self, Self::Fold { .. })
+    }
+
     pub fn is_eof(self) -> bool {
         // all doc chars except the EOF char have non-zero codepoints
         matches!(self, GraphemeSource::Document { codepoints: 0 })
@@ -64,6 +72,7 @@ impl GraphemeSource {
     pub fn doc_chars(self) -> usize {
         match self {
             GraphemeSource::Document { codepoints } => codepoints as usize,
+            GraphemeSource::Fold { codepoints } => codepoints,
             GraphemeSource::VirtualText { .. } => 0,
         }
     }
@@ -180,8 +189,11 @@ impl Default for TextFormat {
     }
 }
 
+pub const FOLD_MARKER: &str = "…";
+
 #[derive(Debug)]
 pub struct DocumentFormatter<'t> {
+    text: RopeSlice<'t>,
     text_fmt: &'t TextFormat,
     annotations: &'t TextAnnotations<'t>,
 
@@ -223,11 +235,16 @@ impl<'t> DocumentFormatter<'t> {
         char_idx: usize,
     ) -> Self {
         // TODO divide long lines into blocks to avoid bad performance for long lines
-        let block_line_idx = text.char_to_line(char_idx.min(text.len_chars()));
-        let block_char_idx = text.line_to_char(block_line_idx);
+        let mut block_line_idx = text.char_to_line(char_idx.min(text.len_chars()));
+        let mut block_char_idx = text.line_to_char(block_line_idx);
+        while let Some(start) = annotations.fold_start_containing(block_char_idx) {
+            block_line_idx = text.char_to_line(start);
+            block_char_idx = text.line_to_char(block_line_idx);
+        }
         annotations.reset_pos(block_char_idx);
 
         DocumentFormatter {
+            text,
             text_fmt,
             annotations,
             visual_pos: Position { row: 0, col: 0 },
@@ -277,6 +294,20 @@ impl<'t> DocumentFormatter<'t> {
                     GraphemeSource::VirtualText {
                         highlight: metadata.highlight,
                         inline_completion: metadata.inline_completion,
+                    },
+                )
+            } else if let Some(end) = self
+                .annotations
+                .fold_at(char_pos)
+                .map(|end| end.min(self.text.len_chars()))
+                .filter(|&end| end > char_pos)
+            {
+                self.graphemes = self.text.slice(end..).graphemes();
+                self.annotations.skip_hidden(end);
+                (
+                    FOLD_MARKER.into(),
+                    GraphemeSource::Fold {
+                        codepoints: end - char_pos,
                     },
                 )
             } else if let Some(grapheme) = self.graphemes.next() {
@@ -475,7 +506,10 @@ impl<'t> Iterator for DocumentFormatter<'t> {
         };
 
         self.char_pos += grapheme.doc_chars();
-        if !grapheme.is_virtual() {
+        if grapheme.source.is_fold() {
+            self.line_pos = self.text.char_to_line(self.char_pos);
+            self.annotations.skip_hidden_line_anchors(self.char_pos);
+        } else if !grapheme.is_virtual() {
             self.annotations.process_virtual_text_anchors(&grapheme);
         }
         if grapheme.raw == Grapheme::Newline {

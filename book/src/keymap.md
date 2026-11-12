@@ -200,6 +200,11 @@ useful when you're simply looking over text and not actively editing it.
 | `t`                  | Align the line to the top of the screen                   | `align_view_top`        |
 | `b`                  | Align the line to the bottom of the screen                | `align_view_bottom`     |
 | `m`                  | Align the line to the middle of the screen (horizontally) | `align_view_middle`     |
+| `a`                  | Toggle the function fold at the cursor                   | `toggle_fold`          |
+| `f`                  | Fold the function at the cursor                          | `fold`                 |
+| `o`                  | Unfold the current function                              | `unfold`               |
+| `M`                  | Fold all functions, keeping editing cursors visible       | `fold_all`             |
+| `R`                  | Unfold all functions in this view                        | `unfold_all`           |
 | `j`, `down`          | Scroll the view downwards                                 | `scroll_down`           |
 | `k`, `up`            | Scroll the view upwards                                   | `scroll_up`             |
 | `Ctrl-f`, `PageDown` | Move page down                                            | `page_down`             |

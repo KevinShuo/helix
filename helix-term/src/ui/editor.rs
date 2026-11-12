@@ -118,26 +118,41 @@ impl EditorView {
             decorations.add_decoration(line_decoration);
         }
 
-        let syntax_highlighter =
-            Self::doc_syntax_highlighter(doc, view_offset.anchor, inner.height, &loader);
+        let visible_ranges = view.visible_text_ranges(doc);
+        let text = doc.text().slice(..);
+        let syntax_highlighter: Vec<_> = doc
+            .syntax()
+            .into_iter()
+            .flat_map(|syntax| {
+                visible_ranges.iter().map(|range| {
+                    syntax.highlighter(
+                        text,
+                        &loader,
+                        text.char_to_byte(range.start) as u32..text.char_to_byte(range.end) as u32,
+                    )
+                })
+            })
+            .collect();
         let mut overlays = Vec::new();
 
-        overlays.push(Self::overlay_syntax_highlights(
-            doc,
-            view_offset.anchor,
-            inner.height,
-            &text_annotations,
-        ));
+        for range in &visible_ranges {
+            overlays.push(text_annotations.collect_overlay_highlights(range.clone()));
+        }
 
         if doc
             .language_config()
             .and_then(|config| config.rainbow_brackets)
             .unwrap_or(config.rainbow_brackets)
         {
-            if let Some(overlay) =
-                Self::doc_rainbow_highlights(doc, view_offset.anchor, inner.height, theme, &loader)
-            {
-                overlays.push(overlay);
+            if let Some(syntax) = doc.syntax() {
+                for range in &visible_ranges {
+                    overlays.push(syntax.rainbow_highlights(
+                        text,
+                        theme.rainbow_length(),
+                        &loader,
+                        text.char_to_byte(range.start) as u32..text.char_to_byte(range.end) as u32,
+                    ));
+                }
             }
         }
 
@@ -1407,6 +1422,29 @@ impl EditorView {
                     editor.focus(view_id);
 
                     let (view, doc) = current!(cxt.editor);
+
+                    let mut start = 0;
+                    let gutter = view.gutters().iter().copied().find(|gutter| {
+                        let width = gutter.width(view, doc);
+                        let hit = (start..start + width).contains(&coords.col);
+                        start += width;
+                        hit
+                    });
+                    if gutter == Some(helix_view::editor::GutterType::Fold) {
+                        if let Some(pos) =
+                            view.pos_at_visual_coords(doc, coords.row as u16, 0, true)
+                        {
+                            let line = doc.text().char_to_line(pos);
+                            let changed = commands::toggle_fold_at_line(doc, view_id, line);
+                            if !changed {
+                                cxt.editor.set_status(
+                                    "No foldable function here, or another cursor is inside",
+                                );
+                            }
+                            cxt.editor.ensure_cursor_in_view(view_id);
+                        }
+                        return EventResult::Consumed(None);
+                    }
 
                     let Some(path) = doc.path().map(ToOwned::to_owned) else {
                         return EventResult::Ignored(None);

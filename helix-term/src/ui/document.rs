@@ -28,13 +28,13 @@ pub struct LinePos {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn render_document(
+pub fn render_document<'h>(
     surface: &mut Surface,
     viewport: Rect,
     doc: &Document,
     offset: ViewPosition,
     doc_annotations: &TextAnnotations,
-    syntax_highlighter: Option<Highlighter<'_>>,
+    syntax_highlighter: impl IntoIterator<Item = Highlighter<'h>>,
     overlay_highlights: Vec<syntax::OverlayHighlights>,
     theme: &Theme,
     decorations: DecorationManager,
@@ -60,13 +60,13 @@ pub fn render_document(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn render_text(
+pub fn render_text<'h>(
     renderer: &mut TextRenderer,
     text: RopeSlice<'_>,
     anchor: usize,
     text_fmt: &TextFormat,
     text_annotations: &TextAnnotations,
-    syntax_highlighter: Option<Highlighter<'_>>,
+    syntax_highlighter: impl IntoIterator<Item = Highlighter<'h>>,
     overlay_highlights: Vec<syntax::OverlayHighlights>,
     theme: &Theme,
     mut decorations: DecorationManager,
@@ -153,6 +153,14 @@ pub fn render_text(
             GraphemeStyle {
                 syntax_style: style,
                 overlay_style: Style::default(),
+            }
+        } else if grapheme.source.is_fold() {
+            GraphemeStyle {
+                syntax_style: theme
+                    .try_get("ui.virtual.fold")
+                    .or_else(|| theme.try_get("ui.virtual.inlay-hint"))
+                    .unwrap_or_else(|| theme.get("comment")),
+                overlay_style: overlay_highlighter.style,
             }
         } else {
             GraphemeStyle {
@@ -486,7 +494,7 @@ impl<'a> TextRenderer<'a> {
 }
 
 struct SyntaxHighlighter<'h, 'r, 't> {
-    inner: Option<Highlighter<'h>>,
+    inner: std::collections::VecDeque<Highlighter<'h>>,
     text: RopeSlice<'r>,
     /// The character index of the next highlight event, or `usize::MAX` if the highlighter is
     /// finished.
@@ -498,13 +506,13 @@ struct SyntaxHighlighter<'h, 'r, 't> {
 
 impl<'h, 'r, 't> SyntaxHighlighter<'h, 'r, 't> {
     fn new(
-        inner: Option<Highlighter<'h>>,
+        inner: impl IntoIterator<Item = Highlighter<'h>>,
         text: RopeSlice<'r>,
         theme: &'t Theme,
         text_style: Style,
     ) -> Self {
         let mut highlighter = Self {
-            inner,
+            inner: inner.into_iter().collect(),
             text,
             pos: 0,
             theme,
@@ -516,9 +524,17 @@ impl<'h, 'r, 't> SyntaxHighlighter<'h, 'r, 't> {
     }
 
     fn update_pos(&mut self) {
+        while self
+            .inner
+            .front()
+            .is_some_and(|highlighter| highlighter.next_event_offset() == u32::MAX)
+        {
+            self.inner.pop_front();
+            self.style = self.text_style;
+        }
         self.pos = self
             .inner
-            .as_ref()
+            .front()
             .and_then(|highlighter| {
                 let next_byte_idx = highlighter.next_event_offset();
                 (next_byte_idx != u32::MAX).then(|| {
@@ -532,7 +548,7 @@ impl<'h, 'r, 't> SyntaxHighlighter<'h, 'r, 't> {
     }
 
     fn advance(&mut self) {
-        let Some(highlighter) = self.inner.as_mut() else {
+        let Some(highlighter) = self.inner.front_mut() else {
             return;
         };
 

@@ -211,3 +211,269 @@ fn annotation_and_overlay() {
         "fooo  bar "
     );
 }
+
+const FOLD_TEXT: &str = "fn a() {\n  x\n  y\n}\nz\n";
+
+fn fold_text(text: &str, softwrap: bool, folds: &[std::ops::Range<usize>]) -> String {
+    let mut annotations = TextAnnotations::default();
+    annotations.add_folds(folds);
+    let res = DocumentFormatter::new_at_prev_checkpoint(
+        text.into(),
+        &TextFormat::new_test(softwrap),
+        &annotations,
+        0,
+    )
+    .collect_to_str();
+    res
+}
+
+#[test]
+fn fold() {
+    let fold = 8..17;
+    assert_eq!(fold, 8..17);
+    assert_eq!(
+        fold_text(FOLD_TEXT, false, std::slice::from_ref(&fold)),
+        "fn a() {…} \nz \n "
+    );
+    assert_eq!(
+        fold_text(FOLD_TEXT, true, std::slice::from_ref(&fold)),
+        "fn a() {…} \nz \n "
+    );
+}
+
+#[test]
+fn nested_fold() {
+    // the inner fold is hidden by the outer fold
+    let folds = [8..17, 12..15];
+    assert_eq!(fold_text(FOLD_TEXT, false, &folds), "fn a() {…} \nz \n ");
+    // only the inner fold
+    assert_eq!(
+        fold_text(FOLD_TEXT, false, &folds[1..]),
+        "fn a() { \n  x…y \n} \nz \n "
+    );
+}
+
+#[test]
+fn fold_line_indices_and_positions() {
+    use crate::{char_idx_at_visual_offset, visual_offset_from_block, Position};
+
+    let text = crate::Rope::from(FOLD_TEXT);
+    let text = text.slice(..);
+    let fold = 8..17;
+    let mut annotations = TextAnnotations::default();
+    annotations.add_folds(std::slice::from_ref(&fold));
+    let text_fmt = TextFormat::new_test(false);
+
+    // starting the formatter inside the fold starts at the fold header
+    let mut formatter =
+        DocumentFormatter::new_at_prev_checkpoint(text, &text_fmt, &annotations, 14);
+    assert_eq!(formatter.next_char_pos(), 0);
+    let graphemes: Vec<_> = formatter.by_ref().collect();
+    let z = graphemes.iter().find(|g| g.char_idx == 19).unwrap();
+    assert_eq!(z.line_idx, 4);
+    assert_eq!(z.visual_pos, Position::new(1, 0));
+    let closing = graphemes.iter().find(|g| g.char_idx == 17).unwrap();
+    assert_eq!(closing.line_idx, 3);
+    assert_eq!(closing.visual_pos, Position::new(0, 9));
+
+    // hidden chars are displayed at the fold marker
+    assert_eq!(
+        visual_offset_from_block(text, 0, 12, &text_fmt, &annotations).0,
+        Position::new(0, 8)
+    );
+    // moving down from the header skips the hidden lines
+    assert_eq!(
+        char_idx_at_visual_offset(text, 0, 1, 0, &text_fmt, &annotations),
+        (19, 0)
+    );
+    // moving up from the line after the fold lands on the header
+    assert_eq!(
+        char_idx_at_visual_offset(text, 19, -1, 2, &text_fmt, &annotations),
+        (2, 0)
+    );
+}
+
+#[test]
+fn move_vertically_skips_folds() {
+    use crate::movement::{move_vertically, Direction, Movement};
+    use crate::Range;
+
+    let text = crate::Rope::from(FOLD_TEXT);
+    let text = text.slice(..);
+    let fold = 8..17;
+    let mut annotations = TextAnnotations::default();
+    annotations.add_folds(std::slice::from_ref(&fold));
+    let text_fmt = TextFormat::new_test(false);
+    let mut move_line = |pos: usize, dir| {
+        move_vertically(
+            text,
+            Range::point(pos),
+            dir,
+            1,
+            Movement::Move,
+            &text_fmt,
+            &mut annotations,
+        )
+        .head
+    };
+    // `fn a() {…}` -> `z`
+    assert_eq!(move_line(0, Direction::Forward), 19);
+    // `z` -> `fn a() {…}`
+    assert_eq!(move_line(19, Direction::Backward), 0);
+}
+
+#[test]
+fn move_horizontally_skips_folds() {
+    use crate::movement::{move_horizontally, Direction, Movement};
+    use crate::Range;
+
+    let text = crate::Rope::from(FOLD_TEXT);
+    let text = text.slice(..);
+    let fold = 8..17;
+    let mut annotations = TextAnnotations::default();
+    annotations.add_folds(std::slice::from_ref(&fold));
+    let text_fmt = TextFormat::new_test(false);
+    let mut move_char = |pos: usize, dir, count| {
+        move_horizontally(
+            text,
+            Range::point(pos),
+            dir,
+            count,
+            Movement::Move,
+            &text_fmt,
+            &mut annotations,
+        )
+        .head
+    };
+    // `{` -> `…` -> `}`
+    assert_eq!(move_char(7, Direction::Forward, 1), 8);
+    assert_eq!(move_char(8, Direction::Forward, 1), 17);
+    assert_eq!(move_char(7, Direction::Forward, 2), 17);
+    // `}` -> `…` -> `{`
+    assert_eq!(move_char(17, Direction::Backward, 1), 8);
+    assert_eq!(move_char(17, Direction::Backward, 2), 7);
+    // `z` -> line ending after `}`
+    assert_eq!(move_char(19, Direction::Backward, 1), 18);
+}
+
+#[test]
+fn fold_vertical_motion_can_land_on_visible_closing_brace() {
+    use crate::movement::{move_vertically, Direction, Movement};
+    let text = crate::Rope::from("void f() {\n  hidden();\n}\n01234567890\n");
+    let end = text.to_string().find('}').unwrap();
+    let folds = [10..end];
+    let mut annotations = TextAnnotations::default();
+    annotations.add_folds(&folds);
+    let pos = text.line_to_char(3) + 11;
+    let range = move_vertically(
+        text.slice(..),
+        crate::Range::point(pos),
+        Direction::Backward,
+        1,
+        Movement::Move,
+        &TextFormat::default(),
+        &mut annotations,
+    );
+    assert_eq!(range.cursor(text.slice(..)), end);
+}
+
+#[test]
+fn folded_python_eof_down_stays_visible() {
+    use crate::movement::{move_vertically, Direction, Movement};
+    let text = crate::Rope::from("def f():\n    pass");
+    let folds = [8..17];
+    let mut annotations = TextAnnotations::default();
+    annotations.add_folds(&folds);
+    let range = move_vertically(
+        text.slice(..),
+        crate::Range::point(0),
+        Direction::Forward,
+        1,
+        Movement::Move,
+        &TextFormat::default(),
+        &mut annotations,
+    );
+    assert_eq!(range.cursor(text.slice(..)), 0);
+}
+
+#[test]
+fn folded_unicode_crlf_maps_marker_and_eof() {
+    use crate::{char_idx_at_visual_offset, visual_offset_from_block, Position};
+    let text = crate::Rope::from("界{\r\n\t🙂隐\r\n}");
+    let folds = [2..9];
+    let mut annotations = TextAnnotations::default();
+    annotations.add_folds(&folds);
+    for soft_wrap in [false, true] {
+        let format = TextFormat {
+            soft_wrap,
+            viewport_width: 8,
+            ..TextFormat::default()
+        };
+        let graphemes: Vec<_> =
+            DocumentFormatter::new_at_prev_checkpoint(text.slice(..), &format, &annotations, 5)
+                .collect();
+        assert_eq!(
+            graphemes
+                .iter()
+                .filter(|g| !g.source.is_eof())
+                .map(|g| g.raw.to_string())
+                .collect::<String>(),
+            "界{…}"
+        );
+        assert_eq!(
+            char_idx_at_visual_offset(text.slice(..), 0, 0, 3, &format, &annotations),
+            (2, 0)
+        );
+        assert_eq!(
+            visual_offset_from_block(text.slice(..), 0, 5, &format, &annotations).0,
+            Position::new(0, 3)
+        );
+    }
+}
+
+#[test]
+fn folding_skips_hidden_annotations_including_line_anchors() {
+    use crate::{text_annotations::LineAnnotation, Position};
+    struct Anchors {
+        next: usize,
+        pending: usize,
+    }
+    impl LineAnnotation for Anchors {
+        fn reset_pos(&mut self, pos: usize) -> usize {
+            self.next = if pos <= 8 { 8 } else { usize::MAX };
+            self.next
+        }
+        fn process_anchor(&mut self, _: &crate::doc_formatter::FormattedGrapheme) -> usize {
+            self.pending += 1;
+            usize::MAX
+        }
+        fn insert_virtual_lines(&mut self, _: usize, _: Position, _: usize) -> Position {
+            Position::new(std::mem::take(&mut self.pending), 0)
+        }
+    }
+    let inline = [
+        InlineAnnotation::new(12, "HIDDEN"),
+        InlineAnnotation::new(19, "visible "),
+    ];
+    let overlays = [Overlay::new(14, "X")];
+    let folds = [8..17];
+    let mut annotations = TextAnnotations::default();
+    annotations
+        .add_folds(&folds)
+        .add_inline_annotations(&inline, None)
+        .add_overlay(&overlays, None)
+        .add_line_annotation(Box::new(Anchors {
+            next: 8,
+            pending: 0,
+        }));
+    assert_eq!(
+        DocumentFormatter::new_at_prev_checkpoint(
+            FOLD_TEXT.into(),
+            &TextFormat::new_test(false),
+            &annotations,
+            0
+        )
+        .collect_to_str(),
+        "fn a() {…} \nvisible z \n "
+    );
+}

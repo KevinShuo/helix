@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::fmt::Debug;
@@ -174,23 +175,23 @@ pub trait LineAnnotation {
 }
 
 #[derive(Debug)]
-struct Layer<'a, A, M> {
-    annotations: &'a [A],
+struct Layer<'a, A: Clone, M> {
+    annotations: Cow<'a, [A]>,
     current_index: Cell<usize>,
     metadata: M,
 }
 
-impl<A, M: Clone> Clone for Layer<'_, A, M> {
+impl<A: Clone, M: Clone> Clone for Layer<'_, A, M> {
     fn clone(&self) -> Self {
         Layer {
-            annotations: self.annotations,
+            annotations: self.annotations.clone(),
             current_index: self.current_index.clone(),
             metadata: self.metadata.clone(),
         }
     }
 }
 
-impl<A, M> Layer<'_, A, M> {
+impl<A: Clone, M> Layer<'_, A, M> {
     pub fn reset_pos(&self, char_idx: usize, get_char_idx: impl Fn(&A) -> usize) {
         let new_index = self
             .annotations
@@ -210,17 +211,17 @@ impl<A, M> Layer<'_, A, M> {
     }
 }
 
-impl<'a, A, M> From<(&'a [A], M)> for Layer<'a, A, M> {
+impl<'a, A: Clone, M> From<(&'a [A], M)> for Layer<'a, A, M> {
     fn from((annotations, metadata): (&'a [A], M)) -> Layer<'a, A, M> {
         Layer {
-            annotations,
+            annotations: Cow::Borrowed(annotations),
             current_index: Cell::new(0),
             metadata,
         }
     }
 }
 
-fn reset_pos<A, M>(layers: &[Layer<A, M>], pos: usize, get_pos: impl Fn(&A) -> usize) {
+fn reset_pos<A: Clone, M>(layers: &[Layer<A, M>], pos: usize, get_pos: impl Fn(&A) -> usize) {
     for layer in layers {
         layer.reset_pos(pos, &get_pos)
     }
@@ -279,6 +280,8 @@ pub struct TextAnnotations<'a> {
     inline_annotations: Vec<Layer<'a, InlineAnnotation, InlineAnnotationMetadata>>,
     overlays: Vec<Layer<'a, Overlay, Option<Highlight>>>,
     line_annotations: Vec<(Cell<usize>, RawBox<dyn LineAnnotation + 'a>)>,
+    folds: Cow<'a, [Range<usize>]>,
+    fold_idx: Cell<usize>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -292,6 +295,7 @@ impl Debug for TextAnnotations<'_> {
         f.debug_struct("TextAnnotations")
             .field("inline_annotations", &self.inline_annotations)
             .field("overlays", &self.overlays)
+            .field("folds", &self.folds)
             .finish_non_exhaustive()
     }
 }
@@ -303,6 +307,77 @@ impl<'a> TextAnnotations<'a> {
         reset_pos(&self.overlays, char_idx, |annot| annot.char_idx);
         for (next_anchor, layer) in &self.line_annotations {
             next_anchor.set(unsafe { layer.get().reset_pos(char_idx) });
+        }
+        self.fold_idx
+            .set(self.folds.partition_point(|fold| fold.start < char_idx));
+    }
+
+    /// Hide sorted character ranges behind one grapheme. Nested ranges retain
+    /// their state in the caller; only the outermost ones participate in layout.
+    pub fn add_folds(&mut self, folds: &'a [Range<usize>]) -> &mut Self {
+        self.folds = if folds.windows(2).any(|pair| pair[0].end > pair[1].start) {
+            let mut visible: Vec<Range<usize>> = Vec::new();
+            for fold in folds {
+                if visible.last().is_none_or(|last| last.end <= fold.start) {
+                    visible.push(fold.clone());
+                }
+            }
+            Cow::Owned(visible)
+        } else {
+            Cow::Borrowed(folds)
+        };
+        self.fold_idx.set(0);
+        self
+    }
+
+    pub fn has_folds(&self) -> bool {
+        !self.folds.is_empty()
+    }
+
+    pub fn folds(&self) -> &[Range<usize>] {
+        &self.folds
+    }
+
+    /// Includes the end boundary for checkpoint normalization: a closing brace
+    /// at the beginning of a source line still belongs to the folded visual row.
+    pub fn fold_containing(&self, char_idx: usize) -> Option<Range<usize>> {
+        let i = self.folds.partition_point(|fold| fold.start < char_idx);
+        i.checked_sub(1)
+            .and_then(|i| self.folds.get(i))
+            .filter(|fold| char_idx <= fold.end)
+            .cloned()
+    }
+
+    pub fn fold_start_containing(&self, char_idx: usize) -> Option<usize> {
+        self.fold_containing(char_idx).map(|fold| fold.start)
+    }
+
+    pub(crate) fn fold_at(&self, char_idx: usize) -> Option<usize> {
+        let mut idx = self.fold_idx.get();
+        while self
+            .folds
+            .get(idx)
+            .is_some_and(|fold| fold.start < char_idx)
+        {
+            idx += 1;
+        }
+        self.fold_idx.set(idx);
+        self.folds
+            .get(idx)
+            .filter(|fold| fold.start == char_idx)
+            .map(|fold| fold.end)
+    }
+
+    pub(crate) fn skip_hidden(&self, char_idx: usize) {
+        reset_pos(&self.inline_annotations, char_idx, |annot| annot.char_idx);
+        reset_pos(&self.overlays, char_idx, |annot| annot.char_idx);
+    }
+
+    pub(crate) fn skip_hidden_line_anchors(&self, end: usize) {
+        for (next_anchor, layer) in &self.line_annotations {
+            if next_anchor.get() < end {
+                next_anchor.set(unsafe { layer.get().skip_concealed_anchors(end) });
+            }
         }
     }
 
@@ -348,6 +423,25 @@ impl<'a> TextAnnotations<'a> {
                 )
                     .into(),
             );
+        }
+        self
+    }
+
+    /// Add annotations projected into visible coordinates without altering their source cache.
+    pub fn add_owned_inline_annotations(
+        &mut self,
+        annotations: Vec<InlineAnnotation>,
+        highlight: Option<Highlight>,
+    ) -> &mut Self {
+        if !annotations.is_empty() {
+            self.inline_annotations.push(Layer {
+                annotations: Cow::Owned(annotations),
+                current_index: Cell::new(0),
+                metadata: InlineAnnotationMetadata {
+                    highlight,
+                    inline_completion: false,
+                },
+            });
         }
         self
     }

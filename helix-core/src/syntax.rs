@@ -42,6 +42,7 @@ pub struct LanguageData {
     syntax: OnceLock<Option<SyntaxConfig>>,
     indent_query: OnceLock<Option<IndentQuery>>,
     textobject_query: OnceLock<Option<TextObjectQuery>>,
+    fold_query: OnceLock<Option<Query>>,
     tag_query: OnceLock<Option<TagQuery>>,
     rainbow_query: OnceLock<Option<RainbowQuery>>,
 }
@@ -53,6 +54,7 @@ impl LanguageData {
             syntax: OnceLock::new(),
             indent_query: OnceLock::new(),
             textobject_query: OnceLock::new(),
+            fold_query: OnceLock::new(),
             tag_query: OnceLock::new(),
             rainbow_query: OnceLock::new(),
         }
@@ -159,6 +161,27 @@ impl LanguageData {
                     })
                     .ok()
                     .flatten()
+            })
+            .as_ref()
+    }
+
+    fn fold_query(&self, loader: &Loader) -> Option<&Query> {
+        self.fold_query
+            .get_or_init(|| {
+                let source = read_query(&self.config.language_id, "folds.scm");
+                if source.is_empty() {
+                    return None;
+                }
+                let grammar = self.syntax_config(loader)?.grammar;
+                Query::new(grammar, &source, |_, _| Ok(()))
+                    .map_err(|err| {
+                        log::error!(
+                            "Failed to compile folds.scm for '{}': {err}",
+                            self.config.language_id
+                        )
+                    })
+                    .ok()
+                    .filter(|query| query.get_capture("fold.function").is_some())
             })
             .as_ref()
     }
@@ -414,6 +437,10 @@ impl Loader {
 
     pub fn textobject_query(&self, lang: Language) -> Option<&TextObjectQuery> {
         self.language(lang).textobject_query(self)
+    }
+
+    pub fn fold_query(&self, lang: Language) -> Option<&Query> {
+        self.language(lang).fold_query(self)
     }
 
     pub fn tag_query(&self, lang: Language) -> Option<&TagQuery> {
