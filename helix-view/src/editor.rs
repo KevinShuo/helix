@@ -344,6 +344,8 @@ pub struct Config {
     pub ai_completion: crate::ai_completion::AiCompletionConfig,
     /// Function reference counts and latest Git authors beside declarations.
     pub function_hints: crate::function_hints::FunctionHintsConfig,
+    /// Optional source overview at the right of each editing split.
+    pub minimap: crate::minimap::MinimapConfig,
     /// Enable filepath completion.
     /// Show files and directories if an existing path at the cursor was recognized,
     /// either absolute or relative to the current opened document or current working directory (if the buffer is not yet saved).
@@ -1220,6 +1222,7 @@ impl Default for Config {
             auto_completion: true,
             ai_completion: crate::ai_completion::AiCompletionConfig::default(),
             function_hints: crate::function_hints::FunctionHintsConfig::default(),
+            minimap: crate::minimap::MinimapConfig::default(),
             path_completion: true,
             word_completion: WordCompletion::default(),
             auto_format: true,

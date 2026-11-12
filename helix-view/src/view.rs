@@ -208,7 +208,11 @@ impl View {
     }
 
     pub fn inner_area(&self, doc: &Document) -> Rect {
-        self.area.clip_left(self.gutter_offset(doc)).clip_bottom(1) // -1 for statusline
+        self.minimap_layout(doc).text
+    }
+
+    pub fn minimap_layout(&self, doc: &Document) -> crate::minimap::MinimapLayout {
+        crate::minimap::MinimapLayout::new(self.area, self.gutter_offset(doc), &doc.config.load().minimap)
     }
 
     pub fn inner_height(&self) -> usize {
@@ -216,7 +220,7 @@ impl View {
     }
 
     pub fn inner_width(&self, doc: &Document) -> u16 {
-        self.area.clip_left(self.gutter_offset(doc)).width
+        self.inner_area(doc).width
     }
 
     pub fn gutters(&self) -> &[GutterType] {
