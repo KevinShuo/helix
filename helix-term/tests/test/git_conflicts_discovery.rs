@@ -45,6 +45,36 @@ async fn git_conflicts_focus_scan_no_focus_steal() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_focus_scan_honors_explicit_trusted_workspace_globs() -> anyhow::Result<()> {
+    use helix_loader::workspace_trust::{build_trusted_globs, Config, TrustQuery};
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    let workspace = helix_loader::find_workspace_in(repo.path()).0;
+    let pattern = workspace.to_string_lossy().replace('\\', "/");
+    app.editor.workspace_trust.set_config(Config {
+        trusted_globs: build_trusted_globs(&[pattern]),
+        ..Config::default()
+    });
+    assert!(app
+        .editor
+        .workspace_trust
+        .query(&workspace, TrustQuery::Git)
+        .is_trusted());
+    focus_gained(&mut app).await;
+    assert!(app.editor.git_conflict_scan.is_running());
+    finish_scan(&mut app).await?;
+    assert!(app
+        .editor
+        .get_status()
+        .is_some_and(|(text, _)| text.contains("2 conflicted files")));
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
 pub(super) async fn wait_screen(app: &mut Application, expected: &str) -> anyhow::Result<()> {
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     while !screen(app).contains(expected) && std::time::Instant::now() < deadline {
@@ -83,9 +113,18 @@ async fn wait_operation(app: &mut Application, root: &Path) -> anyhow::Result<()
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn git_conflicts_merge_opens_list() -> anyhow::Result<()> {
     let repo = repository(false);
-    let mut app = AppBuilder::new()
-        .with_file(repo.path().join("file.txt"), None)
-        .build()?;
+    let fold_path = repo.path().join("unchanged.cpp");
+    fs::write(&fold_path, "void f() {\n  hidden();\n}\nint tail;\n")?;
+    let mut app = AppBuilder::new().with_file(&fold_path, None).build()?;
+    app.test_resize(160, 40).await?;
+    keys(&mut app, "za").await?;
+    let fold_view = app.editor.tree.focus;
+    let fold_doc = current_ref!(app.editor).1.id();
+    assert_eq!(app.editor.documents[&fold_doc].folds(fold_view).len(), 1);
+    app.editor.open(
+        &repo.path().join("file.txt"),
+        helix_view::editor::Action::VerticalSplit,
+    )?;
     let hidden = app.editor.open(
         &repo.path().join("second.txt"),
         helix_view::editor::Action::Replace,
@@ -99,12 +138,38 @@ async fn git_conflicts_merge_opens_list() -> anyhow::Result<()> {
     keys(&mut app, "y").await?;
     wait_screen(&mut app, "Enter resolve").await?;
     assert!(screen(&app).contains("Conflicts (2)"));
+    assert_eq!(app.editor.documents[&fold_doc].folds(fold_view).len(), 1);
     assert_eq!(
         checked_git(repo.path(), &["ls-files", "-u"])
             .lines()
             .count(),
         6
     );
+    // A real content change still clears folds during Git's automatic reload.
+    fs::write(
+        &fold_path,
+        "void f() {\n  hidden();\n}\nint changed_tail;\n",
+    )?;
+    let providers = app.editor.diff_providers.clone();
+    app.editor
+        .documents
+        .get_mut(&fold_doc)
+        .unwrap()
+        .reload_preserving_unchanged_folds(app.editor.tree.get_mut(fold_view), &providers, true)?;
+    assert_eq!(app.editor.documents[&fold_doc].folds(fold_view).len(), 0);
+    app.editor
+        .documents
+        .get_mut(&fold_doc)
+        .unwrap()
+        .fold_all(fold_view);
+    assert_eq!(app.editor.documents[&fold_doc].folds(fold_view).len(), 1);
+    // Explicit :reload keeps its existing "clear folds" semantics.
+    app.editor.documents.get_mut(&fold_doc).unwrap().reload(
+        app.editor.tree.get_mut(fold_view),
+        &providers,
+        true,
+    )?;
+    assert_eq!(app.editor.documents[&fold_doc].folds(fold_view).len(), 0);
     // Clean ordinary buffers are refreshed after Git changes their files.
     assert_eq!(
         current_ref!(app.editor).1.text().to_string(),

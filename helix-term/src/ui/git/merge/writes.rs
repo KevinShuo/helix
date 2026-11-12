@@ -23,7 +23,9 @@ pub(crate) fn reload_clean(editor: &mut Editor, root: &Path, target: Option<&Pat
     for id in ids {
         let view_id = editor.get_synced_view_id(id);
         let doc = editor.documents.get_mut(&id).unwrap();
-        if let Err(error) = doc.reload(editor.tree.get_mut(view_id), &providers, true) {
+        if let Err(error) =
+            doc.reload_preserving_unchanged_folds(editor.tree.get_mut(view_id), &providers, true)
+        {
             editor.set_error(format!("Git changed files; buffer reload failed: {error}"));
         }
     }

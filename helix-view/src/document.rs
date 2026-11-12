@@ -1305,6 +1305,26 @@ impl Document {
         provider_registry: &DiffProviderRegistry,
         trust_full: bool,
     ) -> Result<(), Error> {
+        self.reload_impl(view, provider_registry, trust_full, false)
+    }
+
+    /// Refresh Git metadata without unfolding a buffer whose text is unchanged.
+    pub fn reload_preserving_unchanged_folds(
+        &mut self,
+        view: &mut View,
+        provider_registry: &DiffProviderRegistry,
+        trust_full: bool,
+    ) -> Result<(), Error> {
+        self.reload_impl(view, provider_registry, trust_full, true)
+    }
+
+    fn reload_impl(
+        &mut self,
+        view: &mut View,
+        provider_registry: &DiffProviderRegistry,
+        trust_full: bool,
+        preserve_unchanged_folds: bool,
+    ) -> Result<(), Error> {
         let encoding = self.encoding;
         let path = match self.path() {
             None => return Ok(()),
@@ -1319,12 +1339,13 @@ impl Document {
 
         let mut file = std::fs::File::open(&path)?;
         let (rope, ..) = from_reader(&mut file, Some(encoding))?;
-        self.reset_folding();
-
         // Calculate the difference between the buffer and source text, and apply it.
         // This is not considered a modification of the contents of the file regardless
         // of the encoding.
         let transaction = helix_core::diff::compare_ropes(self.text(), &rope);
+        if !preserve_unchanged_folds || !transaction.changes().is_empty() {
+            self.reset_folding();
+        }
         self.apply(&transaction, view.id);
         self.append_changes_to_history(view);
         self.reset_modified();

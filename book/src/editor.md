@@ -488,7 +488,8 @@ Closing a class preserves any nested method folds for when the class is reopened
 
 Selections, copying, editing, saving, LSP and undo still operate on the real text.
 Edits affecting a definition unfold it; edits elsewhere shift its range and discard
-folds whose syntax is no longer valid. Reload and language changes clear folds.
+folds whose syntax is no longer valid. Explicit reload and language changes clear
+folds. Git refreshes retain folds when the file's text is unchanged.
 Folding itself does not modify the file or create undo entries.
 
 To show clickable fold arrows beside line numbers, opt in to the `fold` gutter:

@@ -22,7 +22,7 @@ pub(crate) enum ConflictScanReason {
 fn context(editor: &Editor) -> Option<std::path::PathBuf> {
     editor
         .git_context_path()
-        .map(|path| std::fs::canonicalize(&path).unwrap_or(path))
+        .map(|path| helix_stdx::path::normalize(std::fs::canonicalize(&path).unwrap_or(path)))
 }
 
 pub(crate) fn request(editor: &mut Editor, reason: ConflictScanReason) {
