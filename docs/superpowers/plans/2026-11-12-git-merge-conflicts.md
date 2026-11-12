@@ -10,7 +10,7 @@
 
 **Spec:** [调研与设计草案](../specs/2026-11-12-git-merge-conflicts-design.md)。
 
-状态：2026-11-12 用户已批准方案 A，并授权完整实现、测试和最终 git push；随后要求保存进度，回家后继续。当前已暂停，Tasks 1–4 完成，Task 5 已实现待独立审查，Tasks 6–7 未完成。以[续做说明](../2026-11-12-git-merge-conflicts-handoff.md)的实际状态为准；下方原始细分 checkbox 尚未逐项回填。
+状态：2026-11-12 已从暂停检查点恢复并完成首版实现。用户已批准方案 A，并授权完整实现、测试和最终 git push。下方保留原始实施步骤；任务实际完成状态以[续做说明](../2026-11-12-git-merge-conflicts-handoff.md)为准，检查命令、独立审查与平台限制见[验证记录](../2026-11-12-git-merge-conflicts-validation.md)。
 
 ## Global Constraints
 
