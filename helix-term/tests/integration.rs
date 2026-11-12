@@ -25,5 +25,6 @@ mod test {
     #[cfg(feature = "git")]
     mod git_tools;
     mod movement;
+    mod minimap;
     mod splits;
 }

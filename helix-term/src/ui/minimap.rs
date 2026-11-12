@@ -1,4 +1,6 @@
 //! The minimap painter reads prepared grids; source traversal lives in the handler.
+mod interaction;
+pub(super) use interaction::MinimapInteraction;
 use std::ops::Range;
 
 use helix_view::{

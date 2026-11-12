@@ -44,6 +44,7 @@ pub struct EditorView {
     spinners: ProgressSpinners,
     /// Tracks if the terminal window is focused by reaction to terminal focus events
     terminal_focused: bool,
+    minimap: super::minimap::MinimapInteraction,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +70,7 @@ impl EditorView {
             completion: None,
             spinners: ProgressSpinners::default(),
             terminal_focused: true,
+            minimap: super::minimap::MinimapInteraction::default(),
         }
     }
 
@@ -1357,6 +1359,10 @@ impl EditorView {
             self.handle_non_key_input(cxt)
         }
 
+        if self.minimap.handle(event, cxt) {
+            return EventResult::Consumed(None);
+        }
+
         let config = cxt.editor.config();
         let MouseEvent {
             kind,
@@ -1663,6 +1669,7 @@ impl Component for EditorView {
                 EventResult::Consumed(None)
             }
             Event::Key(mut key) => {
+                self.minimap.cancel();
                 let (previous_doc, previous_version) = {
                     let (_, doc) = current_ref!(cx.editor);
                     (doc.id(), doc.version())
@@ -1795,6 +1802,7 @@ impl Component for EditorView {
                 EventResult::Consumed(None)
             }
             Event::FocusLost => {
+                self.minimap.cancel();
                 crate::handlers::ai_completion::clear(cx.editor);
                 if context.editor.config().auto_save.focus_lost {
                     let options = commands::WriteAllOptions {
@@ -1834,6 +1842,7 @@ impl Component for EditorView {
 
         // if the terminal size suddenly changed, we need to trigger a resize
         cx.editor.resize(editor_area);
+        self.minimap.validate(cx.editor);
         crate::handlers::minimap::request(cx.editor);
 
         if use_bufferline {
