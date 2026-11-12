@@ -2,6 +2,13 @@
 
 use std::path::{Path, PathBuf};
 
+#[path = "log/conflicts.rs"]
+mod conflicts;
+pub use conflicts::*;
+#[cfg(feature = "git")]
+#[path = "log/conflicts_backend.rs"]
+mod conflicts_backend;
+
 #[derive(Clone, Debug)]
 pub struct GitRepository {
     root: PathBuf,
@@ -156,11 +163,11 @@ mod implementation {
     use tokio::{io::AsyncReadExt, process::Command};
 
     const MAX_OUTPUT: usize = 16 * 1024 * 1024;
-    const QUERY_TIMEOUT: Duration = Duration::from_secs(20);
-    const OPERATION_TIMEOUT: Duration = Duration::from_secs(60);
+    pub(super) const QUERY_TIMEOUT: Duration = Duration::from_secs(20);
+    pub(super) const OPERATION_TIMEOUT: Duration = Duration::from_secs(60);
     static OPERATIONS: OnceLock<parking_lot::Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
-    struct OperationGuard(PathBuf);
+    pub(super) struct OperationGuard(PathBuf);
 
     impl Drop for OperationGuard {
         fn drop(&mut self) {
@@ -222,7 +229,7 @@ mod implementation {
         Ok(resolved)
     }
 
-    fn valid_id(id: &str) -> bool {
+    pub(super) fn valid_id(id: &str) -> bool {
         matches!(id.len(), 40 | 64) && id.bytes().all(|b| b.is_ascii_hexdigit())
     }
 
@@ -255,7 +262,7 @@ mod implementation {
         Ok(result)
     }
 
-    fn path_from_bytes(bytes: &[u8]) -> Result<PathBuf> {
+    pub(super) fn path_from_bytes(bytes: &[u8]) -> Result<PathBuf> {
         Ok(bytes.as_bstr().to_path()?.to_path_buf())
     }
 
@@ -286,7 +293,7 @@ mod implementation {
             .await?
         }
 
-        async fn run(&self, args: &[OsString], timeout: Duration) -> Result<Output> {
+        pub(super) async fn run(&self, args: &[OsString], timeout: Duration) -> Result<Output> {
             let mut command = Command::new("git");
             command
                 .args(["--no-pager", "--no-replace-objects", "--literal-pathspecs"])
@@ -343,7 +350,7 @@ mod implementation {
             })
         }
 
-        async fn checked(&self, args: &[OsString]) -> Result<Vec<u8>> {
+        pub(super) async fn checked(&self, args: &[OsString]) -> Result<Vec<u8>> {
             let output = self.run(args, QUERY_TIMEOUT).await?;
             ensure!(
                 output.status.success(),
@@ -353,7 +360,7 @@ mod implementation {
             Ok(output.stdout)
         }
 
-        fn relative(&self, path: &Path) -> Result<PathBuf> {
+        pub(super) fn relative(&self, path: &Path) -> Result<PathBuf> {
             let resolved;
             let path = if path.is_absolute() {
                 resolved = normalize_path(path)?;
@@ -382,7 +389,7 @@ mod implementation {
                 .contains(&self.git_dir)
         }
 
-        fn begin_operation(&self) -> Result<OperationGuard> {
+        pub(super) fn begin_operation(&self) -> Result<OperationGuard> {
             let mut active = OPERATIONS.get_or_init(Default::default).lock();
             ensure!(
                 active.insert(self.git_dir.clone()),
@@ -391,7 +398,7 @@ mod implementation {
             Ok(OperationGuard(self.git_dir.clone()))
         }
 
-        async fn head(&self) -> Result<(Option<String>, String)> {
+        pub(super) async fn head(&self) -> Result<(Option<String>, String)> {
             let head = self
                 .run(
                     &args(&["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]),
@@ -875,7 +882,7 @@ mod implementation {
         }
     }
 
-    fn args(items: &[&str]) -> Vec<OsString> {
+    pub(super) fn args(items: &[&str]) -> Vec<OsString> {
         items.iter().map(OsString::from).collect()
     }
 

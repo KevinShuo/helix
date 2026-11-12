@@ -8,6 +8,9 @@ use std::{
 #[path = "review.rs"]
 mod review;
 
+#[path = "conflicts_test.rs"]
+mod conflicts;
+
 struct Repo(tempfile::TempDir);
 
 impl Repo {
