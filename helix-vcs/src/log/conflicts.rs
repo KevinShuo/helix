@@ -104,6 +104,14 @@ pub struct ConflictVersion {
     pub(super) operation: ConflictOperation,
     pub(super) working: Option<Vec<u8>>,
     pub(super) attributes: Vec<u8>,
+    #[cfg(feature = "git")]
+    pub(super) path_identity: Option<super::conflicts_write::PathIdentity>,
+}
+
+impl ConflictVersion {
+    pub fn root(&self) -> &std::path::Path {
+        &self.root
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -117,8 +125,87 @@ pub struct GitConflictData {
     pub version: ConflictVersion,
 }
 
+#[derive(Clone, Debug)]
+pub struct ResolutionRequest {
+    pub version: ConflictVersion,
+    pub contents: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+#[cfg_attr(not(feature = "git"), allow(dead_code))]
+pub struct StageRetry {
+    pub(super) version: ConflictVersion,
+    pub(super) contents: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+pub enum ApplyOutcome {
+    Staged,
+    WrittenNotStaged { retry: StageRetry, message: String },
+    NeedsRefresh { message: String },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MergeAction {
+    Finish,
+    Abort,
+}
+
+/// A preview and its validation token. Callers cannot change the action or
+/// preview independently of the repository state that authorized it.
+#[derive(Clone, Debug)]
+#[cfg_attr(not(feature = "git"), allow(dead_code))]
+pub struct MergeActionPlan {
+    pub(super) action: MergeAction,
+    pub(super) staged_paths: Vec<PathBuf>,
+    pub(super) head: String,
+    pub(super) parents: Vec<String>,
+    pub(super) default_message: String,
+    #[cfg(feature = "git")]
+    pub(super) token: super::conflicts_write::MergeActionToken,
+}
+
+impl MergeActionPlan {
+    pub fn action(&self) -> MergeAction {
+        self.action
+    }
+    pub fn staged_paths(&self) -> &[PathBuf] {
+        &self.staged_paths
+    }
+    pub fn head(&self) -> &str {
+        &self.head
+    }
+    pub fn parents(&self) -> &[String] {
+        &self.parents
+    }
+    pub fn default_message(&self) -> &str {
+        &self.default_message
+    }
+}
+
 #[cfg(not(feature = "git"))]
 impl GitRepository {
+    pub async fn apply_resolution(
+        &self,
+        _request: &ResolutionRequest,
+    ) -> anyhow::Result<ApplyOutcome> {
+        anyhow::bail!("Git support was not compiled in")
+    }
+    pub async fn retry_stage(&self, _retry: &StageRetry) -> anyhow::Result<ApplyOutcome> {
+        anyhow::bail!("Git support was not compiled in")
+    }
+    pub async fn prepare_merge_action(
+        &self,
+        _action: MergeAction,
+    ) -> anyhow::Result<MergeActionPlan> {
+        anyhow::bail!("Git support was not compiled in")
+    }
+    pub async fn execute_merge_action(
+        &self,
+        _plan: &MergeActionPlan,
+    ) -> anyhow::Result<GitConflictSnapshot> {
+        anyhow::bail!("Git support was not compiled in")
+    }
     pub async fn conflicts(&self) -> anyhow::Result<GitConflictSnapshot> {
         anyhow::bail!("Git support was not compiled in")
     }

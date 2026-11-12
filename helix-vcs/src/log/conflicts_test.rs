@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "conflicts_write_test.rs"]
+mod writes;
+
 fn raw_git(repo: &Repo, args: &[&str]) -> std::process::Output {
     Command::new("git")
         .args(args)
@@ -16,6 +19,7 @@ fn conflict_repo(path: &str, base: Option<&[u8]>, current: Option<&[u8]>, incomi
     repo.git(&["config", "user.name", "Conflict Test"]);
     repo.git(&["config", "user.email", "conflict@example.test"]);
     repo.commit("seed", "seed\n", "seed");
+    fs::create_dir_all(repo.path().join(path).parent().unwrap()).unwrap();
     if let Some(base) = base {
         fs::write(repo.path().join(path), base).unwrap();
         repo.git(&["add", "--", path]);
@@ -111,6 +115,18 @@ async fn git_conflicts_detects_operation_and_empty_repository() {
     let state = empty.open().await.conflicts().await.unwrap();
     assert_eq!(state.operation, ConflictOperation::None);
     assert!(state.files.is_empty());
+    assert!(empty
+        .open()
+        .await
+        .prepare_merge_action(MergeAction::Finish)
+        .await
+        .is_err());
+    assert!(empty
+        .open()
+        .await
+        .prepare_merge_action(MergeAction::Abort)
+        .await
+        .is_err());
     let repo = text_conflict("file.txt");
     repo.git(&["merge", "--abort"]);
     assert!(!raw_git(&repo, &["rebase", "topic"]).status.success());
@@ -118,12 +134,36 @@ async fn git_conflicts_detects_operation_and_empty_repository() {
         repo.open().await.conflicts().await.unwrap().operation,
         ConflictOperation::Rebase
     );
+    assert!(repo
+        .open()
+        .await
+        .prepare_merge_action(MergeAction::Finish)
+        .await
+        .is_err());
+    assert!(repo
+        .open()
+        .await
+        .prepare_merge_action(MergeAction::Abort)
+        .await
+        .is_err());
     repo.git(&["rebase", "--abort"]);
     assert!(!raw_git(&repo, &["cherry-pick", "topic"]).status.success());
     assert_eq!(
         repo.open().await.conflicts().await.unwrap().operation,
         ConflictOperation::CherryPick
     );
+    assert!(repo
+        .open()
+        .await
+        .prepare_merge_action(MergeAction::Finish)
+        .await
+        .is_err());
+    assert!(repo
+        .open()
+        .await
+        .prepare_merge_action(MergeAction::Abort)
+        .await
+        .is_err());
 }
 
 #[tokio::test]

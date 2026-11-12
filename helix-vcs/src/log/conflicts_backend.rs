@@ -59,6 +59,7 @@ mod tests {
                     operation: operation.clone(),
                     working: Some(working.as_bytes().to_vec()),
                     attributes: Vec::new(),
+                    path_identity: None,
                 },
                 file,
                 operation,
@@ -206,7 +207,7 @@ mod tests {
     }
 }
 
-fn read_bounded(path: &Path) -> Result<Option<Vec<u8>>> {
+pub(super) fn read_bounded(path: &Path) -> Result<Option<Vec<u8>>> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -416,7 +417,7 @@ impl GitRepository {
         Ok(GitConflictSnapshot { operation, files })
     }
 
-    async fn merge_attributes(&self, path: &Path) -> Result<Vec<u8>> {
+    pub(super) async fn merge_attributes(&self, path: &Path) -> Result<Vec<u8>> {
         let mut command = args(&[
             "check-attr",
             "-z",
@@ -461,8 +462,9 @@ impl GitRepository {
         if let Err(error) = unsupported_attributes(&attributes) {
             reason.get_or_insert_with(|| error.to_string());
         }
-        let working = if !self.contains_path(&full_path)? {
-            reason.get_or_insert_with(|| "File resolves outside this worktree".into());
+        let path_identity = self.safe_conflict_path(&path);
+        let working = if let Err(error) = &path_identity {
+            reason.get_or_insert_with(|| error.to_string());
             None
         } else {
             match read_bounded(&full_path) {
@@ -516,6 +518,7 @@ impl GitRepository {
             operation: snapshot.operation.clone(),
             working: working.clone(),
             attributes,
+            path_identity: path_identity.ok(),
         };
         Ok(GitConflictData {
             file,

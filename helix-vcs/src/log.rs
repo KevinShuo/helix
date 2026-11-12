@@ -8,6 +8,9 @@ pub use conflicts::*;
 #[cfg(feature = "git")]
 #[path = "log/conflicts_backend.rs"]
 mod conflicts_backend;
+#[cfg(feature = "git")]
+#[path = "log/conflicts_write.rs"]
+mod conflicts_write;
 
 #[derive(Clone, Debug)]
 pub struct GitRepository {
