@@ -17,6 +17,7 @@ pub mod info;
 pub mod input;
 pub mod keyboard;
 pub mod macro_input;
+pub mod merge;
 pub mod minimap;
 pub mod register;
 pub mod theme;

@@ -23,6 +23,8 @@ mod test {
     #[cfg(feature = "git")]
     mod function_hints;
     #[cfg(feature = "git")]
+    mod git_conflicts;
+    #[cfg(feature = "git")]
     mod git_tools;
     mod minimap;
     mod movement;

@@ -253,6 +253,31 @@ macro_rules! static_commands {
 
 impl MappableCommand {
     pub fn execute(&self, cx: &mut Context) {
+        if matches!(
+            self.name(),
+            "rotate_view"
+                | "rotate_view_reverse"
+                | "jump_view_right"
+                | "jump_view_left"
+                | "jump_view_up"
+                | "jump_view_down"
+                | "swap_view_right"
+                | "swap_view_left"
+                | "swap_view_up"
+                | "swap_view_down"
+                | "transpose_view"
+                | "wonly"
+                | "jump_forward"
+                | "jump_backward"
+        ) {
+            if let Err(err) = cx
+                .editor
+                .leave_merge(helix_view::merge::MergeLeave::KeepDraft)
+            {
+                cx.editor.set_error(err.to_string());
+                return;
+            }
+        }
         match &self {
             Self::Typable { name, args, doc: _ } => {
                 if let Some(command) = typed::TYPABLE_COMMAND_MAP.get(name.as_str()) {
@@ -936,6 +961,10 @@ fn goto_previous_buffer(cx: &mut Context) {
 }
 
 fn goto_buffer(editor: &mut Editor, direction: Direction, count: usize) {
+    if let Err(err) = editor.leave_merge(helix_view::merge::MergeLeave::KeepDraft) {
+        editor.set_error(err.to_string());
+        return;
+    }
     let current = view!(editor).doc;
 
     let id = match direction {
@@ -6027,6 +6056,10 @@ fn transpose_view(cx: &mut Context) {
 ///
 /// Maintain the current view (both the cursor's position and view in document).
 fn split(editor: &mut Editor, action: Action) {
+    if let Err(err) = editor.leave_merge(helix_view::merge::MergeLeave::KeepDraft) {
+        editor.set_error(err.to_string());
+        return;
+    }
     let (view, doc) = current!(editor);
     let id = doc.id();
     let selection = doc.selection(view.id).clone();
@@ -6059,6 +6092,15 @@ fn vsplit_new(cx: &mut Context) {
 }
 
 fn wclose(cx: &mut Context) {
+    if cx.editor.active_merge().is_some() {
+        if let Err(err) = cx
+            .editor
+            .leave_merge(helix_view::merge::MergeLeave::KeepDraft)
+        {
+            cx.editor.set_error(err.to_string());
+        }
+        return;
+    }
     if cx.editor.tree.views().count() == 1 {
         if let Err(err) = typed::buffers_remaining_impl(cx.editor) {
             cx.editor.set_error(err.to_string());

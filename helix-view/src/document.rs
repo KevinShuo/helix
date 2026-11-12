@@ -141,6 +141,7 @@ pub enum DocumentOpenError {
 }
 
 pub struct Document {
+    pub(crate) merge: Option<crate::merge::MergeDocumentState>,
     pub(crate) id: DocumentId,
     text: Rope,
     selections: HashMap<ViewId, Selection>,
@@ -741,6 +742,7 @@ impl Document {
 
         Self {
             id: DocumentId::default(),
+            merge: None,
             active_snippet: None,
             path: None,
             relative_path: OnceLock::new(),
@@ -1017,6 +1019,10 @@ impl Document {
         impl Future<Output = Result<DocumentSavedEvent, anyhow::Error>> + 'static + Send,
         anyhow::Error,
     > {
+        anyhow::ensure!(
+            self.merge.is_none(),
+            "Merge draft: use Space v m a to apply and stage the result"
+        );
         log::debug!(
             "submitting save of doc '{:?}'",
             self.path().map(|path| path.to_string_lossy())
@@ -1477,6 +1483,10 @@ impl Document {
     ) -> bool {
         use helix_core::Assoc;
 
+        if self.merge.as_ref().is_some_and(|m| m.busy) && !transaction.changes().is_empty() {
+            return false;
+        }
+
         let old_doc = self.text().clone();
         let changes = transaction.changes();
         if !changes.apply(&mut self.text) {
@@ -1500,6 +1510,9 @@ impl Document {
 
         self.modified_since_accessed = true;
         self.version += 1;
+        if let Some(merge) = &mut self.merge {
+            merge.model.on_change(changes);
+        }
         self.map_folds(changes);
 
         for selection in self.selections.values_mut() {
@@ -1676,6 +1689,9 @@ impl Document {
         view_id: ViewId,
         emit_lsp_notification: bool,
     ) -> bool {
+        if self.merge.as_ref().is_some_and(|m| m.busy) && !transaction.changes().is_empty() {
+            return false;
+        }
         // store the state just before any changes are made. This allows us to undo to the
         // state just before a transaction was applied.
         if self.changes.is_empty() && !transaction.changes().is_empty() {
@@ -1708,6 +1724,9 @@ impl Document {
     }
 
     fn undo_redo_impl(&mut self, view: &mut View, undo: bool) -> bool {
+        if self.merge.as_ref().is_some_and(|m| m.busy) {
+            return false;
+        }
         if undo {
             self.append_changes_to_history(view);
         } else if !self.changes.is_empty() {
@@ -1793,6 +1812,9 @@ impl Document {
     }
 
     fn earlier_later_impl(&mut self, view: &mut View, uk: UndoKind, earlier: bool) -> bool {
+        if self.merge.as_ref().is_some_and(|m| m.busy) {
+            return false;
+        }
         if earlier {
             self.append_changes_to_history(view);
         } else if !self.changes.is_empty() {
@@ -2159,8 +2181,18 @@ impl Document {
     }
 
     pub fn display_name(&self) -> Cow<'_, str> {
+        if let Some(merge) = &self.merge {
+            return format!("[merge result] {}", merge.data.file.path.display()).into();
+        }
         self.relative_path()
             .map_or_else(|| SCRATCH_BUFFER_NAME.into(), |path| path.to_string_lossy())
+    }
+
+    pub fn merge(&self) -> Option<&crate::merge::MergeDocumentState> {
+        self.merge.as_ref()
+    }
+    pub fn merge_mut(&mut self) -> Option<&mut crate::merge::MergeDocumentState> {
+        self.merge.as_mut()
     }
 
     // transact(Fn) ?

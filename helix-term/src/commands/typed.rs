@@ -115,6 +115,12 @@ fn quit(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow
         return Ok(());
     }
 
+    if cx.editor.active_merge().is_some() {
+        return cx
+            .editor
+            .leave_merge(helix_view::merge::MergeLeave::KeepDraft);
+    }
+
     // last view and we have unsaved changes
     if cx.editor.tree.views().count() == 1 {
         buffers_remaining_impl(cx.editor)?
@@ -129,6 +135,12 @@ fn quit(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow
 fn force_quit(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
     if event != PromptEvent::Validate {
         return Ok(());
+    }
+
+    if cx.editor.active_merge().is_some() {
+        return cx
+            .editor
+            .leave_merge(helix_view::merge::MergeLeave::Discard);
     }
 
     cx.block_try_flush_writes()?;
@@ -382,6 +394,10 @@ fn write_impl(
     path: Option<&str>,
     options: WriteOptions,
 ) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        doc!(cx.editor).merge().is_none(),
+        "Merge draft: use Space v m a to apply and stage the result"
+    );
     let config = cx.editor.config();
     let (view, doc) = current!(cx.editor);
     let doc_id = doc.id();
@@ -862,6 +878,7 @@ pub fn write_all_impl(
     options: WriteAllOptions,
 ) -> anyhow::Result<()> {
     let mut errors: Vec<&'static str> = Vec::new();
+    let mut merge_drafts = false;
     let config = cx.editor.config();
     let saves: Vec<_> = cx
         .editor
@@ -872,6 +889,12 @@ pub fn write_all_impl(
         .into_iter()
         .filter_map(|id| {
             let doc = doc!(cx.editor, &id);
+            if doc.merge().is_some() {
+                if options.write_scratch {
+                    merge_drafts = true;
+                }
+                return None;
+            }
             if !doc.is_modified() {
                 return None;
             }
@@ -959,6 +982,10 @@ pub fn write_all_impl(
         }
     }
 
+    anyhow::ensure!(
+        !merge_drafts,
+        "Merge drafts remain unapplied; use Space v m a"
+    );
     if !errors.is_empty() && !options.force {
         bail!("{:?}", errors);
     }
@@ -1047,6 +1074,9 @@ fn quit_all_impl(cx: &mut compositor::Context, force: bool) -> anyhow::Result<()
     if !force {
         buffers_remaining_impl(cx.editor)?;
     }
+
+    cx.editor
+        .leave_merge(helix_view::merge::MergeLeave::KeepDraft)?;
 
     // close all views
     let views: Vec<_> = cx.editor.tree.views().map(|(view, _)| view.id).collect();
@@ -1610,6 +1640,8 @@ fn reload_all(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> 
     if event != PromptEvent::Validate {
         return Ok(());
     }
+    cx.editor
+        .leave_merge(helix_view::merge::MergeLeave::KeepDraft)?;
 
     let scrolloff = cx.editor.config().scrolloff;
     let view_id = view!(cx.editor).id;
@@ -1617,6 +1649,7 @@ fn reload_all(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> 
     let docs_view_ids: Vec<(DocumentId, Vec<ViewId>)> = cx
         .editor
         .documents_mut()
+        .filter(|doc| doc.merge().is_none())
         .map(|doc| {
             let mut view_ids: Vec<_> = doc.selections().keys().cloned().collect();
 

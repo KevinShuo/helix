@@ -672,11 +672,14 @@ impl Application {
 
         self.editor
             .set_doc_path(doc_save_event.doc_id, &doc_save_event.path);
-        // TODO: fix being overwritten by lsp
-        self.editor.set_status(format!(
-            "'{}' written, {lines}L {size}",
-            get_relative_path(&doc_save_event.path).to_string_lossy(),
-        ));
+        // An asynchronous success must not hide a command's outstanding error,
+        // such as :wa reporting merge drafts while ordinary documents save.
+        if !self.editor.is_err() {
+            self.editor.set_status(format!(
+                "'{}' written, {lines}L {size}",
+                get_relative_path(&doc_save_event.path).to_string_lossy(),
+            ));
+        }
     }
 
     #[inline(always)]

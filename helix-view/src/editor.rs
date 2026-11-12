@@ -1306,6 +1306,7 @@ pub struct Editor {
     /// Current editing mode.
     pub mode: Mode,
     pub tree: Tree,
+    pub merge_sessions: crate::merge::MergeSessions,
     pub next_document_id: DocumentId,
     pub documents: BTreeMap<DocumentId, Document>,
 
@@ -1460,6 +1461,7 @@ impl Editor {
         Self {
             mode: Mode::Normal,
             tree: Tree::new(area),
+            merge_sessions: Default::default(),
             next_document_id: DocumentId::default(),
             documents: BTreeMap::new(),
             saves: HashMap::new(),
@@ -1973,6 +1975,24 @@ impl Editor {
     pub fn switch(&mut self, id: DocumentId, action: Action) {
         use crate::tree::Layout;
 
+        if !matches!(action, Action::Load) {
+            if let Some(session) = self
+                .documents
+                .get(&id)
+                .and_then(|doc| doc.merge())
+                .map(|m| m.session)
+            {
+                if let Err(err) = self.resume_merge(session) {
+                    self.set_error(err.to_string());
+                }
+                return;
+            }
+            if let Err(err) = self.leave_merge(crate::merge::MergeLeave::KeepDraft) {
+                self.set_error(err.to_string());
+                return;
+            }
+        }
+
         if !self.documents.contains_key(&id) {
             log::error!("cannot switch to document that does not exist (anymore)");
             return;
@@ -2080,7 +2100,7 @@ impl Editor {
     }
 
     /// Generate an id for a new document and register it.
-    fn new_document(&mut self, mut doc: Document) -> DocumentId {
+    pub(crate) fn new_document(&mut self, mut doc: Document) -> DocumentId {
         let id = self.next_document_id;
         // Safety: adding 1 from 1 is fine, practically impossible to reach usize max
         self.next_document_id =
@@ -2182,6 +2202,12 @@ impl Editor {
     }
 
     pub fn close(&mut self, id: ViewId) {
+        if self.active_merge().is_some() {
+            if let Err(err) = self.leave_merge(crate::merge::MergeLeave::KeepDraft) {
+                self.set_error(err.to_string());
+            }
+            return;
+        }
         // Remove selections for the closed view on all documents.
         for doc in self.documents_mut() {
             doc.remove_view(id);
@@ -2191,6 +2217,23 @@ impl Editor {
     }
 
     pub fn close_document(&mut self, doc_id: DocumentId, force: bool) -> Result<(), CloseError> {
+        if let Some(session) = self
+            .documents
+            .get(&doc_id)
+            .and_then(|doc| doc.merge())
+            .map(|m| m.session)
+        {
+            let result = if force {
+                self.discard_merge(session)
+            } else if self.active_merge() == Some(session) {
+                self.leave_merge(crate::merge::MergeLeave::KeepDraft)
+            } else {
+                Ok(())
+            };
+            return result.map_err(CloseError::SaveError);
+        }
+        self.leave_merge(crate::merge::MergeLeave::KeepDraft)
+            .map_err(CloseError::SaveError)?;
         let doc = match self.documents.get(&doc_id) {
             Some(doc) => doc,
             None => return Err(CloseError::DoesNotExist),
@@ -2247,6 +2290,7 @@ impl Editor {
             let doc_id = self
                 .documents
                 .iter()
+                .filter(|(_, doc)| doc.merge().is_none())
                 .map(|(&doc_id, _)| doc_id)
                 .next()
                 .unwrap_or_else(|| {
@@ -2604,23 +2648,25 @@ impl Editor {
     /// if possible or there are no selections returns current_view
     /// otherwise uses an arbitrary view
     pub fn get_synced_view_id(&mut self, id: DocumentId) -> ViewId {
-        let current_view = view_mut!(self);
+        let current = self.tree.focus;
         let doc = self.documents.get_mut(&id).unwrap();
-        if doc.selections().contains_key(&current_view.id) {
-            // only need to sync current view if this is not the current doc
-            if current_view.doc != id {
-                current_view.sync_changes(doc);
-            }
-            current_view.id
-        } else if let Some(view_id) = doc.selections().keys().next() {
-            let view_id = *view_id;
-            let view = self.tree.get_mut(view_id);
-            view.sync_changes(doc);
-            view_id
+        let view_id = if doc.selections().contains_key(&current) {
+            current
         } else {
-            doc.ensure_view_init(current_view.id);
-            current_view.id
+            // A merge workspace temporarily owns a different Tree. Original
+            // document selections may reference views in the saved Tree.
+            doc.selections()
+                .keys()
+                .copied()
+                .find(|id| self.tree.contains(*id))
+                .unwrap_or(current)
+        };
+        doc.ensure_view_init(view_id);
+        let view = self.tree.get_mut(view_id);
+        if view.doc != id {
+            view.sync_changes(doc);
         }
+        view_id
     }
 
     pub fn set_cwd(&mut self, path: &Path) -> std::io::Result<()> {

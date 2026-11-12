@@ -103,6 +103,9 @@ fn request_auto_save(editor: &mut Editor) {
 pub(super) fn register_hooks(handlers: &Handlers) {
     let tx = handlers.auto_save.clone();
     register_hook!(move |event: &mut DocumentDidChange<'_>| {
+        if event.doc.merge().is_some() {
+            return Ok(());
+        }
         let config = event.doc.config.load();
         if config.auto_save.after_delay.enable {
             send_blocking(
