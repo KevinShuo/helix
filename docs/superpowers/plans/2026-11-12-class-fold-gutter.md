@@ -19,5 +19,5 @@ Docstrings and arbitrary blocks remain outside this extension.
   syntax and mouse integration tests.
 - [x] Extend candidate queries and gutter hit-testing; update command text/docs.
 - [x] Run core/view/term checks and an independent review; fix relevant findings.
-- [ ] Build, verify and install the updated release; preserve original local edits
+- [x] Build, verify and install the updated release; preserve original local edits
   and record publication/rollout according to the user's standing instructions.

@@ -46,10 +46,36 @@ passes both tests, and the review reports no remaining correctness findings.
 
 ## Rollout
 
-The user's existing push/release/local-install instructions still apply. The
-implementation will be built from a clean commit with unrelated local edits
-temporarily preserved, and published as `code-folding-2026.11.12.1`.
-The installed path remains `C:\dev\helix\target\release\hx.exe`.
-Running editor sessions are preserved; restarting Helix loads the new executable
-and class-fold queries. Final artifact and installation details follow after the
-release checks.
+- Built from clean commit `8b3b22b7fd079a7fd86102d10a54d9eb882d47b2` using
+  `cargo build --release --locked --jobs 2 -p helix-term` (4m 02s).
+  `HELIX_DISABLE_AUTO_GRAMMAR_BUILD=1` reuses the previously verified grammar
+  cache. Clean-source checks also pass: 41 term library tests, 10 folding
+  integration tests, and the no-default-features check.
+- The four pre-existing local edits were temporarily stashed, excluded from the
+  build, then restored byte-for-byte against their saved SHA-256 hashes. The
+  temporary stash was removed after restoration.
+- Pushed the implementation to `fork/master` and `fork/codex/code-folding` and
+  published [code-folding-2026.11.12.1](https://github.com/KevinShuo/helix/releases/tag/code-folding-2026.11.12.1).
+  The public release API confirms the release is not a draft and its three
+  uploaded assets have the expected sizes and SHA-256 digests. The release tag
+  remains on the implementation commit; this rollout record is a later docs
+  commit.
+- The Windows ZIP is 37,397,456 bytes and includes the executable, runtime,
+  298 Windows grammar DLLs, Chinese installation notes and build information.
+  ZIP SHA-256:
+  `9dd2dc67de2db82db86c8cdf47a5f1743cb264f0623780dcc45ee37bf380387f`.
+  Executable SHA-256:
+  `f52ddede160e0ca7eda95035c4984f83466af1cb03d22d769c1f0193df7fcd80`.
+- Standalone package and installed Python/C++ health checks pass. Native
+  terminal smoke checks using actual mouse events verify closing and reopening
+  a C++ class, folding its method, and folding a Python class. Declaration-line
+  arrows and preserved headers were inspected in terminal output.
+- The installed executable is `C:\dev\helix\target\release\hx.exe`; resolving
+  `hx` from the persisted user/machine PATH selects it and reports
+  `helix 25.07.1 (8b3b22b7)`. Installed Python/C/C++ folding queries were updated
+  from the verified package. The user's `mouse`, `fold` gutter and portable
+  `${USERPROFILE}` AI paths remain configured.
+- Existing editor sessions were left running. Their previous executable is
+  preserved at `C:\dev\helix\target\release\hx-before-class-folding-899a5b51.exe`.
+  Restarting Helix loads the new executable and class-fold queries. The earlier
+  Scoop Helix uninstall and PATH setup remain in effect.
