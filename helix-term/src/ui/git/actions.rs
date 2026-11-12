@@ -353,19 +353,25 @@ impl GitPanel {
                                 == document
                             && trusted(editor, repository.root());
                         let Some(panel) = compositor.find::<GitPanel>().filter(|p| {
-                            p.instance == instance
-                                && p.operation_version == operation_version
+                            (p.instance != instance || p.operation_version == operation_version)
                                 && p.repository
                                     .as_ref()
                                     .is_some_and(|r| r.same_worktree(&repository))
                         }) else {
                             return;
                         };
-                        let show_conflicts =
-                            in_context && panel.focused && panel.load_version == load_version;
-                        panel.operation_task = None;
-                        panel.busy = false;
-                        panel.message = render::safe_text(&message);
+                        let originating_panel = panel.instance == instance;
+                        let show_conflicts = originating_panel
+                            && in_context
+                            && panel.focused
+                            && panel.load_version == load_version;
+                        if originating_panel {
+                            panel.operation_task = None;
+                            panel.busy = false;
+                            panel.message = render::safe_text(&message);
+                        }
+                        // A reopened panel still needs fresh data, while only
+                        // the originating panel may automatically open a list.
                         panel.refresh();
                         if let Some(snapshot) =
                             snapshot.filter(|s| show_conflicts && !s.files.is_empty())
