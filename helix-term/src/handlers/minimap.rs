@@ -9,7 +9,10 @@ use helix_core::syntax::HighlightEvent;
 use helix_event::register_hook;
 use helix_view::{
     events::{ConfigDidChange, DocumentDidChange},
-    minimap::{source_lines, MinimapSummary, Projection, ProjectionKey, SourceKey, SourceRow},
+    minimap::{
+        source_lines, source_sample_count, MinimapSummary, Projection, ProjectionKey, SourceKey,
+        SourceRow,
+    },
     Document, DocumentId, Editor,
 };
 
@@ -62,14 +65,16 @@ pub(crate) fn request(editor: &mut Editor) {
             continue;
         };
         let current = key(doc);
-        if doc
-            .minimap
-            .summary
-            .as_ref()
-            .is_some_and(|s| s.key != current)
+        if doc.minimap.source_budget != budget
+            || doc
+                .minimap
+                .summary
+                .as_ref()
+                .is_some_and(|s| s.key != current)
         {
             doc.minimap.invalidate();
         }
+        doc.minimap.source_budget = budget;
         if doc.minimap.requested == keys
             && (doc.minimap.pending || !doc.minimap.projections.is_empty())
         {
@@ -82,24 +87,30 @@ pub(crate) fn request(editor: &mut Editor) {
         let degraded = lines > 50_000
             || doc.text().len_bytes() > 4 * 1024 * 1024
             || lines.saturating_mul(std::mem::size_of::<(usize, SourceRow)>()) > budget;
+        let height = keys.iter().map(|k| k.height).max().unwrap_or(1).min(
+            (budget / (32 * std::mem::size_of::<(usize, SourceRow)>())).clamp(1, u16::MAX as usize)
+                as u16,
+        );
+        let samples = source_sample_count(lines, degraded, height);
         let summary = doc
             .minimap
             .summary
             .clone()
-            .filter(|s| s.degraded == degraded);
-        let height = keys.iter().map(|k| k.height).max().unwrap_or(1);
+            .filter(|s| s.degraded == degraded && s.rows.len() >= samples);
+        let source = if summary.is_none() {
+            source_lines(lines, degraded, height)
+        } else {
+            Vec::new()
+        };
+        let rows = Vec::with_capacity(source.len());
         let build = Build {
             doc: doc.id(),
             serial: doc.minimap.serial,
             key: key(doc),
             lines,
             degraded,
-            source: if summary.is_none() {
-                source_lines(lines, degraded, height)
-            } else {
-                Vec::new()
-            },
-            rows: Vec::new(),
+            source,
+            rows,
             summary,
             cursor: 0,
             projections: keys
@@ -107,7 +118,10 @@ pub(crate) fn request(editor: &mut Editor) {
                 .map(|k| Projection::new(lines, k))
                 .collect(),
         };
-        tokio::spawn(run(build));
+        let handle = doc.minimap.controller.restart();
+        tokio::spawn(async move {
+            helix_event::cancelable_future(run(build), handle).await;
+        });
     }
 }
 
@@ -134,23 +148,41 @@ async fn run(mut build: Build) {
                 let loader = editor.syn_loader.load();
                 let text = doc.text().slice(..);
                 let mut bytes = 0;
-                let end = (build.cursor + 128).min(build.source.len());
+                let limit = (build.cursor + 128).min(build.source.len());
+                let first_byte = text.line_to_byte(build.source[build.cursor]);
+                let mut end = limit;
+                let mut last_byte = first_byte;
+                let mut colorable = !build.degraded;
+                if colorable {
+                    // One bounded query per slice instead of seeking the syntax tree per line.
+                    end = build.cursor;
+                    for index in build.cursor..limit {
+                        let line = build.source[index];
+                        let start = text.line_to_byte(line);
+                        let len = text.line(line).len_bytes();
+                        if len > 8192 || start + len - first_byte > 32 * 1024 {
+                            if index == build.cursor {
+                                end += 1;
+                                colorable = false;
+                            }
+                            break;
+                        }
+                        end = index + 1;
+                        last_byte = start + len;
+                    }
+                }
+                let mut highlighter = (colorable && first_byte < last_byte)
+                    .then(|| {
+                        doc.syntax().map(|syntax| {
+                            syntax.highlighter(text, &loader, first_byte as u32..last_byte as u32)
+                        })
+                    })
+                    .flatten();
+                let mut color = None;
                 while build.cursor < end {
                     let line = build.source[build.cursor];
                     let source = text.line(line);
                     let byte_start = text.line_to_byte(line);
-                    let mut highlighter = (!build.degraded && source.len_bytes() <= 8192)
-                        .then(|| {
-                            doc.syntax().map(|syntax| {
-                                syntax.highlighter(
-                                    text,
-                                    &loader,
-                                    byte_start as u32..(byte_start + source.len_bytes()) as u32,
-                                )
-                            })
-                        })
-                        .flatten();
-                    let mut color = None;
                     let row = SourceRow::from_line(source, build.key.tab_width, |offset| {
                         if let Some(h) = &mut highlighter {
                             while h.next_event_offset() != u32::MAX

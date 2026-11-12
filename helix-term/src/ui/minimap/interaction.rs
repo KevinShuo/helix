@@ -227,6 +227,12 @@ fn navigate(editor: &mut Editor, view_id: ViewId, line: usize, center: bool) {
         let selection = selection.replace(index, Range::new(anchor, head));
         doc.set_selection(view_id, selection);
     }
+    // Correct horizontal visibility without letting the old cursor restore the vertical view.
+    if let Some(adjusted) = view.offset_coords_to_in_view(doc, scrolloff) {
+        let mut offset = doc.view_offset(view_id);
+        offset.horizontal_offset = adjusted.horizontal_offset;
+        doc.set_view_offset(view_id, offset);
+    }
     // SelectionDidChange makes an old AI suggestion invalid without changing document text.
     if doc
         .ai_completion

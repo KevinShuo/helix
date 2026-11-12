@@ -209,4 +209,20 @@ mod tests {
         let default_keys = Config::default().keys;
         assert_eq!(default_keys, keymap::default());
     }
+
+    #[test]
+    fn minimap_config_merges_project_fields_and_rejects_invalid_values() {
+        let global = "[editor.minimap]\nenabled=false\nwidth=20\ndiagnostics=false\n".to_owned();
+        let local = "[editor.minimap]\nenabled=true\nrender='blocks'\n".to_owned();
+        let merged = Config::load(Ok(&global), Ok(local)).unwrap();
+        assert!(merged.editor.minimap.enabled);
+        assert_eq!(merged.editor.minimap.width, 20);
+        assert!(!merged.editor.minimap.diagnostics);
+        assert_eq!(
+            merged.editor.minimap.render,
+            helix_view::minimap::MinimapRender::Blocks
+        );
+        let bad = "[editor.minimap]\nwidth=0\n".to_owned();
+        assert!(Config::load(Ok(&bad), Err(ConfigLoadError::default())).is_err());
+    }
 }

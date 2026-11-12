@@ -67,7 +67,8 @@ pub(super) fn render(editor: &Editor, doc: &Document, view: &View, surface: &mut
         .get("ui.background")
         .patch(theme.get("ui.text"))
         .patch(theme.try_get_exact("ui.minimap").unwrap_or_default());
-    surface.set_style(area, base);
+    // The terminal retains unpainted cells. Clear disabled lanes and unpublished source grids.
+    surface.clear_with(area, base);
     let current = doc.minimap.summary.as_ref().is_some_and(|s| {
         s.key.version == doc.version()
             && s.key.epoch == doc.minimap.epoch
@@ -99,7 +100,7 @@ pub(super) fn render(editor: &Editor, doc: &Document, view: &View, surface: &mut
     let viewport_style = theme
         .try_get_exact("ui.minimap.viewport")
         .unwrap_or_else(|| theme.get("ui.selection"));
-    let bg = viewport_style.bg.unwrap_or(Color::Rgb(48, 48, 48));
+    let bg = viewport_style.bg.unwrap_or(Color::Indexed(8));
     for y in viewport {
         for x in content.x..content.right() {
             surface[(x, content.y + y)].set_bg(bg);

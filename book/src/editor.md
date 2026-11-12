@@ -5,6 +5,7 @@
 - [`[editor.statusline]` Section](#editorstatusline-section)
 - [`[editor.lsp]` Section](#editorlsp-section)
 - [`[editor.function-hints]` Section](#editorfunction-hints-section)
+- [`[editor.minimap]` Section](#editorminimap-section)
 - [`[editor.cursor-shape]` Section](#editorcursor-shape-section)
 - [`[editor.file-picker]` Section](#editorfile-picker-section)
 - [`[editor.file-explorer]` Section](#editorfile-explorer-section)
@@ -222,6 +223,51 @@ Git queries are limited to 16 MiB files and time out after 15 seconds.
 These settings are independent of `editor.lsp.display-inlay-hints`. They can also
 be changed with `:toggle function-hints.references` and
 `:toggle function-hints.git-author`.
+
+### `[editor.minimap]` Section
+
+The optional minimap shows a source overview at the right of each editing split.
+It uses colored Braille dots to preserve indentation and code structure in a
+terminal. It is disabled by default. Enable it in `config.toml`:
+
+```toml
+[editor.minimap]
+enabled = true
+```
+
+| Key | Description | Default |
+| --- | --- | --- |
+| `enabled` | Show the source minimap in editing splits. | `false` |
+| `width` | Total terminal columns, including the separator and two marker lanes; 8–40. | `16` |
+| `render` | `"braille"` for 2×4 dots, or `"blocks"` for 2×2 blocks when Braille glyphs are unsuitable. | `"braille"` |
+| `min-editor-width` | Minimum remaining text width after gutters and minimap; at least 20. | `60` |
+| `diagnostics` | Show existing diagnostic ranges in the right marker lane. | `true` |
+| `git-diff` | Show existing Git additions, modifications and deletions in the other lane. | `true` |
+
+The minimap hides automatically when a split cannot retain `min-editor-width`
+text columns or has fewer than four text rows. Marker lanes retain their width
+when switched off. Short files stay at the top; long files fit the minimap's
+height. The first 160 display columns of source are shown. Virtual annotations,
+AI suggestions and soft wrapping do not add source lines to the map.
+
+With `editor.mouse` enabled, click outside the highlighted viewport to center
+that source region; drag the viewport to scroll. A hidden fold destination is
+expanded even when it lies inside the viewport highlight. Wheel events over a
+minimap scroll its split while preserving keyboard focus. Navigation follows
+Helix's scrolling rules: a cursor leaving the viewport is moved into it, the
+select-mode anchor is preserved, and other selections are retained.
+
+Use `:toggle-option minimap.enabled` or `:set-option minimap.enabled false` for
+a session-only change. Edit `config.toml` and run `:config-reload` to persist a
+change. You can switch the rendering mode with `:set-option minimap.render blocks`.
+No default key binding is assigned.
+
+Source summaries are cached and built in small, debounced jobs. Files larger
+than 50,000 lines or 4MiB use a bounded monochrome sample; short code fragments
+can be omitted in that mode. Missing syntax, diagnostics or Git data leave
+those colors/markers unavailable. No extra LSP or Git requests are made.
+Optional theme scopes are `ui.minimap`, `ui.minimap.viewport` and
+`ui.minimap.cursor`; existing themes use fallback colors.
 
 ### `[editor.cursor-shape]` Section
 

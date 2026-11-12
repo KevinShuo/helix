@@ -43,3 +43,7 @@ They appear as grey text and are accepted in full with `Shift-Right` in insert m
 Function reference counts and Git authors can be enabled independently in
 [`[editor.function-hints]`](./editor.md#editorfunction-hints-section).
 
+
+A right-side source overview can be enabled with
+[`[editor.minimap]`](./editor.md#editorminimap-section). It supports Braille or block
+rendering and the session-only `:toggle-option minimap.enabled` command.

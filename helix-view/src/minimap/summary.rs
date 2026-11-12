@@ -74,10 +74,18 @@ pub fn source_lines(lines: usize, degraded: bool, height: u16) -> Vec<usize> {
     if !degraded {
         return (0..lines).collect();
     }
-    let count = (height as usize * 4 * 8).clamp(2, 4096).min(lines);
+    let count = source_sample_count(lines, degraded, height);
     (0..count)
         .map(|i| (i as u128 * (lines - 1) as u128 / (count - 1).max(1) as u128) as usize)
         .collect()
+}
+
+pub fn source_sample_count(lines: usize, degraded: bool, height: u16) -> usize {
+    if degraded {
+        (height as usize * 4 * 8).clamp(2, 4096).min(lines.max(1))
+    } else {
+        lines.max(1)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,6 +162,8 @@ pub struct MinimapState {
     pub epoch: u64,
     pub serial: u64,
     pub pending: bool,
+    pub controller: helix_event::TaskController,
+    pub source_budget: usize,
     pub requested: Vec<ProjectionKey>,
     pub summary: Option<Arc<MinimapSummary>>,
     pub projections: Vec<Projection>,
@@ -161,6 +171,7 @@ pub struct MinimapState {
 
 impl MinimapState {
     pub fn invalidate(&mut self) {
+        self.controller.cancel();
         self.epoch = self.epoch.wrapping_add(1);
         self.serial = self.serial.wrapping_add(1);
         self.pending = false;
@@ -221,5 +232,23 @@ mod tests {
                 .iter()
                 .any(|c| c.highlight == Some(Highlight::new(3))));
         }
+    }
+
+    #[test]
+    fn minimap_invalidation_cancels_work_and_drops_cached_geometry() {
+        let mut state = MinimapState::default();
+        let handle = state.controller.restart();
+        state.pending = true;
+        state.requested.push(ProjectionKey {
+            width: 13,
+            height: 20,
+            render: MinimapRender::Braille,
+        });
+        let epoch = state.epoch;
+        state.invalidate();
+        assert!(handle.is_canceled());
+        assert!(!state.pending);
+        assert!(state.requested.is_empty());
+        assert_ne!(state.epoch, epoch);
     }
 }

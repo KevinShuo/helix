@@ -212,7 +212,11 @@ impl View {
     }
 
     pub fn minimap_layout(&self, doc: &Document) -> crate::minimap::MinimapLayout {
-        crate::minimap::MinimapLayout::new(self.area, self.gutter_offset(doc), &doc.config.load().minimap)
+        crate::minimap::MinimapLayout::new(
+            self.area,
+            self.gutter_offset(doc),
+            &doc.config.load().minimap,
+        )
     }
 
     pub fn inner_height(&self) -> usize {
