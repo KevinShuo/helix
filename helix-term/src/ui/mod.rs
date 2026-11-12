@@ -6,6 +6,7 @@ mod info;
 pub mod lsp;
 mod markdown;
 pub mod menu;
+pub(crate) mod minimap;
 pub mod overlay;
 pub mod picker;
 pub mod popup;

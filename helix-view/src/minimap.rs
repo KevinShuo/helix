@@ -5,7 +5,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::graphics::Rect;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+mod summary;
+pub use summary::*;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MinimapRender {
     #[default]

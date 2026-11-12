@@ -24,6 +24,7 @@ mod document_colors;
 mod document_highlight;
 mod document_links;
 pub(crate) mod function_hints;
+pub(crate) mod minimap;
 mod prompt;
 mod signature_help;
 mod snippet;
@@ -58,6 +59,7 @@ pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
     completion::register_hooks(&handlers);
     ai_completion::register_hooks();
     function_hints::register_hooks();
+    minimap::register_hooks();
     signature_help::register_hooks(&handlers);
     document_highlight::register_hooks(&handlers);
     code_action_hint::register_hooks(&handlers);

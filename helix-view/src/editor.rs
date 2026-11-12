@@ -1626,6 +1626,10 @@ impl Editor {
 
         let scopes = theme.scopes();
         (*self.syn_loader).load().set_scopes(scopes.to_vec());
+        // Highlight indices belong to the theme's scope list, including previews.
+        for doc in self.documents_mut() {
+            doc.minimap.invalidate();
+        }
 
         match preview {
             ThemeAction::Preview => {

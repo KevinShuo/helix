@@ -240,6 +240,8 @@ impl EditorView {
             decorations,
         );
 
+        super::minimap::render(editor, doc, view, surface);
+
         // if we're not at the edge of the screen, draw a right border
         if viewport.right() != view.area.right() {
             let x = area.right();
@@ -1832,6 +1834,7 @@ impl Component for EditorView {
 
         // if the terminal size suddenly changed, we need to trigger a resize
         cx.editor.resize(editor_area);
+        crate::handlers::minimap::request(cx.editor);
 
         if use_bufferline {
             Self::render_bufferline(cx.editor, area.with_height(1), surface);

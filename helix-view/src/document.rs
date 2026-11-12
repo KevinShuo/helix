@@ -154,6 +154,8 @@ pub struct Document {
     pub(crate) inlay_hints: HashMap<ViewId, DocumentInlayHints>,
     /// Cached function metadata and in-flight requests, scoped to each viewport.
     pub function_hints: HashMap<ViewId, crate::function_hints::FunctionHints>,
+    /// Bounded source overview shared by views, never part of document history.
+    pub minimap: crate::minimap::MinimapState,
     /// Jump label overlays for each view.
     pub(crate) jump_labels: HashMap<ViewId, Vec<Overlay>>,
     /// LSP document highlights for each view, stored as char ranges.
@@ -749,6 +751,7 @@ impl Document {
             selections: HashMap::default(),
             inlay_hints: HashMap::default(),
             function_hints: HashMap::default(),
+            minimap: crate::minimap::MinimapState::default(),
             inlay_hints_oudated: false,
             view_data: Default::default(),
             fold_candidates: OnceLock::new(),
@@ -1376,6 +1379,7 @@ impl Document {
         loader: &syntax::Loader,
     ) {
         self.language = language_config;
+        self.minimap.invalidate();
         self.reset_folding();
         self.syntax = self.language.as_ref().and_then(|config| {
             Syntax::new(self.text.slice(..), config.language(), loader)
