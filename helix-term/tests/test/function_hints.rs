@@ -5,6 +5,39 @@ use helix_view::{current_ref, function_hints::FunctionHintsConfig};
 
 use super::helpers::*;
 
+fn virtual_text(app: &helix_term::application::Application) -> String {
+    let (view, doc) = current_ref!(app.editor);
+    let annotations = view.text_annotations(doc, None);
+    DocumentFormatter::new_at_prev_checkpoint(
+        doc.text().slice(..),
+        &TextFormat::default(),
+        &annotations,
+        0,
+    )
+    .filter(|grapheme| grapheme.is_virtual())
+    .map(|grapheme| grapheme.raw.to_string())
+    .collect()
+}
+
+async fn scroll(app: &mut helix_term::application::Application, down: bool) {
+    #[cfg(windows)]
+    use crossterm::event::{Event, KeyModifiers, MouseEvent, MouseEventKind};
+    #[cfg(not(windows))]
+    use termina::event::{Event, KeyModifiers, MouseEvent, MouseEventKind};
+    app.handle_terminal_events(Ok(Event::Mouse(MouseEvent {
+        kind: if down {
+            MouseEventKind::ScrollDown
+        } else {
+            MouseEventKind::ScrollUp
+        },
+        column: 10,
+        row: 5,
+        modifiers: KeyModifiers::NONE,
+    })))
+    .await;
+    app.handle_idle_timeout().await;
+}
+
 fn hidden(command: &mut Command) -> &mut Command {
     #[cfg(windows)]
     {
@@ -79,9 +112,12 @@ async fn function_hints_flow_from_lsp_and_git_to_virtual_text() -> anyhow::Resul
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let text = "def hello():\n    return 1\n\nhello()\nhello()\n";
+    let text = format!(
+        "def hello():\n    return 1\n\nhello()\nhello()\n{}",
+        "\n".repeat(80)
+    );
     let file = temp.path().join("example.py");
-    fs::write(&file, text)?;
+    fs::write(&file, &text)?;
     git(temp.path(), &["init", "--initial-branch=main"]);
     git(temp.path(), &["add", "example.py"]);
     git(temp.path(), &["commit", "-m", "Define hello"]);
@@ -110,6 +146,7 @@ language-servers = ["function-hints-fixture"]
         .with_lang_loader(test_syntax_loader(Some(overrides)))
         .with_file(&file, None)
         .build()?;
+    app.test_resize(80, 16).await?;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
     loop {
         app.editor.reset_idle_timer();
@@ -152,6 +189,120 @@ language-servers = ["function-hints-fixture"]
     tokio::time::timeout(Duration::from_secs(3), run_event_loop_until_idle(&mut app)).await?;
     let requests = fs::read_to_string(&log_path)?;
     assert_eq!(requests.matches("textDocument/references").count(), 1);
+
+    // Leave the annotated function, finish the empty viewport request, and
+    // return repeatedly. Cached text must survive both the scroll and its result.
+    for down in [true, false, true, false] {
+        scroll(&mut app, down).await;
+        let (view, doc) = current_ref!(app.editor);
+        assert_eq!(
+            doc.view_offset(view.id).anchor == 0,
+            !down,
+            "mouse wheel did not scroll"
+        );
+        assert_eq!(
+            virtual_text(&app),
+            "  2 usages  Hint Author",
+            "scroll refresh hid cached hints"
+        );
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            app.editor.reset_idle_timer();
+            tokio::time::timeout(Duration::from_secs(3), run_event_loop_until_idle(&mut app))
+                .await?;
+            let (view, doc) = current_ref!(app.editor);
+            if !doc.function_hints[&view.id].controller.is_running() {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "scroll refresh did not complete"
+            );
+        }
+        assert_eq!(
+            virtual_text(&app),
+            "  2 usages  Hint Author",
+            "viewport result discarded offscreen hints"
+        );
+    }
+
+    // A periodic refresh must keep the current virtual text visible until its
+    // replacement arrives, including when an external commit changes the author.
+    git(
+        temp.path(),
+        &[
+            "commit",
+            "--amend",
+            "--no-edit",
+            "--author=New Author <new@example.com>",
+        ],
+    );
+    let (view, doc) = helix_view::current!(app.editor);
+    doc.function_hints.get_mut(&view.id).unwrap().requested_at =
+        std::time::Instant::now() - Duration::from_secs(16);
+    app.handle_idle_timeout().await;
+    let (view, doc) = current_ref!(app.editor);
+    let annotations = view.text_annotations(doc, None);
+    let displayed: String = DocumentFormatter::new_at_prev_checkpoint(
+        doc.text().slice(..),
+        &TextFormat::default(),
+        &annotations,
+        0,
+    )
+    .filter(|grapheme| grapheme.is_virtual())
+    .map(|grapheme| grapheme.raw.to_string())
+    .collect();
+    assert_eq!(
+        displayed, "  2 usages  Hint Author",
+        "refresh must not clear the displayed hints while requests are pending"
+    );
+    drop(annotations);
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        app.editor.reset_idle_timer();
+        tokio::time::timeout(Duration::from_secs(3), run_event_loop_until_idle(&mut app)).await?;
+        let (view, doc) = current_ref!(app.editor);
+        if doc.function_hints.get(&view.id).is_some_and(|hints| {
+            hints
+                .authors
+                .first()
+                .is_some_and(|a| a.text == "  New Author")
+                && !hints.controller.is_running()
+        }) {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "refreshed Git author did not arrive"
+        );
+    }
+
+    // A successful empty symbol result must still remove previous annotations.
+    fs::write(log_path.with_extension("symbols"), "null")?;
+    let (view, doc) = helix_view::current!(app.editor);
+    doc.function_hints.get_mut(&view.id).unwrap().requested_at =
+        std::time::Instant::now() - Duration::from_secs(16);
+    app.handle_idle_timeout().await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        app.editor.reset_idle_timer();
+        tokio::time::timeout(Duration::from_secs(3), run_event_loop_until_idle(&mut app)).await?;
+        let (view, doc) = current_ref!(app.editor);
+        let hints = &doc.function_hints[&view.id];
+        if !hints.controller.is_running() {
+            assert!(
+                hints.references.is_empty(),
+                "stale reference hints remained"
+            );
+            assert!(hints.authors.is_empty(), "stale Git author hints remained");
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "empty symbol refresh did not complete"
+        );
+    }
     app.close().await;
     Ok(())
 }

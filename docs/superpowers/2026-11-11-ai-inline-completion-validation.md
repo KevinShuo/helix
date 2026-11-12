@@ -82,6 +82,61 @@ repair fixes insertion boundaries; the 7B model can still make incorrect code
 guesses. Conservative checks may also omit otherwise valid ambiguous fragments.
 Line mode deliberately suggests only the current line.
 
+## Sorting completion quality follow-up
+
+The line prompt previously moved the current line out of its original location:
+it sent the preceding code, then the following code, then the typed line as a
+separate quoted fragment. A controlled local-model experiment kept the source
+in order with `<CURSOR>` in the incomplete line. The model, system instruction,
+sampling temperature (0.1), output limit (48 tokens), and seed (42) stayed fixed.
+
+Ten completion holes covered insertion sort, bubble sort, quicksort, heap sort,
+and descending insertion sort. Every fixture already fit the launcher's
+3000-character prefix / 500-character suffix window (largest prefix: 640;
+largest suffix: 462). Raising those limits to 12000/4000 therefore sent exactly
+the same code in this experiment.
+
+| Prompt | Programs passing all inputs |
+| --- | --- |
+| Previous line prompt, 3000/500 | 8/10 |
+| Previous line prompt, 12000/4000 | 8/10 |
+| Source kept in order with a cursor marker | 10/10 |
+
+Each completed program was compiled as C++17 and run on 162 arrays: empty,
+singleton, ascending, descending, duplicate and negative values, plus seeded
+random inputs. Reference implementations passed those same checks first.
+Boundary canaries and a recursion budget detected corrupt writes and recursion
+that did not shrink its input. The two regressions were:
+
+- Insertion sort's shift: `a[j + 1] = key;` became `a[j + 1] = a[j];`.
+- Quicksort's right recursion: `quick_sort(a, low, high);` became
+  `quick_sort(a, pivotIndex + 1, high);`.
+
+The editor now uses the tested source ordering, and the launcher's `-Check`
+prompt follows it. A regression captures the real HTTP request and requires
+the incomplete assignment to remain inside its loop, before the final key
+assignment. It failed with the previous prompt and passed with the change.
+Context limits and insertion-boundary handling are unchanged.
+
+Fresh verification for this change:
+
+- 22 `helix-term` library tests and 19 AI editor integration tests passed.
+- The opt-in live Python editor test displayed `sum(items)` and accepted it
+  with Shift+Right; the launcher's updated `-Check` returned the same insertion.
+- The optimized release build passed in 1m16s. The replacement executable is
+  `target/release/hx.exe`; the running editor image was preserved before the
+  build so existing sessions were not closed.
+- Changed-file rustfmt, PowerShell parsing, and `git diff --check` passed.
+  The integration build still emits the existing unused `line_feed_handling`
+  test-helper warning. The unrelated broad-suite baseline failures described
+  below were not rerun for this prompt-only change.
+
+This is a small synthetic comparison, not a general accuracy estimate. It
+shows that prompt organization can cause wrong code even when all relevant
+source is present. Large functions and cross-file types can still need context
+that this character-window implementation does not collect. No model switch or
+larger context window was needed for these ten examples.
+
 ## Original 27B implementation results
 
 - Release build passed: `cargo build --release --locked -p helix-term` with

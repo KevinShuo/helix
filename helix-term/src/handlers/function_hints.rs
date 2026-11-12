@@ -36,6 +36,7 @@ const MAX_VISIBLE_FUNCTIONS: usize = 64;
 enum HintResult {
     References(Vec<InlineAnnotation>),
     Authors(Vec<InlineAnnotation>),
+    Empty,
 }
 
 fn attach(
@@ -53,6 +54,19 @@ fn attach(
     {
         return;
     }
+    let text = doc.text();
+    let visible_start = text.line_to_char(request.visible.start.min(text.len_lines()));
+    let visible_end = if request.visible.end < text.len_lines() {
+        text.line_to_char(request.visible.end)
+    } else {
+        // A final line without a newline has its annotation at EOF.
+        text.len_chars().saturating_add(1)
+    };
+    let replace = |cached: &mut Vec<InlineAnnotation>, annotations: Vec<InlineAnnotation>| {
+        let start = cached.partition_point(|a| a.char_idx < visible_start);
+        let end = cached.partition_point(|a| a.char_idx < visible_end);
+        drop(cached.splice(start..end, annotations));
+    };
     let Some(hints) = doc
         .function_hints
         .get_mut(&view)
@@ -61,8 +75,12 @@ fn attach(
         return;
     };
     match result {
-        HintResult::References(annotations) => hints.references = annotations,
-        HintResult::Authors(annotations) => hints.authors = annotations,
+        HintResult::References(annotations) => replace(&mut hints.references, annotations),
+        HintResult::Authors(annotations) => replace(&mut hints.authors, annotations),
+        HintResult::Empty => {
+            replace(&mut hints.references, Vec::new());
+            replace(&mut hints.authors, Vec::new());
+        }
     }
 }
 
@@ -164,18 +182,26 @@ pub(crate) fn request_visible(editor: &mut Editor) {
         }) {
             continue;
         }
-        let mut controller = TaskController::new();
-        let handle = controller.restart();
-        doc.function_hints.insert(
-            view_id,
-            FunctionHints {
+        let hints = doc
+            .function_hints
+            .entry(view_id)
+            .or_insert_with(|| FunctionHints {
                 request: prepared.key.clone(),
                 requested_at: Instant::now(),
-                controller,
+                controller: TaskController::new(),
                 references: Vec::new(),
                 authors: Vec::new(),
-            },
-        );
+            });
+        // Moving the viewport changes the query scope, not the cached source
+        // positions. Retain previously queried functions when scrolling back.
+        hints.request.visible.clone_from(&prepared.key.visible);
+        if hints.request != prepared.key {
+            hints.references.clear();
+            hints.authors.clear();
+            hints.request = prepared.key.clone();
+        }
+        hints.requested_at = Instant::now();
+        let handle = hints.controller.restart();
         tokio::spawn(async move {
             tokio::select! {
                 biased;
@@ -203,8 +229,9 @@ async fn request(prepared: PreparedRequest, doc: DocumentId, view: ViewId, handl
             partial_result_params: Default::default(),
         });
     let response = match tokio::time::timeout(REQUEST_TIMEOUT, future).await {
-        Ok(Ok(Some(response))) => response,
-        Ok(Ok(None)) => return,
+        Ok(Ok(response)) => {
+            response.unwrap_or_else(|| lsp::DocumentSymbolResponse::Nested(Vec::new()))
+        }
         error => {
             log::debug!("Function hints: document symbols unavailable: {error:?}");
             return;
@@ -227,6 +254,14 @@ async fn request(prepared: PreparedRequest, doc: DocumentId, view: ViewId, handl
     });
     targets.truncate(MAX_VISIBLE_FUNCTIONS);
     if targets.is_empty() {
+        publish(
+            doc,
+            view,
+            prepared.key.clone(),
+            handle.clone(),
+            HintResult::Empty,
+        )
+        .await;
         return;
     }
     let references = async {
@@ -412,13 +447,17 @@ mod tests {
     use std::{sync::Arc, time::Instant};
 
     fn setup() -> (Document, View, FunctionHintsRequest) {
+        setup_text("fn f() {}\n")
+    }
+
+    fn setup_text(text: &str) -> (Document, View, FunctionHintsRequest) {
         let mut config = Config::default();
         config.function_hints = FunctionHintsConfig {
             references: true,
             git_author: true,
         };
         let mut doc = Document::from(
-            Rope::from_str("fn f() {}\n"),
+            Rope::from_str(text),
             None,
             Arc::new(ArcSwap::from_pointee(config)),
             Arc::new(ArcSwap::from_pointee(syntax::Loader::default())),
@@ -451,6 +490,93 @@ mod tests {
 
     fn references() -> HintResult {
         HintResult::References(vec![InlineAnnotation::new(9, "  2 usages")])
+    }
+
+    #[test]
+    fn viewport_results_preserve_offscreen_hints_and_replace_visible_hints() {
+        let (mut doc, view, mut request) = setup_text("fn a() {}\n\nfn b() {}\n\nfn c() {}\n");
+        request.visible = 0..6;
+        doc.function_hints.get_mut(&view.id).unwrap().request = request.clone();
+        for result in [
+            HintResult::References(vec![
+                InlineAnnotation::new(9, "  1 usage"),
+                InlineAnnotation::new(20, "  1 usage"),
+                InlineAnnotation::new(31, "  1 usage"),
+            ]),
+            HintResult::Authors(vec![
+                InlineAnnotation::new(9, "  Alice"),
+                InlineAnnotation::new(20, "  Bob"),
+                InlineAnnotation::new(31, "  Carol"),
+            ]),
+        ] {
+            attach(&mut doc, view.id, &request, 7, result);
+        }
+        request.visible = 2..4;
+        doc.function_hints.get_mut(&view.id).unwrap().request = request.clone();
+        attach(
+            &mut doc,
+            view.id,
+            &request,
+            7,
+            HintResult::References(vec![InlineAnnotation::new(20, "  3 usages")]),
+        );
+        attach(
+            &mut doc,
+            view.id,
+            &request,
+            7,
+            HintResult::Authors(vec![InlineAnnotation::new(20, "  New Author")]),
+        );
+        let hints = &doc.function_hints[&view.id];
+        assert_eq!(
+            hints
+                .references
+                .iter()
+                .map(|a| (a.char_idx, a.text.as_str()))
+                .collect::<Vec<_>>(),
+            [(9, "  1 usage"), (20, "  3 usages"), (31, "  1 usage")]
+        );
+        assert_eq!(
+            hints
+                .authors
+                .iter()
+                .map(|a| (a.char_idx, a.text.as_str()))
+                .collect::<Vec<_>>(),
+            [(9, "  Alice"), (20, "  New Author"), (31, "  Carol")]
+        );
+        attach(&mut doc, view.id, &request, 7, HintResult::Empty);
+        let hints = &doc.function_hints[&view.id];
+        assert_eq!(
+            hints
+                .references
+                .iter()
+                .map(|a| a.char_idx)
+                .collect::<Vec<_>>(),
+            [9, 31]
+        );
+        assert_eq!(
+            hints.authors.iter().map(|a| a.char_idx).collect::<Vec<_>>(),
+            [9, 31]
+        );
+    }
+
+    #[test]
+    fn refresh_replaces_and_removes_an_annotation_at_eof() {
+        let (mut doc, view, request) = setup_text("fn f() {}");
+        for name in ["  Old Author", "  New Author"] {
+            attach(
+                &mut doc,
+                view.id,
+                &request,
+                7,
+                HintResult::Authors(vec![InlineAnnotation::new(9, name)]),
+            );
+        }
+        let hints = &doc.function_hints[&view.id];
+        assert_eq!(hints.authors.len(), 1);
+        assert_eq!(hints.authors[0].text.as_str(), "  New Author");
+        attach(&mut doc, view.id, &request, 7, HintResult::Empty);
+        assert!(doc.function_hints[&view.id].authors.is_empty());
     }
 
     #[test]

@@ -7,6 +7,7 @@ use std::{
 
 fn main() {
     let log_path = std::env::args_os().nth(1).unwrap();
+    let symbols_path = std::path::Path::new(&log_path).with_extension("symbols");
     let mut log = OpenOptions::new()
         .create(true)
         .append(true)
@@ -50,7 +51,9 @@ fn main() {
             assert!(message.contains("\"hierarchicalDocumentSymbolSupport\":true"));
             r#"{"capabilities":{"documentSymbolProvider":true,"referencesProvider":true,"textDocumentSync":1}}"#.to_owned()
         } else if message.contains("\"method\":\"textDocument/documentSymbol\"") {
-            r#"[{"name":"hello","kind":12,"range":{"start":{"line":0,"character":0},"end":{"line":1,"character":12}},"selectionRange":{"start":{"line":0,"character":4},"end":{"line":0,"character":9}}}]"#.to_owned()
+            std::fs::read_to_string(&symbols_path).unwrap_or_else(|_| {
+                r#"[{"name":"hello","kind":12,"range":{"start":{"line":0,"character":0},"end":{"line":1,"character":12}},"selectionRange":{"start":{"line":0,"character":4},"end":{"line":0,"character":9}}}]"#.to_owned()
+            })
         } else if message.contains("\"method\":\"textDocument/references\"") {
             assert!(message.contains("\"includeDeclaration\":false"));
             assert!(message.contains("\"position\":{\"character\":4,\"line\":0}"));

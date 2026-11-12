@@ -88,7 +88,12 @@ Suggestions wait for a 200 ms typing pause, use up to 3000 characters before the
 cursor and 500 after it, and generate at most 48 tokens. The request timeout is
 5 seconds. The Instruct model uses the existing chat completion interface with
 `prompt-mode = "line"`. It generates a completed current line, and Helix extracts
-only the missing text. Replies that rewrite the typed prefix or omit existing
+only the missing text. The surrounding source stays in its original order, with
+the cursor marked inside the incomplete line so the model can see its enclosing
+control flow. Context currently comes only from this document's character window;
+definitions in other files are not fetched automatically.
+
+Replies that rewrite the typed prefix or omit existing
 text to the right are discarded. This avoids inserting repeated identifiers or
 an unrelated multiline block inside a condition. It does not verify the logic of
 the proposed condition. Use `-PromptMode insertion` for direct, potentially

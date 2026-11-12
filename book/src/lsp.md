@@ -29,6 +29,7 @@ keys are listed below.
 | Document / workspace symbols | `Space-s` / `Space-S` |
 | Format document | `:format`, or set `auto-format` to format on save |
 | Inlay hints | enable with `display-inlay-hints` (see below) |
+| Highlight references to the symbol at the cursor | enable with `auto-document-highlight` (see below) |
 
 ## Configuration
 
@@ -37,6 +38,18 @@ toggles LSP behaviour — `display-inlay-hints`, `auto-signature-help`,
 `auto-document-highlight`, `snippets`, and `enable` to disable LSP entirely. How
 much diagnostic detail is shown inline at the cursor is configured separately in
 [`[editor.inline-diagnostics]`](./editor.md#editorinline-diagnostics-section).
+
+To highlight other references to the symbol at the cursor in the current
+document, enable automatic document highlights:
+
+```toml
+[editor.lsp]
+auto-document-highlight = true
+```
+
+Run `:config-reload` after updating the configuration. This feature requires a
+language server that supports document highlights; matches refer to the same
+symbol, rather than every occurrence of the same text.
 
 Which server(s) a language uses, the server's command and arguments, and any
 language-specific settings are configured in `languages.toml` (see
