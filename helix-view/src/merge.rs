@@ -30,6 +30,20 @@ pub struct MergeDocumentState {
     pub model: MergeModel,
     /// Text and history cannot change while an explicitly requested write runs.
     pub busy: bool,
+    pub write_status: MergeWriteStatus,
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum MergeWriteStatus {
+    #[default]
+    Draft,
+    Staged,
+    NeedsRefresh(String),
+    Retry {
+        token: helix_vcs::git_tools::StageRetry,
+        version: i32,
+        message: String,
+    },
 }
 
 struct Session {
@@ -67,6 +81,22 @@ impl MergeSessions {
 }
 
 impl Editor {
+    /// The selected document may be a pathless merge draft. Its immutable
+    /// worktree binding takes precedence over cwd for every Git entry point.
+    pub fn git_context_path(&self) -> Option<PathBuf> {
+        let view = self.tree.try_get(self.tree.focus)?;
+        let doc = self.documents.get(&view.doc)?;
+        if let Some(merge) = doc.merge() {
+            return Some(merge.data.version.root().to_owned());
+        }
+        Some(
+            doc.path()
+                .and_then(Path::parent)
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(helix_stdx::env::current_working_dir),
+        )
+    }
+
     pub fn active_merge(&self) -> Option<MergeSessionId> {
         self.merge_sessions.active
     }
@@ -111,6 +141,7 @@ impl Editor {
             data,
             model,
             busy: false,
+            write_status: MergeWriteStatus::Draft,
         });
         let document = self.new_document(doc);
         self.merge_sessions.sessions.insert(

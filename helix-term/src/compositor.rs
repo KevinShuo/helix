@@ -44,6 +44,10 @@ pub trait Component: Any + AnyComponent {
         area
     }
 
+    fn editor_area_for(&self, area: Rect, _editor: &Editor) -> Rect {
+        self.editor_area(area)
+    }
+
     /// Process input events, return true if handled.
     fn handle_event(&mut self, _event: &Event, _ctx: &mut Context) -> EventResult {
         EventResult::Ignored(None)
@@ -188,10 +192,11 @@ impl Compositor {
     }
 
     pub fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
+        cx.editor.merge_restore_area(area.clip_bottom(1));
         cx.editor_area = Some(
             self.layers
                 .iter()
-                .fold(area, |area, layer| layer.editor_area(area)),
+                .fold(area, |area, layer| layer.editor_area_for(area, cx.editor)),
         );
         for layer in &mut self.layers {
             layer.render(area, surface, cx);

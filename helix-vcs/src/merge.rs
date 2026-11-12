@@ -141,6 +141,26 @@ pub struct MergeCandidate {
     pub blocks: Vec<ConflictBlock>,
     pub matches_working: bool,
     working: Option<Rope>,
+    ranges_verified: bool,
+}
+
+impl MergeCandidate {
+    /// Explicitly discard preserved working content. Only generated, verified ranges
+    /// may become blockwise decisions; ambiguity never authorizes reconstruction.
+    pub fn rebuild(self) -> Result<MergeModel> {
+        ensure!(
+            self.ranges_verified,
+            "Source ranges are ambiguous; preserve the manual result"
+        );
+        Ok(MergeModel {
+            result_len: self.result.len_chars(),
+            initial_result: self.result,
+            sources: self.sources,
+            blocks: self.blocks,
+            mode: MergeMode::Blockwise,
+            whole_reviewed: false,
+        })
+    }
 }
 
 /// Owns immutable initialization and review metadata. The editor Document owns
@@ -614,6 +634,7 @@ pub(crate) fn candidate_from_output(
         sources,
         blocks,
         working: working.map(Rope::from),
+        ranges_verified: mapped,
     })
 }
 

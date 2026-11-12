@@ -268,3 +268,22 @@ fn merge_result_limits_reject_expansion() {
     assert!(near_limit.len() < 2 * 1024 * 1024);
     assert!(format.encode(Rope::from(near_limit).slice(..)).is_err());
 }
+
+#[test]
+fn merge_rebuild_preserves_manual_work_until_explicit_and_refuses_ambiguous_ranges() {
+    let mut candidate = basic();
+    candidate.matches_working = false;
+    candidate.working = Some(Rope::from("manual work"));
+    assert_eq!(
+        MergeModel::from_candidate(candidate.clone())
+            .initial_result()
+            .to_string(),
+        "manual work"
+    );
+    let rebuilt = candidate.clone().rebuild().unwrap();
+    assert_eq!(rebuilt.mode(), MergeMode::Blockwise);
+    assert_eq!(rebuilt.initial_result().to_string(), BASE);
+    assert!(!rebuilt.ready_to_apply());
+    candidate.ranges_verified = false;
+    assert!(candidate.rebuild().is_err());
+}

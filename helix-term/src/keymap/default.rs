@@ -236,6 +236,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "g" => changed_file_picker,
             "v" => { "Git"
                 "g" => git_log,
+                "r" => git_resolve_conflicts,
+                "m" => git_merge_menu,
                 "b" => git_branches,
                 "c" => git_status,
                 "h" => git_file_history,

@@ -37,6 +37,7 @@ pub(super) fn perform_open_action(
         return;
     }
     match action {
+        OpenAction::Conflicts => {}
         OpenAction::Log => {
             panel.target = GitTarget::Commit(String::new());
             panel.request_details();

@@ -87,6 +87,26 @@ async fn keys(app: &mut Application, input: &str) -> anyhow::Result<()> {
     }
     app.editor.reset_idle_timer();
     tokio::time::timeout(Duration::from_secs(8), run_event_loop_until_idle(app)).await?;
+    if input.contains("<space>vma") || input.contains("<space>vmt") {
+        for _ in 0..100 {
+            if !app
+                .editor
+                .documents()
+                .any(|doc| doc.merge().is_some_and(|state| state.busy))
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            app.editor.reset_idle_timer();
+            tokio::time::timeout(Duration::from_secs(8), run_event_loop_until_idle(app)).await?;
+        }
+        assert!(
+            !app.editor
+                .documents()
+                .any(|doc| doc.merge().is_some_and(|state| state.busy)),
+            "Apply is still busy"
+        );
+    }
     Ok(())
 }
 
@@ -406,6 +426,410 @@ async fn git_conflicts_busy_draft_buffer_close_reports_refusal() -> anyhow::Resu
     assert!(app.editor.active_merge().is_none());
     assert!(!app.editor.documents.contains_key(&draft));
     assert_eq!(current_ref!(app.editor).1.id(), original);
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_manual_list_and_apply() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    open_ui(&mut app).await?;
+    assert!(screen(&app).contains("Current"));
+    keys(&mut app, "<space>vma").await?;
+    assert!(app.editor.is_err());
+    keys(&mut app, "<space>vmr").await?;
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        "before\nincoming\nafter\n"
+    );
+    keys(&mut app, "<space>vma").await?;
+    assert_eq!(
+        checked_git(repo.path(), &["ls-files", "-u", "--", "file.txt"]),
+        ""
+    );
+    assert_eq!(
+        fs::read_to_string(repo.path().join("file.txt"))?,
+        "before\nincoming\nafter\n"
+    );
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+async fn source_mouse(
+    app: &mut Application,
+    column: u16,
+    row: u16,
+    scroll: bool,
+) -> anyhow::Result<()> {
+    #[cfg(windows)]
+    use crossterm::event as terminal;
+    #[cfg(not(windows))]
+    use termina::event as terminal;
+    let event = terminal::Event::Mouse(terminal::MouseEvent {
+        kind: if scroll {
+            terminal::MouseEventKind::ScrollDown
+        } else {
+            terminal::MouseEventKind::Down(terminal::MouseButton::Left)
+        },
+        column,
+        row,
+        modifiers: terminal::KeyModifiers::NONE,
+    });
+    app.handle_terminal_events(Ok(event)).await;
+    keys(app, "").await
+}
+
+async fn wait_merge(app: &mut Application) -> anyhow::Result<()> {
+    for _ in 0..100 {
+        if app.editor.active_merge().is_some() {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(app, "").await?;
+    }
+    anyhow::bail!("merge workspace did not open: {}", screen(app))
+}
+async fn open_ui(app: &mut Application) -> anyhow::Result<()> {
+    keys(app, "<space>vr").await?;
+    for _ in 0..100 {
+        if screen(app).contains("Enter resolve") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(app, "").await?;
+    }
+    keys(app, "<ret>").await?;
+    wait_merge(app).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_ui_preview_readonly_and_native_close() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(80, 24).await?;
+    open_ui(&mut app).await?;
+    let text = current_ref!(app.editor).1.text().to_string();
+    let doc = current_ref!(app.editor).1.id();
+    keys(&mut app, "<space>vmvijjddx1ialter3dd").await?;
+    assert_eq!(current_ref!(app.editor).1.text().to_string(), text);
+    assert_eq!(current_ref!(app.editor).1.id(), doc);
+    keys(&mut app, "2iresult<esc>").await?;
+    assert!(current_ref!(app.editor)
+        .1
+        .text()
+        .to_string()
+        .starts_with("result"));
+    app.test_resize(160, 40).await?;
+    let edited = current_ref!(app.editor).1.text().to_string();
+    source_mouse(&mut app, 5, 4, false).await?;
+    source_mouse(&mut app, 5, 4, true).await?;
+    keys(&mut app, "iddx").await?;
+    assert_eq!(current_ref!(app.editor).1.text().to_string(), edited);
+    source_mouse(&mut app, 80, 1, false).await?;
+    keys(&mut app, ":q<ret>").await?;
+    assert!(app.editor.active_merge().is_none());
+    assert!(!screen(&app).contains("Result [editable]"));
+    assert!(!screen(&app).contains("Enter resolve"));
+    open_ui(&mut app).await?;
+    assert_eq!(current_ref!(app.editor).1.id(), doc);
+    assert!(current_ref!(app.editor)
+        .1
+        .text()
+        .to_string()
+        .starts_with("result"));
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_ui_whole_file_rebuild_and_stale_refresh_confirmations() -> anyhow::Result<()>
+{
+    let repo = repository(true);
+    fs::write(repo.path().join("file.txt"), "external manual")?;
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("second.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    open_ui(&mut app).await?;
+    keys(&mut app, "<space>vmLn").await?;
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        "external manual"
+    );
+    keys(&mut app, "<space>vmLy").await?;
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        "before\ncurrent\nafter\n"
+    );
+    assert!(!current_ref!(app.editor)
+        .1
+        .merge()
+        .unwrap()
+        .model
+        .ready_to_apply());
+    assert_eq!(
+        fs::read_to_string(repo.path().join("file.txt"))?,
+        "external manual"
+    );
+    keys(&mut app, "<space>vmBy").await?;
+    for _ in 0..100 {
+        if current_ref!(app.editor).1.merge().unwrap().model.mode()
+            == helix_vcs::merge::MergeMode::Blockwise
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(&mut app, "").await?;
+    }
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        "before\nbase\nafter\n"
+    );
+    keys(&mut app, "<space>vml").await?;
+    fs::write(repo.path().join("file.txt"), "new external work")?;
+    keys(&mut app, "<space>vma").await?;
+    assert!(matches!(
+        current_ref!(app.editor).1.merge().unwrap().write_status,
+        helix_view::merge::MergeWriteStatus::NeedsRefresh(_)
+    ));
+    keys(&mut app, ":q<ret>").await?;
+    open_ui(&mut app).await?;
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        "before\ncurrent\nafter\n"
+    );
+    keys(&mut app, "<space>vmFn").await?;
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        "before\ncurrent\nafter\n"
+    );
+    let old_id = current_ref!(app.editor).1.id();
+    keys(&mut app, "<space>vmFy").await?;
+    for _ in 0..100 {
+        if current_ref!(app.editor).1.id() != old_id {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(&mut app, "").await?;
+    }
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        "new external work"
+    );
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_ui_dirty_buffer_blocks_apply_and_retry_survives_reentry(
+) -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    let ordinary = current_ref!(app.editor).1.id();
+    keys(&mut app, "idirty<esc>").await?;
+    open_ui(&mut app).await?;
+    keys(&mut app, "<space>vml<space>vma").await?;
+    assert!(app
+        .editor
+        .get_status()
+        .unwrap()
+        .0
+        .contains("unsaved buffer"));
+    assert!(!checked_git(repo.path(), &["ls-files", "-u", "--", "file.txt"]).is_empty());
+    // Undo the ordinary edit through its real view, then return to the same draft.
+    let session = app.editor.active_merge().unwrap();
+    keys(&mut app, ":q<ret>u").await?;
+    assert!(!app.editor.documents[&ordinary].is_modified());
+    app.editor.resume_merge(session)?;
+    fs::write(repo.path().join(".git/index.lock"), "")?;
+    keys(&mut app, "<space>vma").await?;
+    assert!(matches!(
+        current_ref!(app.editor).1.merge().unwrap().write_status,
+        helix_view::merge::MergeWriteStatus::Retry { .. }
+    ));
+    let draft = current_ref!(app.editor).1.id();
+    assert_eq!(
+        app.editor.documents[&ordinary].text().to_string(),
+        "before\ncurrent\nafter\n"
+    );
+    keys(&mut app, ":q<ret>").await?;
+    open_ui(&mut app).await?;
+    assert_eq!(current_ref!(app.editor).1.id(), draft);
+    assert!(matches!(
+        current_ref!(app.editor).1.merge().unwrap().write_status,
+        helix_view::merge::MergeWriteStatus::Retry { .. }
+    ));
+    fs::remove_file(repo.path().join(".git/index.lock"))?;
+    keys(&mut app, "<space>vmt").await?;
+    assert!(matches!(
+        current_ref!(app.editor).1.merge().unwrap().write_status,
+        helix_view::merge::MergeWriteStatus::Staged
+    ));
+    assert_eq!(
+        checked_git(repo.path(), &["ls-files", "-u", "--", "file.txt"]),
+        ""
+    );
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_ui_finish_and_abort_are_separate_confirmations() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    open_ui(&mut app).await?;
+    keys(&mut app, "<space>vml<space>vma<space>vmf").await?;
+    for _ in 0..100 {
+        if screen(&app).contains("Enter resolve") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(&mut app, "").await?;
+    }
+    keys(&mut app, "j<ret>").await?;
+    wait_merge(&mut app).await?;
+    assert_eq!(
+        current_ref!(app.editor).1.merge().unwrap().data.file.path,
+        Path::new("second.txt")
+    );
+    keys(&mut app, "<space>vmr<space>vma<space>vmf").await?;
+    for _ in 0..100 {
+        if screen(&app).contains("Enter resolve") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(&mut app, "").await?;
+    }
+    assert!(repo.path().join(".git/MERGE_HEAD").exists());
+    keys(&mut app, "f").await?;
+    for _ in 0..100 {
+        if screen(&app).contains("Confirm Finish") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(&mut app, "").await?;
+    }
+    assert!(screen(&app).contains("file.txt"));
+    assert!(screen(&app).contains("second.txt"));
+    keys(&mut app, "y").await?;
+    for _ in 0..100 {
+        if !repo.path().join(".git/MERGE_HEAD").exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        keys(&mut app, "").await?;
+    }
+    assert!(!repo.path().join(".git/MERGE_HEAD").exists());
+    assert_eq!(
+        checked_git(repo.path(), &["rev-list", "--parents", "-1", "HEAD"])
+            .split_whitespace()
+            .count(),
+        3
+    );
+    keys(&mut app, "q:qa!<ret>").await?;
+    app.close().await;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_ui_abort_requires_confirmation() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    keys(&mut app, "<space>vr").await?;
+    for _ in 0..100 {
+        if screen(&app).contains("Enter resolve") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(&mut app, "").await?;
+    }
+    keys(&mut app, "a").await?;
+    for _ in 0..100 {
+        if screen(&app).contains("Confirm Abort") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(&mut app, "").await?;
+    }
+    keys(&mut app, "n").await?;
+    assert!(repo.path().join(".git/MERGE_HEAD").exists());
+    keys(&mut app, "a").await?;
+    for _ in 0..100 {
+        if screen(&app).contains("Confirm Abort") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        keys(&mut app, "").await?;
+    }
+    keys(&mut app, "y").await?;
+    for _ in 0..100 {
+        if !repo.path().join(".git/MERGE_HEAD").exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        keys(&mut app, "").await?;
+    }
+    assert!(!repo.path().join(".git/MERGE_HEAD").exists());
+    keys(&mut app, "q:qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_ui_trust_and_apply_completion_after_close() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    let ordinary = current_ref!(app.editor).1.id();
+    open_ui(&mut app).await?;
+    keys(&mut app, "<space>vml").await?;
+    let draft = current_ref!(app.editor).1.id();
+    app.editor.workspace_trust.set_config(Default::default());
+    let workspace = helix_loader::find_workspace_in(repo.path()).0;
+    app.editor.workspace_trust.deny_once(&workspace);
+    keys(&mut app, "<space>vma").await?;
+    assert!(app.editor.get_status().unwrap().0.contains("trusted"));
+    assert!(!checked_git(repo.path(), &["ls-files", "-u", "--", "file.txt"]).is_empty());
+    app.editor.workspace_trust = helix_loader::workspace_trust::WorkspaceTrust::fully_trusted();
+    // All input is delivered before driving Jobs: the result view is already
+    // closed when the confirmed write completes.
+    keys(&mut app, "<space>vma:q<ret>").await?;
+    assert!(app.editor.active_merge().is_none());
+    assert_eq!(current_ref!(app.editor).1.id(), ordinary);
+    assert!(!app.editor.documents[&draft].merge().unwrap().busy);
+    assert!(matches!(
+        app.editor.documents[&draft].merge().unwrap().write_status,
+        helix_view::merge::MergeWriteStatus::Staged
+    ));
+    assert_eq!(
+        app.editor.documents[&ordinary].text().to_string(),
+        "before\ncurrent\nafter\n"
+    );
+    assert!(!screen(&app).contains("Result [editable]"));
+    assert!(!screen(&app).contains("Enter resolve"));
     keys(&mut app, ":qa!<ret>").await?;
     app.close().await;
     Ok(())

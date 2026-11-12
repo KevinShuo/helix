@@ -14,7 +14,12 @@ pub(super) fn git_status(cx: &mut Context) {
 }
 
 pub(super) fn git_file_history(cx: &mut Context) {
-    let Some(path) = helix_view::doc!(cx.editor).path().map(ToOwned::to_owned) else {
+    let doc = helix_view::doc!(cx.editor);
+    let Some(path) = doc
+        .merge()
+        .map(|m| m.data.version.root().join(&m.data.file.path))
+        .or_else(|| doc.path().map(ToOwned::to_owned))
+    else {
         cx.editor
             .set_error("The current buffer has no file path for Git history");
         return;
@@ -36,4 +41,33 @@ pub(super) fn git_pull(cx: &mut Context) {
 
 pub(super) fn git_push(cx: &mut Context) {
     open(cx, OpenAction::Push);
+}
+
+pub(super) fn git_resolve_conflicts(cx: &mut Context) {
+    open(cx, OpenAction::Conflicts);
+}
+pub(super) fn git_merge_menu(cx: &mut Context) {
+    use crate::ui::git::merge::{merge_action, MergeUiAction as A};
+    cx.editor.set_status("Merge: n/p next/previous  l/r/b current/incoming/both  v base  m review  a apply  f files  L/R whole file  B rebuild  t retry  F refresh");
+    cx.on_next_key(|cx, key| {
+        use helix_view::input::KeyCode::Char;
+        let action = match key.code {
+            Char('n') => A::Next,
+            Char('p') => A::Previous,
+            Char('l') => A::UseCurrent,
+            Char('r') => A::UseIncoming,
+            Char('b') => A::KeepBoth,
+            Char('v') => A::ShowBase,
+            Char('m') => A::MarkReviewed,
+            Char('a') => A::Apply,
+            Char('f') => A::Files,
+            Char('L') => A::AcceptCurrentFile,
+            Char('R') => A::AcceptIncomingFile,
+            Char('B') => A::Rebuild,
+            Char('t') => A::RetryStage,
+            Char('F') => A::Refresh,
+            _ => return,
+        };
+        merge_action(cx, action);
+    });
 }

@@ -446,6 +446,8 @@ impl MappableCommand {
         lsp_or_syntax_symbol_picker, "Open symbol picker from LSP or syntax information",
         changed_file_picker, "Open changed file picker",
         git_log, "Open Git commit graph and log",
+        git_resolve_conflicts, "Open Git conflict files",
+        git_merge_menu, "Merge decisions and actions",
         git_branches, "Open Git branches and tags",
         git_status, "Open Git working tree changes",
         git_file_history, "Open current file's Git history",

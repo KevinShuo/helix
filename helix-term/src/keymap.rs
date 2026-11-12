@@ -515,6 +515,8 @@ mod tests {
             assert!(!group.is_sticky);
             for (key, name) in [
                 ('g', "git_log"),
+                ('r', "git_resolve_conflicts"),
+                ('m', "git_merge_menu"),
                 ('b', "git_branches"),
                 ('c', "git_status"),
                 ('h', "git_file_history"),

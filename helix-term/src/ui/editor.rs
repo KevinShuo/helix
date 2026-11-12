@@ -1828,11 +1828,12 @@ impl Component for EditorView {
 
         // check if bufferline should be rendered
         use helix_view::editor::BufferLine;
-        let use_bufferline = match config.bufferline {
-            BufferLine::Always => true,
-            BufferLine::Multiple if cx.editor.documents.len() > 1 => true,
-            _ => false,
-        };
+        let use_bufferline = cx.editor.active_merge().is_none()
+            && match config.bufferline {
+                BufferLine::Always => true,
+                BufferLine::Multiple if cx.editor.documents.len() > 1 => true,
+                _ => false,
+            };
 
         // -1 for commandline and -1 for bufferline
         let mut editor_area = cx.editor_area.unwrap_or(area).clip_bottom(1);

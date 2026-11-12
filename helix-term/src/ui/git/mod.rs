@@ -1,4 +1,6 @@
 mod actions;
+pub(crate) mod conflicts;
+pub(crate) mod merge;
 mod render;
 
 use std::{
@@ -30,6 +32,7 @@ static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug)]
 pub(crate) enum OpenAction {
+    Conflicts,
     Log,
     Branches,
     Status,
@@ -134,11 +137,20 @@ impl Drop for GitPanel {
 }
 
 pub(crate) fn open(cx: &mut crate::commands::Context, action: OpenAction) {
-    let path = helix_view::doc!(cx.editor)
-        .path()
-        .and_then(|p| p.parent())
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(helix_stdx::env::current_working_dir);
+    if matches!(action, OpenAction::Conflicts) {
+        conflicts::open(cx);
+        return;
+    }
+    let Some(path) = cx.editor.git_context_path() else {
+        return;
+    };
+    if let Err(error) = cx
+        .editor
+        .leave_merge(helix_view::merge::MergeLeave::KeepDraft)
+    {
+        cx.editor.set_error(error.to_string());
+        return;
+    }
     if !trusted(cx.editor, &path) {
         cx.editor
             .set_error("Git tools require a trusted workspace (:trust)");
@@ -725,7 +737,18 @@ impl Component for GitPanel {
         }
     }
 
+    fn editor_area_for(&self, area: Rect, editor: &Editor) -> Rect {
+        if editor.active_merge().is_some() {
+            area
+        } else {
+            self.editor_area(area)
+        }
+    }
+
     fn render(&mut self, area: Rect, frame: &mut Buffer, cx: &mut Context) {
+        if cx.editor.active_merge().is_some() {
+            return;
+        }
         self.last_layout = self.layout(area);
         self.draw(frame, &cx.editor.theme);
         // The editor's which-key menu must remain above a docked window.
@@ -737,8 +760,8 @@ impl Component for GitPanel {
         }
     }
 
-    fn cursor(&self, area: Rect, _editor: &Editor) -> (Option<Position>, CursorKind) {
-        if self.focused {
+    fn cursor(&self, area: Rect, editor: &Editor) -> (Option<Position>, CursorKind) {
+        if self.focused && editor.active_merge().is_none() {
             (
                 Some(Position::new(area.y as usize, area.x as usize)),
                 CursorKind::Hidden,
@@ -749,6 +772,9 @@ impl Component for GitPanel {
     }
 
     fn handle_event(&mut self, event: &Event, cx: &mut Context) -> EventResult {
+        if cx.editor.active_merge().is_some() {
+            return EventResult::Ignored(None);
+        }
         if let Event::Mouse(mouse) = event {
             let layout = self.last_layout;
             let inside = |r: Rect| {
