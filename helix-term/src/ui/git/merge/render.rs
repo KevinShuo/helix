@@ -136,7 +136,14 @@ impl MergeEditor {
         if layout.wide {
             for (rect, label) in [
                 (layout.current, "Current [read-only]"),
-                (layout.result, "Result [editable]"),
+                (
+                    layout.result,
+                    if matches!(state.write_status, MergeWriteStatus::Staged) {
+                        "Result [staged, read-only]"
+                    } else {
+                        "Result [editable]"
+                    },
+                ),
                 (layout.incoming, "Incoming [read-only]"),
             ] {
                 line(
@@ -152,7 +159,11 @@ impl MergeEditor {
                 frame,
                 layout.header,
                 1,
-                "Current [RO]      Result [editable] Incoming [RO]    Base [RO]",
+                if matches!(state.write_status, MergeWriteStatus::Staged) {
+                    "Current [RO]      Result [staged]   Incoming [RO]    Base [RO]"
+                } else {
+                    "Current [RO]      Result [editable] Incoming [RO]    Base [RO]"
+                },
                 style,
             );
         }
@@ -244,10 +255,10 @@ impl MergeEditor {
         }
         if let Some(action) = self.confirmation {
             let warning = match action {
-                MergeUiAction::AcceptCurrentFile => "y accept / n cancel: whole Current file discards ALL Incoming changes; review required",
-                MergeUiAction::AcceptIncomingFile => "y accept / n cancel: whole Incoming file discards ALL Current changes; review required",
-                MergeUiAction::Rebuild => "y rebuild / n cancel: discard ALL manual draft work, rebuild both sources",
-                _ => "y refresh / n cancel: discard preserved draft and reload disk/index",
+                MergeUiAction::AcceptCurrentFile => "Discard ALL Incoming changes? y/n",
+                MergeUiAction::AcceptIncomingFile => "Discard ALL Current changes? y/n",
+                MergeUiAction::Rebuild => "Discard ALL draft edits? y/n",
+                _ => "Discard draft; reload disk/index? y/n",
             };
             line(frame, layout.footer, 0, warning, highlight);
         }

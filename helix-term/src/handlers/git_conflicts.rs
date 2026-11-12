@@ -96,11 +96,11 @@ pub(crate) fn request(editor: &mut Editor, reason: ConflictScanReason) {
 }
 
 pub(super) fn register_hooks() {
-    register_hook!(|event: &mut DocumentFocusLost<'_>| {
+    register_hook!(move |event: &mut DocumentFocusLost<'_>| {
         event.editor.git_conflict_scan.cancel();
         Ok(())
     });
-    register_hook!(|event: &mut DocumentDidClose<'_>| {
+    register_hook!(move |event: &mut DocumentDidClose<'_>| {
         event.editor.git_conflict_scan.cancel();
         Ok(())
     });

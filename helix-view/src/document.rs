@@ -1483,7 +1483,9 @@ impl Document {
     ) -> bool {
         use helix_core::Assoc;
 
-        if self.merge.as_ref().is_some_and(|m| m.busy) && !transaction.changes().is_empty() {
+        if self.merge.as_ref().is_some_and(|m| m.text_is_locked())
+            && !transaction.changes().is_empty()
+        {
             return false;
         }
 
@@ -1689,7 +1691,9 @@ impl Document {
         view_id: ViewId,
         emit_lsp_notification: bool,
     ) -> bool {
-        if self.merge.as_ref().is_some_and(|m| m.busy) && !transaction.changes().is_empty() {
+        if self.merge.as_ref().is_some_and(|m| m.text_is_locked())
+            && !transaction.changes().is_empty()
+        {
             return false;
         }
         // store the state just before any changes are made. This allows us to undo to the
@@ -1724,7 +1728,7 @@ impl Document {
     }
 
     fn undo_redo_impl(&mut self, view: &mut View, undo: bool) -> bool {
-        if self.merge.as_ref().is_some_and(|m| m.busy) {
+        if self.merge.as_ref().is_some_and(|m| m.text_is_locked()) {
             return false;
         }
         if undo {
@@ -1812,7 +1816,7 @@ impl Document {
     }
 
     fn earlier_later_impl(&mut self, view: &mut View, uk: UndoKind, earlier: bool) -> bool {
-        if self.merge.as_ref().is_some_and(|m| m.busy) {
+        if self.merge.as_ref().is_some_and(|m| m.text_is_locked()) {
             return false;
         }
         if earlier {

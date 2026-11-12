@@ -33,6 +33,12 @@ pub struct MergeDocumentState {
     pub write_status: MergeWriteStatus,
 }
 
+impl MergeDocumentState {
+    pub fn text_is_locked(&self) -> bool {
+        self.busy || matches!(self.write_status, MergeWriteStatus::Staged)
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub enum MergeWriteStatus {
     #[default]

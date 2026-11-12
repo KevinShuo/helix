@@ -4,6 +4,12 @@ use helix_vcs::git_tools::GitRepository;
 use helix_view::{current_ref, input::parse_macro, merge::MergeLeave};
 use std::{fs, path::Path, process::Command, time::Duration};
 
+#[path = "git_conflicts_discovery.rs"]
+mod discovery;
+
+#[path = "git_conflicts_acceptance.rs"]
+mod acceptance;
+
 fn git(root: &Path, args: &[&str]) -> std::process::Output {
     let mut command = Command::new("git");
     command
@@ -68,7 +74,16 @@ fn repository(merge_now: bool) -> tempfile::TempDir {
         }
         fs::write(root.join("file.txt"), text).unwrap();
         fs::write(root.join("second.txt"), text).unwrap();
-        checked_git(root, &["add", "--", "file.txt", "second.txt"]);
+        fs::write(
+            root.join("clean.txt"),
+            if branch == "topic" {
+                "clean incoming\n"
+            } else {
+                "clean base\n"
+            },
+        )
+        .unwrap();
+        checked_git(root, &["add", "--", "file.txt", "second.txt", "clean.txt"]);
         checked_git(root, &["commit", "-m", branch]);
     }
     if merge_now {
@@ -545,6 +560,216 @@ async fn git_conflicts_ui_preview_readonly_and_native_close() -> anyhow::Result<
         .text()
         .to_string()
         .starts_with("result"));
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_readonly_preview_footer_cannot_review_or_apply() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    open_ui(&mut app).await?;
+    let working = fs::read(repo.path().join("file.txt"))?;
+    let unmerged = checked_git(repo.path(), &["ls-files", "-u"]);
+    keys(&mut app, "<space>vmv").await?;
+    assert!(screen(&app).contains("Read-only preview"));
+    // These positions contain Review and Apply only while Result is active.
+    source_mouse(&mut app, 54, 38, false).await?;
+    assert!(!current_ref!(app.editor)
+        .1
+        .merge()
+        .unwrap()
+        .model
+        .ready_to_apply());
+    source_mouse(&mut app, 64, 38, false).await?;
+    assert_eq!(fs::read(repo.path().join("file.txt"))?, working);
+    assert_eq!(checked_git(repo.path(), &["ls-files", "-u"]), unmerged);
+    keys(&mut app, "<esc>:qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_narrow_confirmation_shows_the_discarded_side() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(40, 12).await?;
+    open_ui(&mut app).await?;
+    for (key, warning) in [
+        ("L", "ALL Incoming"),
+        ("R", "ALL Current"),
+        ("B", "ALL draft edits"),
+    ] {
+        keys(&mut app, &format!("<space>vm{key}")).await?;
+        assert!(
+            screen(&app).contains(warning),
+            "Hidden consequence: {}",
+            screen(&app)
+        );
+        keys(&mut app, "n").await?;
+    }
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_native_buffer_switch_restores_the_older_merge_workspace(
+) -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    open_ui(&mut app).await?;
+    let first = current_ref!(app.editor).1.id();
+    keys(&mut app, "<space>vmf").await?;
+    discovery::wait_screen(&mut app, "Enter resolve").await?;
+    keys(&mut app, "j<ret>").await?;
+    wait_merge(&mut app).await?;
+    assert_ne!(current_ref!(app.editor).1.id(), first);
+    keys(&mut app, ":q<ret>").await?;
+    // Native buffer picker/cycling and quit guards use this same editor path.
+    app.editor
+        .switch(first, helix_view::editor::Action::Replace);
+    keys(&mut app, "<space>vml").await?;
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        "before\ncurrent\nafter\n"
+    );
+    assert!(current_ref!(app.editor)
+        .1
+        .merge()
+        .unwrap()
+        .model
+        .ready_to_apply());
+    assert!(screen(&app).contains("Result [editable]"));
+    assert!(screen(&app).contains("Current [read-only]"));
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_native_resume_refresh_preserves_other_worktree_drafts() -> anyhow::Result<()>
+{
+    let first_repo = repository(true);
+    let other_repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(first_repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    open_ui(&mut app).await?;
+    keys(&mut app, "iFirst draft<esc>").await?;
+    let first = current_ref!(app.editor).1.id();
+    keys(&mut app, ":q<ret>").await?;
+    app.editor.open(
+        &other_repo.path().join("file.txt"),
+        helix_view::editor::Action::Replace,
+    )?;
+    open_ui(&mut app).await?;
+    keys(&mut app, "iOther draft<esc>").await?;
+    let other = current_ref!(app.editor).1.id();
+    let other_text = current_ref!(app.editor).1.text().to_string();
+    keys(&mut app, ":q<ret>").await?;
+    app.editor
+        .switch(first, helix_view::editor::Action::Replace);
+    keys(&mut app, "<space>vmFy").await?;
+    for _ in 0..200 {
+        if current_ref!(app.editor).1.id() != first {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        keys(&mut app, "").await?;
+    }
+    assert!(
+        app.editor.documents.contains_key(&other),
+        "Refresh of first worktree discarded another worktree's draft"
+    );
+    assert_eq!(app.editor.documents[&other].text().to_string(), other_text);
+    assert_ne!(current_ref!(app.editor).1.id(), first);
+    let root = current_ref!(app.editor)
+        .1
+        .merge()
+        .unwrap()
+        .data
+        .version
+        .root();
+    assert_eq!(
+        fs::canonicalize(root)?,
+        fs::canonicalize(first_repo.path())?
+    );
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_applied_result_is_readonly_including_history_and_choices(
+) -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    open_ui(&mut app).await?;
+    keys(&mut app, "<space>vml<space>vma").await?;
+    let text = current_ref!(app.editor).1.text().to_string();
+    let version = current_ref!(app.editor).1.version();
+    keys(&mut app, "iunsaved change<esc>u<U><space>vmr").await?;
+    assert_eq!(current_ref!(app.editor).1.text().to_string(), text);
+    assert_eq!(current_ref!(app.editor).1.version(), version);
+    assert!(!current_ref!(app.editor).1.is_modified());
+    assert!(screen(&app).contains("staged, read-only"));
+    assert_eq!(fs::read_to_string(repo.path().join("file.txt"))?, text);
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_staged_draft_is_stale_when_the_path_conflicts_again() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    open_ui(&mut app).await?;
+    keys(&mut app, "<space>vml<space>vma<space>vmf").await?;
+    let old_draft = app.editor.merge_sessions.iter().next().unwrap().1;
+    checked_git(repo.path(), &["merge", "--abort"]);
+    assert!(!git(repo.path(), &["merge", "--no-edit", "topic"])
+        .status
+        .success());
+    keys(&mut app, "r").await?;
+    discovery::wait_screen(&mut app, "Stale draft").await?;
+    keys(&mut app, "<ret>").await?;
+    wait_merge(&mut app).await?;
+    assert_eq!(current_ref!(app.editor).1.id(), old_draft);
+    assert!(matches!(
+        current_ref!(app.editor).1.merge().unwrap().write_status,
+        helix_view::merge::MergeWriteStatus::NeedsRefresh(_)
+    ));
+    keys(&mut app, "<space>vmFy").await?;
+    for _ in 0..100 {
+        if current_ref!(app.editor).1.id() != old_draft {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        keys(&mut app, "").await?;
+    }
+    assert_ne!(current_ref!(app.editor).1.id(), old_draft);
+    keys(&mut app, "<space>vmr<space>vma").await?;
+    assert_eq!(
+        checked_git(repo.path(), &["show", ":file.txt"]),
+        "before\nincoming\nafter"
+    );
     keys(&mut app, ":qa!<ret>").await?;
     app.close().await;
     Ok(())

@@ -10,7 +10,7 @@ use helix_vcs::git_tools::{GitConflictSnapshot, GitRepository, MergeAction, Merg
 use helix_view::{
     graphics::{CursorKind, Rect},
     input::{KeyCode, MouseButton, MouseEventKind},
-    merge::{MergeLeave, MergeWriteStatus},
+    merge::{MergeLeave, MergeSessionId, MergeWriteStatus},
     Editor,
 };
 use std::{path::PathBuf, sync::atomic::Ordering};
@@ -18,6 +18,13 @@ use tokio::task::JoinHandle;
 use tui::buffer::Buffer;
 
 pub(crate) const ID: &str = "git-conflicts";
+
+struct FileRequest {
+    path: PathBuf,
+    discard: bool,
+    expected: Option<(MergeSessionId, i32)>,
+}
+
 pub(crate) struct ConflictList {
     instance: u64,
     version: u64,
@@ -29,7 +36,7 @@ pub(crate) struct ConflictList {
     scroll: usize,
     visible: bool,
     task: Option<JoinHandle<()>>,
-    pending_file: Option<PathBuf>,
+    pending_file: Option<FileRequest>,
     message: String,
     confirmation: Option<MergeActionPlan>,
     confirm_scroll: usize,
@@ -98,6 +105,27 @@ pub(crate) fn present(compositor: &mut Compositor, editor: &mut Editor, path: Pa
         compositor.push(Box::new(list));
     }
 }
+/// Bind a confirmed refresh to its result document's worktree, even after
+/// native buffer switching has resumed a draft from a different repository.
+pub(super) fn refresh_draft(
+    compositor: &mut Compositor,
+    editor: &mut Editor,
+    root: PathBuf,
+    path: PathBuf,
+    expected: (MergeSessionId, i32),
+) {
+    if !trusted(editor, &root) {
+        return;
+    }
+    present(compositor, editor, root.clone());
+    if let Some(list) = compositor
+        .find::<ConflictList>()
+        .filter(|list| list.root == root)
+    {
+        list.request_file(path, true, Some(expected));
+    }
+}
+
 impl ConflictList {
     pub(super) fn refresh_for(&mut self, root: &std::path::Path) {
         if self.root == root {
@@ -152,9 +180,27 @@ impl ConflictList {
                                 continue;
                             };
                             let status = match &state.write_status {
-                                MergeWriteStatus::Staged => "Staged",
+                                MergeWriteStatus::Staged
+                                    if state.data.operation == snapshot.operation
+                                        && !snapshot
+                                            .files
+                                            .iter()
+                                            .any(|file| file.path == state.data.file.path) =>
+                                {
+                                    "Staged"
+                                }
+                                MergeWriteStatus::Staged => "Stale draft",
                                 MergeWriteStatus::NeedsRefresh(_) => "Stale draft",
-                                MergeWriteStatus::Retry { .. } => "Written, not staged",
+                                MergeWriteStatus::Retry { .. }
+                                    if state.data.operation == snapshot.operation
+                                        && snapshot
+                                            .files
+                                            .iter()
+                                            .any(|file| *file == state.data.file) =>
+                                {
+                                    "Written, not staged"
+                                }
+                                MergeWriteStatus::Retry { .. } => "Stale draft",
                                 _ if versions
                                     .iter()
                                     .find(|(p, _)| *p == state.data.file.path)
@@ -191,8 +237,8 @@ impl ConflictList {
                             "Enter inspect · r refresh · external resolution required · q close"
                         }
                         .into();
-                        if let Some(path) = list.pending_file.take() {
-                            list.request_file(path, false, None);
+                        if let Some(request) = list.pending_file.take() {
+                            list.request_file(request.path, request.discard, request.expected);
                         }
                     }
                     Err(error) => {
@@ -211,7 +257,11 @@ impl ConflictList {
         expected: Option<(helix_view::merge::MergeSessionId, i32)>,
     ) {
         let Some(repository) = self.repository.clone() else {
-            self.pending_file = Some(path);
+            self.pending_file = Some(FileRequest {
+                path,
+                discard,
+                expected,
+            });
             return;
         };
         if let Some(task) = self.task.take() {
@@ -234,7 +284,10 @@ impl ConflictList {
                 let Some(list) = compositor.find::<ConflictList>().filter(|l| l.instance == instance && l.version == version && l.root == root) else { return; };
                 list.task = None;
                 if let Some((session, document_version)) = expected {
-                    if editor.active_merge() != Some(session) || editor.merge_sessions.document(session).is_none_or(|id| editor.documents[&id].version() != document_version) { return; }
+                    if editor.active_merge() != Some(session) || editor.merge_sessions.document(session).is_none_or(|id| {
+                        editor.documents.get(&id).is_none_or(|doc| doc.version() != document_version
+                            || doc.merge().is_none_or(|state| state.data.version.root() != root || state.data.file.path != path))
+                    }) { return; }
                 } else if !list.visible || editor.active_merge().is_some() { return; }
                 let existing = editor.merge_sessions.find(&root, &path);
                 if discard && result.is_ok() {
@@ -243,7 +296,12 @@ impl ConflictList {
                     if let Some(id) = existing {
                     let document = editor.merge_sessions.document(id).unwrap();
                     let state = editor.documents.get_mut(&document).unwrap().merge_mut().unwrap();
-                    if !matches!(state.write_status, MergeWriteStatus::Staged | MergeWriteStatus::Retry { .. }) && result.as_ref().map_or(true, |(data, _)| data.version != state.data.version) {
+                    let stale = match &state.write_status {
+                        MergeWriteStatus::Staged => result.is_ok() || state.data.operation != list.snapshot.operation,
+                        MergeWriteStatus::Retry { .. } => result.as_ref().map_or(true, |(data, _)| data.operation != state.data.operation || data.file != state.data.file),
+                        _ => result.as_ref().map_or(true, |(data, _)| data.version != state.data.version),
+                    };
+                    if stale {
                         state.write_status = MergeWriteStatus::NeedsRefresh("Sources or working file changed; draft preserved. Refresh requires confirmation.".into());
                     }
                     match editor.resume_merge(id) {

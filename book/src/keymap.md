@@ -427,7 +427,10 @@ separate confirmation and changes the draft before any file is written.
 `Apply` checks that the working file, index stages and merge identity still
 match the opened snapshot. Another dirty buffer for the same file blocks it.
 If writing succeeds but staging fails, the written result and draft remain,
-with an explicit staging retry. After all files are resolved, use the separate
+with an explicit staging retry. Successfully staged drafts become read-only so
+their displayed result continues to match the staged version. If the same path
+conflicts again, its retained draft is marked stale; refresh it explicitly to
+load the new sources. After all files are resolved, use the separate
 `Finish Merge` confirmation to review every staged path and create the merge
 commit. Completing a merge does not push. `Abort Merge` has its own confirmation
 and runs `git merge --abort`; failures keep the current state.

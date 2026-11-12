@@ -48,6 +48,11 @@ pub(super) fn git_resolve_conflicts(cx: &mut Context) {
 }
 pub(super) fn git_merge_menu(cx: &mut Context) {
     use crate::ui::git::merge::{merge_action, MergeUiAction as A};
+    if cx.editor.active_merge().is_none() {
+        cx.editor
+            .set_error("Open a conflict file first (Space v r)");
+        return;
+    }
     cx.editor.set_status("Merge: n/p next/previous  l/r/b current/incoming/both  v base  m review  a apply  f files  L/R whole file  B rebuild  t retry  F refresh");
     cx.on_next_key(|cx, key| {
         use helix_view::input::KeyCode::Char;

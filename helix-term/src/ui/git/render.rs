@@ -307,20 +307,46 @@ impl GitPanel {
                 theme.get("ui.text.focus"),
             );
             let files_area = area.clip_top(offset as u16);
+            let rows = self.file_rows();
+            let selected_row = rows
+                .iter()
+                .position(|row| matches!(row, FileRow::File(index) if *index == self.selected_file))
+                .unwrap_or(0);
             scroll_to(
-                self.selected_file,
+                selected_row,
                 files_area.height as usize,
                 &mut self.file_scroll,
             );
-            for (row, (index, file)) in self
-                .details
-                .files
+            for (row, entry) in rows
                 .iter()
-                .enumerate()
                 .skip(self.file_scroll)
                 .take(files_area.height as usize)
                 .enumerate()
             {
+                let index = match entry {
+                    FileRow::Conflicts(count) => {
+                        line(
+                            frame,
+                            files_area,
+                            row,
+                            &format!("Conflicts ({count})"),
+                            theme.get("ui.text.focus"),
+                        );
+                        continue;
+                    }
+                    FileRow::Changes(count) => {
+                        line(
+                            frame,
+                            files_area,
+                            row,
+                            &format!("Other changes ({count})"),
+                            theme.get("ui.text.focus"),
+                        );
+                        continue;
+                    }
+                    FileRow::File(index) => *index,
+                };
+                let file = &self.details.files[index];
                 let style = if index == self.selected_file {
                     selected
                 } else {

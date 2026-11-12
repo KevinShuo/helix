@@ -118,10 +118,7 @@ pub(crate) fn merge_action(cx: &mut commands::Context, action: MergeUiAction) {
         return;
     }
     cx.callback.push(Box::new(move |compositor, cx| {
-        let Some(merge) = compositor
-            .find::<MergeEditor>()
-            .filter(|m| cx.editor.active_merge() == Some(m.session))
-        else {
+        let Some(merge) = compositor.find::<MergeEditor>() else {
             return;
         };
         let event = merge.action(action, cx, false);
@@ -132,7 +129,22 @@ pub(crate) fn merge_action(cx: &mut commands::Context, action: MergeUiAction) {
 }
 impl MergeEditor {
     fn active(&self, editor: &Editor) -> bool {
-        editor.active_merge() == Some(self.session)
+        editor.active_merge().is_some()
+    }
+    fn sync_session(&mut self, editor: &Editor) -> bool {
+        let Some(session) = editor.active_merge() else {
+            return false;
+        };
+        if session != self.session {
+            self.instance = super::NEXT_INSTANCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.session = session;
+            self.selected = 0;
+            self.preview = Preview::Result;
+            self.scroll = [0; 3];
+            self.maps = None;
+            self.confirmation = None;
+        }
+        true
     }
     fn source_key(&mut self, code: KeyCode) {
         source_key(&mut self.preview, &mut self.scroll, code);
@@ -146,12 +158,28 @@ impl MergeEditor {
     }
     fn action(&mut self, action: MergeUiAction, cx: &mut Context, confirmed: bool) -> EventResult {
         use MergeUiAction::*;
-        if !self.active(cx.editor) {
+        if !self.sync_session(cx.editor) {
             return EventResult::Ignored(None);
         }
         let (_, doc) = helix_view::current_ref!(cx.editor);
         if doc.merge().unwrap().busy && !matches!(action, Files | ShowBase | Next | Previous) {
             cx.editor.set_error("Merge result is being applied");
+            return EventResult::Consumed(None);
+        }
+        if matches!(doc.merge().unwrap().write_status, MergeWriteStatus::Staged)
+            && matches!(
+                action,
+                UseCurrent
+                    | UseIncoming
+                    | KeepBoth
+                    | MarkReviewed
+                    | AcceptCurrentFile
+                    | AcceptIncomingFile
+                    | Rebuild
+            )
+        {
+            cx.editor
+                .set_error("Staged result is read-only; return to Files to continue the merge");
             return EventResult::Consumed(None);
         }
         if matches!(
@@ -192,11 +220,10 @@ impl MergeEditor {
             Apply | RetryStage => writes::apply(cx, action == RetryStage),
             Refresh => {
                 let path = doc.merge().unwrap().data.file.path.clone();
-                let expected = Some((self.session, doc.version()));
-                return EventResult::Consumed(Some(Box::new(move |compositor, _| {
-                    if let Some(list) = compositor.find::<super::conflicts::ConflictList>() {
-                        list.request_file(path, true, expected);
-                    }
+                let root = doc.merge().unwrap().data.version.root().to_owned();
+                let expected = (self.session, doc.version());
+                return EventResult::Consumed(Some(Box::new(move |compositor, cx| {
+                    super::conflicts::refresh_draft(compositor, cx.editor, root, path, expected);
                 })));
             }
             Rebuild => {
@@ -352,7 +379,7 @@ impl Component for MergeEditor {
         }
     }
     fn render(&mut self, area: Rect, frame: &mut tui::buffer::Buffer, cx: &mut Context) {
-        if !self.active(cx.editor) {
+        if !self.sync_session(cx.editor) {
             return;
         }
         self.last_layout = MergeLayout::for_area(area);
@@ -378,7 +405,7 @@ impl Component for MergeEditor {
         )
     }
     fn handle_event(&mut self, event: &Event, cx: &mut Context) -> EventResult {
-        if !self.active(cx.editor) {
+        if !self.sync_session(cx.editor) {
             return EventResult::Ignored(None);
         }
         if matches!(event, Event::FocusGained | Event::FocusLost) {
@@ -427,7 +454,9 @@ impl Component for MergeEditor {
                 return EventResult::Consumed(None);
             }
             if inside(layout.footer) {
-                if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+                if self.preview == Preview::Result
+                    && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+                {
                     if let Some(action) = render::button_at(layout.footer, mouse.column) {
                         return self.action(action, cx, false);
                     }

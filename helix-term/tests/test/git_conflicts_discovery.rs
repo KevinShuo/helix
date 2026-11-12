@@ -45,7 +45,7 @@ async fn git_conflicts_focus_scan_no_focus_steal() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn wait_screen(app: &mut Application, expected: &str) -> anyhow::Result<()> {
+pub(super) async fn wait_screen(app: &mut Application, expected: &str) -> anyhow::Result<()> {
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     while !screen(app).contains(expected) && std::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(30)).await;
@@ -86,6 +86,14 @@ async fn git_conflicts_merge_opens_list() -> anyhow::Result<()> {
     let mut app = AppBuilder::new()
         .with_file(repo.path().join("file.txt"), None)
         .build()?;
+    let hidden = app.editor.open(
+        &repo.path().join("second.txt"),
+        helix_view::editor::Action::Replace,
+    )?;
+    app.editor.open(
+        &repo.path().join("file.txt"),
+        helix_view::editor::Action::Replace,
+    )?;
     app.test_resize(160, 40).await?;
     prepare_merge(&mut app).await?;
     keys(&mut app, "y").await?;
@@ -101,6 +109,10 @@ async fn git_conflicts_merge_opens_list() -> anyhow::Result<()> {
     assert_eq!(
         current_ref!(app.editor).1.text().to_string(),
         fs::read_to_string(repo.path().join("file.txt"))?
+    );
+    assert_eq!(
+        app.editor.documents[&hidden].text().to_string(),
+        fs::read_to_string(repo.path().join("second.txt"))?
     );
     keys(&mut app, "<ret>").await?;
     wait_merge(&mut app).await?;
@@ -215,7 +227,10 @@ async fn git_conflicts_focus_scan_uses_pathless_draft_worktree() -> anyhow::Resu
     let session = enter(&mut app, repo.path()).await?;
     assert!(current_ref!(app.editor).1.path().is_none());
     assert_eq!(
-        app.editor.git_context_path(),
+        app.editor
+            .git_context_path()
+            .map(fs::canonicalize)
+            .transpose()?,
         Some(fs::canonicalize(repo.path())?)
     );
     focus_gained(&mut app).await;
@@ -251,6 +266,68 @@ async fn git_conflicts_switch_repository_ignores_old_focus_result() -> anyhow::R
         .get_status()
         .is_some_and(|(text, _)| text.contains("conflicted files")));
     assert!(app.editor.active_merge().is_none());
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_merge_menu_requires_an_active_draft() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new().build()?;
+    let original = current_ref!(app.editor).1.text().to_string();
+    keys(&mut app, "<space>vm").await?;
+    assert!(app.editor.is_err());
+    assert!(app.editor.get_status().unwrap().0.contains("conflict file"));
+    // An unavailable merge menu must not consume the next normal-mode input.
+    keys(&mut app, "iordinary text<esc>").await?;
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        format!("ordinary text{original}")
+    );
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_panel_refresh_notifies_without_opening_a_resolver() -> anyhow::Result<()> {
+    let repo = repository(false);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    keys(&mut app, "<space>vg").await?;
+    wait_screen(&mut app, "Git · Log").await?;
+    assert!(!git(repo.path(), &["merge", "--no-edit", "topic"])
+        .status
+        .success());
+    keys(&mut app, "r").await?;
+    wait_screen(&mut app, "2 conflicted files").await?;
+    assert!(!screen(&app).contains("Enter resolve"));
+    assert!(app.editor.active_merge().is_none());
+    keys(&mut app, "q:qa!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_conflicts_changes_groups_unmerged_files_and_opens_the_resolver() -> anyhow::Result<()>
+{
+    let repo = repository(true);
+    let mut app = AppBuilder::new()
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    keys(&mut app, "<space>vcz").await?;
+    wait_screen(&mut app, "Conflicts (2)").await?;
+    wait_screen(&mut app, "Unmerged file").await?;
+    assert!(app.editor.active_merge().is_none());
+    keys(&mut app, "3<ret>").await?;
+    wait_merge(&mut app).await?;
+    assert_eq!(
+        current_ref!(app.editor).1.merge().unwrap().data.file.path,
+        Path::new("file.txt")
+    );
     keys(&mut app, ":qa!<ret>").await?;
     app.close().await;
     Ok(())

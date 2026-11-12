@@ -11,15 +11,15 @@ use std::{
 
 use helix_core::Position;
 use helix_vcs::git_tools::{
-    GitDetails, GitLogFilter, GitOperation, GitRefKind, GitReference, GitRepository, GitSnapshot,
-    GitTarget,
+    GitDetails, GitFile, GitLogFilter, GitOperation, GitRefKind, GitReference, GitRepository,
+    GitSnapshot, GitTarget,
 };
 use helix_view::{
     graphics::{CursorKind, Rect},
     input::{KeyCode, KeyModifiers, MouseButton, MouseEventKind},
     Editor,
 };
-use tokio::task::JoinHandle;
+use tokio::task::{AbortHandle, JoinHandle};
 use tui::buffer::Buffer;
 
 use crate::{
@@ -67,6 +67,13 @@ struct BranchRow {
     head: bool,
 }
 
+#[derive(Clone, Copy)]
+enum FileRow {
+    Conflicts(usize),
+    Changes(usize),
+    File(usize),
+}
+
 #[derive(Clone, Copy, Default)]
 struct PanelLayout {
     panel: Rect,
@@ -108,7 +115,8 @@ pub(crate) struct GitPanel {
     plan_version: u64,
     detail_task: Option<JoinHandle<()>>,
     patch_task: Option<JoinHandle<()>>,
-    operation_task: Option<JoinHandle<()>>,
+    operation_task: Option<AbortHandle>,
+    operation_version: u64,
     pending_action: Option<OpenAction>,
     message: String,
     busy: bool,
@@ -167,7 +175,7 @@ pub(crate) fn open(cx: &mut crate::commands::Context, action: OpenAction) {
     }));
 }
 
-fn trusted(editor: &Editor, path: &std::path::Path) -> bool {
+pub(crate) fn trusted(editor: &Editor, path: &std::path::Path) -> bool {
     editor
         .workspace_trust
         .query(
@@ -178,6 +186,48 @@ fn trusted(editor: &Editor, path: &std::path::Path) -> bool {
 }
 
 impl GitPanel {
+    fn is_conflict(&self, file: &GitFile) -> bool {
+        matches!(self.target, GitTarget::WorkingTree)
+            && matches!(
+                file.status.as_str(),
+                "DD" | "AU" | "UD" | "UA" | "DU" | "AA" | "UU"
+            )
+    }
+
+    fn file_rows(&self) -> Vec<FileRow> {
+        let conflicts = self
+            .details
+            .files
+            .iter()
+            .filter(|file| self.is_conflict(file))
+            .count();
+        if conflicts == 0 {
+            return (0..self.details.files.len()).map(FileRow::File).collect();
+        }
+        let mut rows = vec![FileRow::Conflicts(conflicts)];
+        rows.extend(
+            self.details
+                .files
+                .iter()
+                .enumerate()
+                .filter(|(_, file)| self.is_conflict(file))
+                .map(|(i, _)| FileRow::File(i)),
+        );
+        let changes = self.details.files.len() - conflicts;
+        if changes > 0 {
+            rows.push(FileRow::Changes(changes));
+            rows.extend(
+                self.details
+                    .files
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, file)| !self.is_conflict(file))
+                    .map(|(i, _)| FileRow::File(i)),
+            );
+        }
+        rows
+    }
+
     fn new(path: PathBuf, action: OpenAction) -> Self {
         let mut filter = GitLogFilter::default();
         if let OpenAction::FileHistory(path) = &action {
@@ -224,6 +274,7 @@ impl GitPanel {
             detail_task: None,
             patch_task: None,
             operation_task: None,
+            operation_version: 0,
             pending_action: Some(action),
             message: "Loading Git repository...".into(),
             busy: true,
@@ -497,6 +548,10 @@ impl GitPanel {
                         if let Some(action) = action {
                             actions::perform_open_action(compositor, editor, action);
                         }
+                        crate::handlers::git_conflicts::request(
+                            editor,
+                            crate::handlers::git_conflicts::ConflictScanReason::Explicit,
+                        );
                     }
                     Err(error) => {
                         panel.busy = false;
@@ -631,7 +686,10 @@ impl GitPanel {
                 };
                 panel.detail_task = None;
                 match result {
-                    Ok(details) => {
+                    Ok(mut details) => {
+                        if matches!(panel.target, GitTarget::WorkingTree) {
+                            details.files.sort_by_key(|file| !panel.is_conflict(file));
+                        }
                         panel.details = details;
                         panel.request_patch();
                     }
@@ -659,6 +717,10 @@ impl GitPanel {
         ) else {
             return;
         };
+        if self.is_conflict(&file) {
+            self.patch = "Unmerged file · Enter or Space v r to resolve".into();
+            return;
+        }
         let (instance, version, target) = (self.instance, self.patch_version, self.target.clone());
         self.patch_task = Some(tokio::spawn(async move {
             let result = repository.patch(&target, &file).await;
@@ -825,9 +887,14 @@ impl Component for GitPanel {
                             Pane::Files => {
                                 let offset = render::file_header_rows(&self.details, rect);
                                 if row >= offset {
-                                    self.selected_file = (self.file_scroll + row - offset)
-                                        .min(self.details.files.len().saturating_sub(1));
-                                    self.request_patch();
+                                    if let Some(FileRow::File(index)) = self
+                                        .file_rows()
+                                        .get(self.file_scroll + row - offset)
+                                        .copied()
+                                    {
+                                        self.selected_file = index;
+                                        self.request_patch();
+                                    }
                                 }
                             }
                             Pane::Diff => {}
@@ -878,7 +945,7 @@ impl Component for GitPanel {
         }
         if self.confirmation.is_some() {
             if key.code == KeyCode::Char('y') {
-                self.start_operation(cx.editor);
+                self.start_operation(cx.editor, cx.jobs);
             } else if matches!(
                 key.code,
                 KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('q')
@@ -935,6 +1002,14 @@ impl Component for GitPanel {
                     self.focus = Pane::Files;
                 }
                 Pane::Files => {
+                    if self
+                        .details
+                        .files
+                        .get(self.selected_file)
+                        .is_some_and(|file| self.is_conflict(file))
+                    {
+                        return self.open_selected_file(false, cx.editor);
+                    }
                     self.request_patch();
                     self.focus = Pane::Diff;
                 }

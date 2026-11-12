@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     compositor::Compositor,
+    job::{Callback, Job, Jobs},
     ui::{Prompt, PromptEvent},
 };
 use helix_core::{Selection, Transaction};
@@ -154,29 +155,6 @@ fn dirty_buffers(editor: &Editor, repository: &GitRepository) -> bool {
     })
 }
 
-fn reload_clean_views(editor: &mut Editor, repository: &GitRepository) {
-    let providers = editor.diff_providers.clone();
-    let ids: Vec<_> = editor
-        .tree
-        .views()
-        .filter_map(|(view, _)| {
-            let doc = editor.document(view.doc)?;
-            (!doc.is_modified()
-                && doc
-                    .path()
-                    .is_some_and(|p| p.exists() && repository.contains_path(p).unwrap_or(false)))
-            .then_some((view.id, view.doc))
-        })
-        .collect();
-    for (view_id, doc_id) in ids {
-        let doc = editor.documents.get_mut(&doc_id).unwrap();
-        let view = editor.tree.get_mut(view_id);
-        if let Err(error) = doc.reload(view, &providers, true) {
-            editor.set_error(format!("Git changed files, but reload failed: {error}"));
-        }
-    }
-}
-
 impl GitPanel {
     pub(super) fn show_details(&self) -> EventResult {
         let metadata = self
@@ -281,7 +259,7 @@ impl GitPanel {
         self.confirmation = Some(operation);
     }
 
-    pub(super) fn start_operation(&mut self, editor: &mut Editor) {
+    pub(super) fn start_operation(&mut self, editor: &mut Editor, jobs: &Jobs) {
         let (Some(operation), Some(repository)) =
             (self.confirmation.take(), self.repository.clone())
         else {
@@ -308,44 +286,97 @@ impl GitPanel {
         self.detail_task = None;
         self.patch_task = None;
         self.busy = true;
+        editor.git_conflict_scan.cancel();
         self.message = "Running Git operation...".into();
+        self.operation_version = self.operation_version.wrapping_add(1);
+        let (instance, operation_version, load_version) =
+            (self.instance, self.operation_version, self.load_version);
+        let context = editor.git_context_path();
+        let document = editor.tree.try_get(editor.tree.focus).map(|view| view.doc);
         let changes_worktree = operation.changes_worktree();
-        self.operation_task = Some(tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             let result = repository.operate(&operation).await;
-            job::dispatch(move |editor, compositor| {
-                // Git can update files before reporting conflicts, so reload clean
-                // views on failure as well. Recheck modification state here.
-                if changes_worktree {
-                    reload_clean_views(editor, &repository);
-                }
-                let message = match &result {
-                    Ok(message) => {
-                        if message.is_empty() {
-                            "Git operation completed".into()
+            // The exit status/message alone cannot tell whether an operation
+            // left unmerged index stages (including localized Git output).
+            let snapshot = repository.conflicts().await;
+            (repository, result, snapshot)
+        });
+        self.operation_task = Some(task.abort_handle());
+        jobs.add(
+            Job::with_callback(async move {
+                let (repository, result, snapshot) = task.await?;
+                Ok(Callback::Editor(Box::new(move |editor| {
+                    if changes_worktree {
+                        merge::reload_clean(editor, repository.root(), None);
+                    }
+                    let mut message = match &result {
+                        Ok(message) => {
+                            if message.is_empty() {
+                                "Git operation completed".into()
+                            } else {
+                                message.clone()
+                            }
+                        }
+                        Err(error) => format!("{error:#}"),
+                    };
+                    let success = result.is_ok();
+                    let snapshot = match snapshot {
+                        Ok(snapshot) => Some(snapshot),
+                        Err(error) => {
+                            message.push_str(&format!("; conflict scan failed: {error:#}"));
+                            None
+                        }
+                    };
+                    let in_context = editor.git_context_path() == context
+                        && editor.tree.try_get(editor.tree.focus).map(|view| view.doc) == document
+                        && trusted(editor, repository.root());
+                    if in_context {
+                        if let Some(snapshot) = snapshot.as_ref().filter(|s| !s.files.is_empty()) {
+                            editor
+                                .git_conflict_scan
+                                .should_notify(repository.root(), snapshot);
+                            editor.set_status(format!(
+                                "Git: {} conflicted files; Space v r to resolve",
+                                snapshot.files.len()
+                            ));
+                        } else if success {
+                            editor.set_status(render::safe_text(&message));
                         } else {
-                            message.clone()
+                            editor.set_error(render::safe_text(&message));
                         }
                     }
-                    Err(error) => format!("{error:#}"),
-                };
-                if result.is_ok() {
-                    editor.set_status(render::safe_text(&message));
-                } else {
-                    editor.set_error(render::safe_text(&message));
-                }
-                if let Some(panel) = compositor.find::<GitPanel>().filter(|p| {
-                    p.repository
-                        .as_ref()
-                        .is_some_and(|r| r.same_worktree(&repository))
-                }) {
-                    panel.operation_task = None;
-                    panel.busy = false;
-                    panel.message = render::safe_text(&message);
-                    panel.refresh();
-                }
+                    // An Editor callback also runs during exit, when there may be
+                    // no compositor. UI updates are separately guarded on delivery.
+                    job::dispatch_blocking(move |editor, compositor| {
+                        let in_context = editor.git_context_path() == context
+                            && editor.tree.try_get(editor.tree.focus).map(|view| view.doc)
+                                == document
+                            && trusted(editor, repository.root());
+                        let Some(panel) = compositor.find::<GitPanel>().filter(|p| {
+                            p.instance == instance
+                                && p.operation_version == operation_version
+                                && p.repository
+                                    .as_ref()
+                                    .is_some_and(|r| r.same_worktree(&repository))
+                        }) else {
+                            return;
+                        };
+                        let show_conflicts =
+                            in_context && panel.focused && panel.load_version == load_version;
+                        panel.operation_task = None;
+                        panel.busy = false;
+                        panel.message = render::safe_text(&message);
+                        panel.refresh();
+                        if let Some(snapshot) =
+                            snapshot.filter(|s| show_conflicts && !s.files.is_empty())
+                        {
+                            conflicts::present_snapshot(compositor, editor, repository, snapshot);
+                        }
+                    });
+                })))
             })
-            .await;
-        }));
+            .wait_before_exiting(),
+        );
     }
 
     pub(super) fn handle_action_menu(&mut self, key: KeyCode, cx: &mut Context) -> EventResult {
@@ -488,6 +519,15 @@ impl GitPanel {
         ) else {
             return EventResult::Consumed(None);
         };
+        if !historical && self.is_conflict(&file) {
+            let root = repository.root().to_owned();
+            return EventResult::Consumed(Some(Box::new(move |compositor, cx| {
+                conflicts::present(compositor, cx.editor, root);
+                if let Some(list) = compositor.find::<conflicts::ConflictList>() {
+                    list.request_file(file.path, false, None);
+                }
+            })));
+        }
         if !historical {
             let path = repository.root().join(&file.path);
             if !path.is_file() {

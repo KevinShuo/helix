@@ -1799,9 +1799,14 @@ impl Component for EditorView {
             Event::IdleTimeout => self.handle_idle_timeout(&mut cx),
             Event::FocusGained => {
                 self.terminal_focused = true;
+                crate::handlers::git_conflicts::request(
+                    cx.editor,
+                    crate::handlers::git_conflicts::ConflictScanReason::FocusGained,
+                );
                 EventResult::Consumed(None)
             }
             Event::FocusLost => {
+                cx.editor.git_conflict_scan.cancel();
                 self.minimap.cancel();
                 crate::handlers::ai_completion::clear(cx.editor);
                 if context.editor.config().auto_save.focus_lost {
