@@ -179,10 +179,31 @@ async fn git_tools_native_dock_fullscreen_and_diff_flow() -> anyhow::Result<()> 
     assert_eq!(app.editor.tree.area(), original);
     assert!(!screen(&app).contains("Git · Log"));
     // The original two-key binding still opens the original changed-file picker.
-    fs::write(repo.path().join("file.txt"), "local change\n")?;
+    // This picker uses the process CWD, not the opened fixture repository.
+    // Its identity must remain testable even when the checkout is clean.
     keys(&mut app, "<space>g").await?;
-    wait_for(&mut app, "modified").await;
-    assert!(!screen(&app).contains("Git · Log"));
+    let deadline = Instant::now() + Duration::from_secs(12);
+    loop {
+        let rendered = screen(&app);
+        if rendered.lines().any(|line| {
+            line.split_whitespace()
+                .collect::<Vec<_>>()
+                .windows(2)
+                .any(|columns| columns == ["change", "path"])
+        }) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Changed-file picker missing:\n{rendered}"
+        );
+        keys(&mut app, "").await?;
+    }
+    assert_eq!(app.editor.tree.area(), original);
+    // Picker previews may contain source code mentioning the Git panel title.
+    assert!(!screen(&app)
+        .lines()
+        .any(|line| line.trim_start().starts_with("Git · Log")));
     keys(&mut app, "<esc>:q!<ret>").await?;
     app.close().await;
     Ok(())
