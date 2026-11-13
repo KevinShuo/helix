@@ -1,0 +1,242 @@
+[
+  {
+    "id": "signed_ceil_div",
+    "language": "python",
+    "code": "def ceil_div(a, b):\n    # Round a / b upward toward positive infinity for every nonzero signed b.\n    return <CURSOR>\n",
+    "reference": "-(-a // b)",
+    "checks": "import math as _reference_math\nfor a in range(-31, 32):\n    for b in range(-9, 10):\n        if b: assert ceil_div(a,b) == _reference_math.ceil(a/b), (a,b)\n",
+    "split": "development"
+  },
+  {
+    "id": "descending_lower_bound",
+    "language": "python",
+    "code": "def insert_position(values, target):\n    # values is descending. Return the first position whose value <= target.\n    lo, hi = 0, len(values)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if values[mid] <CURSOR> target:\n            lo = mid + 1\n        else:\n            hi = mid\n    return lo\n",
+    "reference": ">",
+    "checks": "for xs in [[],[3],[5,3,3,1],[8,8,4,-2]]:\n    for t in range(-4,11): assert insert_position(xs,t) == next((i for i,v in enumerate(xs) if v<=t),len(xs))\n",
+    "split": "holdout"
+  },
+  {
+    "id": "weighted_mean",
+    "language": "python",
+    "code": "def weighted_mean(values, weights):\n    # Nonnegative weights, with at least one positive weight.\n    return sum(v * w for v, w in zip(values, weights)) / <CURSOR>\n",
+    "reference": "sum(weights)",
+    "checks": "for values, weights in [([3,9],[1,3]),([1,5,9],[0,1,0]),([-5,8],[2,7])]:\n    assert abs(weighted_mean(values,weights)-sum(v*w for v,w in zip(values,weights))/sum(weights))<1e-10\n",
+    "split": "development"
+  },
+  {
+    "id": "overlapping_occurrences",
+    "language": "python",
+    "code": "def count_overlaps(text, needle):\n    # Count overlapping occurrences; an empty needle has count zero.\n    if not needle:\n        return 0\n    count = 0\n    pos = text.find(needle)\n    while pos >= 0:\n        count += 1\n        pos = text.find(needle, <CURSOR>)\n    return count\n",
+    "reference": "pos + 1",
+    "checks": "for text, needle in [('aaaa','aa'),('ababa','aba'),('abc','x'),('','a'),('a','')]:\n    assert count_overlaps(text,needle) == (sum(text.startswith(needle,i) for i in range(len(text))) if needle else 0)\n",
+    "split": "holdout"
+  },
+  {
+    "id": "empty_suffix",
+    "language": "python",
+    "code": "def remove_suffix(text, suffix):\n    # Remove one exact suffix. An empty suffix leaves text unchanged.\n    return text[:-len(suffix)] if <CURSOR> else text\n",
+    "reference": "suffix and text.endswith(suffix)",
+    "checks": "for text in ['', 'abc', 'abcbc']:\n    for suffix in ['', 'bc', 'x', 'abc']: assert remove_suffix(text,suffix)==text.removesuffix(suffix)\n",
+    "split": "development"
+  },
+  {
+    "id": "signed_rotation",
+    "language": "python",
+    "code": "def rotate_right(items, k):\n    # Positive k rotates right; negative k rotates left, with cyclic wrapping.\n    if not items:\n        return []\n    k = <CURSOR>\n    return items[-k:] + items[:-k]\n",
+    "reference": "k % len(items)",
+    "checks": "for xs in [[], [1], [1,2,3,4]]:\n    for k in range(-10,11): assert rotate_right(xs,k)==([xs[(i-k)%len(xs)] for i in range(len(xs))] if xs else [])\n",
+    "split": "holdout"
+  },
+  {
+    "id": "dedup_last_occurrence",
+    "language": "python",
+    "code": "def unique_last(values):\n    # Keep only each value's last occurrence, preserving their order in the input.\n    return list(<CURSOR>)\n",
+    "reference": "reversed(dict.fromkeys(reversed(values)))",
+    "checks": "for xs in [[],[1,2,1],[3,1,3,2,1],[0,0,False]]:\n    assert unique_last(xs)==[x for i,x in enumerate(xs) if x not in xs[i+1:]]\n",
+    "split": "development"
+  },
+  {
+    "id": "two_key_sort",
+    "language": "python",
+    "code": "def order_records(records):\n    # Each row is (timestamp, score): score ascending, then timestamp descending.\n    return sorted(records, key=lambda row: <CURSOR>)\n",
+    "reference": "(row[1], -row[0])",
+    "checks": "xs=[(3,1),(1,2),(2,1),(4,2),(3,1)]\nassert order_records(xs)==[(3,1),(3,1),(2,1),(4,2),(1,2)]\n",
+    "split": "holdout"
+  },
+  {
+    "id": "clamp_swapped_bounds",
+    "language": "python",
+    "code": "def clamp(value, bound_a, bound_b):\n    low, high = sorted((bound_a, bound_b))\n    return <CURSOR>\n",
+    "reference": "min(max(value, low), high)",
+    "checks": "for a,b in [(-2,3),(3,-2),(1,1)]:\n    for v in range(-5,6): assert clamp(v,a,b)==min(max(v,min(a,b)),max(a,b))\n",
+    "split": "development"
+  },
+  {
+    "id": "chunk_end",
+    "language": "python",
+    "code": "def chunks(items, size):\n    # size is positive, and the last chunk may be shorter.\n    result = []\n    for start in range(0, len(items), size):\n        result.append(items[start:<CURSOR>])\n    return result\n",
+    "reference": "start + size",
+    "checks": "for n in range(8):\n    for size in range(1,6):\n        xs=list(range(n)); assert chunks(xs,size)==[xs[i:i+size] for i in range(0,n,size)]\n",
+    "split": "holdout"
+  },
+  {
+    "id": "first_nonnegative",
+    "language": "python",
+    "code": "def first_nonnegative(values):\n    # Return the first value >= 0, or None when none exists.\n    return next((value for value in values if <CURSOR>), None)\n",
+    "reference": "value >= 0",
+    "checks": "for xs in [[],[-1,-2],[-1,0,3],[0],[3,-1]]:\n    assert first_nonnegative(xs)==next((x for x in xs if x>=0),None)\n",
+    "split": "development"
+  },
+  {
+    "id": "closed_integer_intervals",
+    "language": "python",
+    "code": "def merge_intervals(intervals):\n    # Closed integer intervals: overlap or adjacency both merge, e.g. [1,2]+[3,4].\n    result = []\n    for start, end in sorted(intervals):\n        if result and <CURSOR>:\n            result[-1][1] = max(result[-1][1], end)\n        else:\n            result.append([start, end])\n    return result\n",
+    "reference": "start <= result[-1][1] + 1",
+    "checks": "assert merge_intervals([(1,2),(3,4),(7,8),(8,10)])==[[1,4],[7,10]]\nassert merge_intervals([(5,6),(1,10)])==[[1,10]]\nassert merge_intervals([])==[]\n",
+    "split": "holdout"
+  },
+  {
+    "id": "lazy_default_factory",
+    "language": "python",
+    "code": "def get_or_create(mapping, key, factory):\n    # Return existing value including None/False/0. Call factory only if missing.\n    return <CURSOR>\n",
+    "reference": "mapping[key] if key in mapping else factory()",
+    "checks": "calls=[]\ndef factory(): calls.append(1); return 99\nfor value in [None,False,0,7]:\n    assert get_or_create({'x':value},'x',factory) is value\nassert calls==[]\nassert get_or_create({},'x',factory)==99 and calls==[1]\n",
+    "split": "development"
+  },
+  {
+    "id": "coalesce_none",
+    "language": "python",
+    "code": "def coalesce(value, fallback):\n    # Preserve False, zero, and empty strings; replace only None.\n    return value if <CURSOR> else fallback\n",
+    "reference": "value is not None",
+    "checks": "for value in [False,0,'',[],3]: assert coalesce(value,99) is value\nassert coalesce(None,99)==99\n",
+    "split": "holdout"
+  },
+  {
+    "id": "binary_search_absent",
+    "language": "python",
+    "code": "def search(values, target):\n    # Sorted ascending. Return first matching index, otherwise -1.\n    lo, hi = 0, len(values)\n    while lo < hi:\n        mid = (lo+hi)//2\n        if values[mid] < target: lo = mid+1\n        else: hi = mid\n    return <CURSOR>\n",
+    "reference": "lo if lo < len(values) and values[lo] == target else -1",
+    "checks": "for xs in [[],[1],[1,3,3,8]]:\n    for t in range(-1,10): assert search(xs,t)==(xs.index(t) if t in xs else -1)\n",
+    "split": "development"
+  },
+  {
+    "id": "single_prefix_removal",
+    "language": "python",
+    "code": "def remove_prefix(text, prefix):\n    # Remove one exact prefix, not an arbitrary set of leading characters.\n    return <CURSOR>\n",
+    "reference": "text[len(prefix):] if text.startswith(prefix) else text",
+    "checks": "for text in ['ababa','baab','', 'hello']:\n    for prefix in ['ab','', 'he','xyz']: assert remove_prefix(text,prefix)==text.removeprefix(prefix)\n",
+    "split": "holdout"
+  },
+  {
+    "id": "flatten_once",
+    "language": "python",
+    "code": "def flatten(rows):\n    return [value for row in rows for value in <CURSOR>]\n",
+    "reference": "row",
+    "checks": "assert flatten([[1,2],[],[3]])==[1,2,3]\nassert flatten([])==[]\n",
+    "split": "development"
+  },
+  {
+    "id": "positive_modulo",
+    "language": "python",
+    "code": "def wrap_index(index, length):\n    # length > 0, return the congruent index in [0, length).\n    return <CURSOR>\n",
+    "reference": "index % length",
+    "checks": "for n in range(1,10):\n    for i in range(-20,21): assert wrap_index(i,n)==i%n\n",
+    "split": "holdout"
+  },
+  {
+    "id": "strictly_increasing",
+    "language": "python",
+    "code": "def is_strictly_increasing(values):\n    # Equal adjacent values do not satisfy strict increase.\n    return all(<CURSOR> for left, right in zip(values, values[1:]))\n",
+    "reference": "left < right",
+    "checks": "for xs,want in [([],True),([1],True),([1,2],True),([1,1],False),([2,1],False)]: assert is_strictly_increasing(xs)==want\n",
+    "split": "development"
+  },
+  {
+    "id": "keyword_only_arguments",
+    "language": "python",
+    "code": "def encode_frame(payload, *, sequence, final=False):\n    return (payload, sequence, final)\n\ndef final_frame(data, seq):\n    # Encode data using seq; this is the final frame.\n    return encode_frame(data, <CURSOR>)\n",
+    "reference": "sequence=seq, final=True",
+    "checks": "assert final_frame(b'data',7)==(b'data',7,True)\n",
+    "split": "holdout"
+  },
+  {
+    "id": "safe_abs_int_min",
+    "language": "cpp",
+    "code": "long long magnitude(int value) {\n    // The magnitude of INT_MIN must be represented without signed int overflow.\n    return value < 0 ? <CURSOR> : value;\n}\n",
+    "reference": "-static_cast<long long>(value)",
+    "checks": "for (int x : {INT_MIN, -7, 0, 8, INT_MAX}) assert(magnitude(x)==(x<0?-(long long)x:(long long)x));",
+    "split": "development"
+  },
+  {
+    "id": "uint64_mask",
+    "language": "cpp",
+    "code": "std::uint64_t bit_mask(unsigned bit) {\n    // bit may be any index from 0 through 63.\n    return <CURSOR>;\n}\n",
+    "reference": "std::uint64_t{1} << bit",
+    "checks": "for (unsigned i=0;i<64;++i) assert(bit_mask(i)==(std::uint64_t{1}<<i));",
+    "split": "holdout"
+  },
+  {
+    "id": "overlap_shift",
+    "language": "cpp",
+    "code": "void shift_right_one(int* values, int count) {\n    // Capacity is count+1; overlap requires copying backward.\n    for (int i=count; i>0; --i) {\n        values[i] = <CURSOR>;\n    }\n}\n",
+    "reference": "values[i - 1]",
+    "checks": "int a[]={1,2,3,4,0}; shift_right_one(a,4); for(int i=1;i<5;++i) assert(a[i]==i);",
+    "split": "development"
+  },
+  {
+    "id": "descending_upper_bound",
+    "language": "cpp",
+    "code": "int upper_desc(const std::vector<int>& values, int target) {\n    // Descending values: return first position strictly less than target.\n    int lo=0, hi=(int)values.size();\n    while(lo<hi) {\n        int mid=lo+(hi-lo)/2;\n        if (values[mid] <CURSOR> target) lo=mid+1;\n        else hi=mid;\n    }\n    return lo;\n}\n",
+    "reference": ">=",
+    "checks": "for(auto xs:std::vector<std::vector<int>>{{},{3},{8,8,4,-2}}) for(int t=-4;t<11;++t){int want=0;while(want<(int)xs.size()&&xs[want]>=t)++want;assert(upper_desc(xs,t)==want);}",
+    "split": "holdout"
+  },
+  {
+    "id": "unsigned_saturating_add",
+    "language": "cpp",
+    "code": "std::uint32_t sat_add(std::uint32_t a, std::uint32_t b) {\n    constexpr auto maximum = UINT32_MAX;\n    if (a > <CURSOR>) return maximum;\n    return a+b;\n}\n",
+    "reference": "maximum - b",
+    "checks": "for(std::uint32_t a:{0u,1u,UINT32_MAX-1,UINT32_MAX})for(std::uint32_t b:{0u,2u,UINT32_MAX}){auto s=(std::uint64_t)a+b;assert(sat_add(a,b)==std::min(s,(std::uint64_t)UINT32_MAX));}",
+    "split": "development"
+  },
+  {
+    "id": "closed_interval_intersection",
+    "language": "cpp",
+    "code": "bool intersects(int a, int b, int c, int d) {\n    // Closed intervals [a,b] and [c,d]; sharing an endpoint counts.\n    return std::max(a,c) <CURSOR> std::min(b,d);\n}\n",
+    "reference": "<=",
+    "checks": "assert(intersects(1,3,3,5));assert(!intersects(1,2,3,4));assert(intersects(2,2,2,2));assert(intersects(1,4,2,3));assert(intersects(-5,3,-2,6));",
+    "split": "holdout"
+  },
+  {
+    "id": "overflow_safe_average",
+    "language": "cpp",
+    "code": "long long average(int a, int b) {\n    // Return integer mean truncated toward zero, without intermediate int overflow.\n    return <CURSOR>;\n}\n",
+    "reference": "(static_cast<long long>(a) + b) / 2",
+    "checks": "for(int a:{INT_MIN,-9,0,8,INT_MAX})for(int b:{INT_MIN,-2,0,7,INT_MAX})assert(average(a,b)==((long long)a+b)/2);",
+    "split": "development"
+  },
+  {
+    "id": "overflow_safe_midpoint",
+    "language": "cpp",
+    "code": "int midpoint(int lo, int hi) {\n    // 0 <= lo <= hi <= INT_MAX; avoid intermediate overflow.\n    return <CURSOR>;\n}\n",
+    "reference": "lo + (hi - lo) / 2",
+    "checks": "for(auto p:std::vector<std::pair<int,int>>{{0,0},{0,9},{INT_MAX-4,INT_MAX},{INT_MAX,INT_MAX}})assert(midpoint(p.first,p.second)==((long long)p.first+p.second)/2);",
+    "split": "holdout"
+  },
+  {
+    "id": "cpp_positive_modulo",
+    "language": "cpp",
+    "code": "int wrap_index(int value, int modulus) {\n    // modulus is positive. The result must lie in [0,modulus), even for value<0.\n    return <CURSOR>;\n}\n",
+    "reference": "value % modulus < 0 ? value % modulus + modulus : value % modulus",
+    "checks": "for(int m:{1,2,9,INT_MAX-1,INT_MAX})for(int v:{INT_MIN,-20,-1,0,1,20,INT_MAX}){long long r=(long long)v%m;int want=(int)(r<0?r+m:r);assert(wrap_index(v,m)==want);}",
+    "split": "development"
+  },
+  {
+    "id": "next_power_of_two",
+    "language": "cpp",
+    "code": "std::uint32_t next_power(std::uint32_t value) {\n    // Return least power of two >= value, for value in [0,2^31].\n    if (value<=1) return 1;\n    --value;\n    value |= value >> 1; value |= value >> 2; value |= value >> 4;\n    value |= value >> 8; value |= value >> 16;\n    return <CURSOR>;\n}\n",
+    "reference": "value + 1",
+    "checks": "for(unsigned v:{0u,1u,2u,3u,17u,1024u,1025u,1u<<31}){unsigned want=1;while(want<v)want*=2;assert(next_power(v)==want);}",
+    "split": "holdout"
+  }
+]

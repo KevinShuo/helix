@@ -18,7 +18,7 @@ param(
     [ValidateRange(0, 200)][int]$GpuLayers = 99,
     [ValidateRange(2048, 32768)][int]$ContextSize = 4096,
     [ValidateSet('f16', 'q8_0', 'q4_0')][string]$CacheType = 'f16',
-    [ValidateSet('insertion', 'line')][string]$PromptMode,
+    [ValidateSet('insertion', 'line', 'gap')][string]$PromptMode,
     [string]$ConfigPath,
     [switch]$UseGateway,
     [switch]$Check,

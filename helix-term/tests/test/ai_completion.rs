@@ -215,7 +215,7 @@ async fn model_server(
     responses: Vec<&'static str>,
 ) -> (
     String,
-    tokio::sync::mpsc::UnboundedReceiver<()>,
+    tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>,
     tokio::task::JoinHandle<()>,
 ) {
     use tokio::{
@@ -246,7 +246,8 @@ async fn model_server(
                         if bytes.len() >= end + 4 + length { break; }
                     }
                 }
-                let _ = sent.send(());
+                let end = bytes.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+                let _ = sent.send(serde_json::from_slice(&bytes[end..]).unwrap());
                 if index == 0 { tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await; }
                 let body = serde_json::json!({"choices":[{"message":{"role":"assistant","content":content},"finish_reason":"stop"}]}).to_string();
                 let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
@@ -304,6 +305,392 @@ async fn ai_completion_automatically_requests_and_displays_without_editing() -> 
     assert_eq!(current_ref!(app.editor).1.version(), version);
     keys(&mut app, "<S-right>").await?;
     assert_eq!(text(&app), "x + 1\n");
+    server.await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_rejects_new_syntax_errors_in_valid_code() -> anyhow::Result<()> {
+    let (endpoint, mut requests, server) = model_server(0, vec!["+ * 2"]).await;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("sample.py");
+    std::fs::write(&path, "")?;
+    let mut config = model_config(endpoint);
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.prompt_mode = AiCompletionPromptMode::Gap;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(path, None)
+        .with_input_text("def f(value):\n    return value#[|\n]#")
+        .build()?;
+    keys(&mut app, "i<space>").await?;
+    idle(&mut app).await;
+    assert!(requests.recv().await.is_some());
+    server.await?;
+    idle(&mut app).await;
+    assert!(current_ref!(app.editor).1.ai_completion.is_none());
+    assert_eq!(text(&app), "def f(value):\n    return value \n");
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_predicts_a_block_accepts_and_undoes() -> anyhow::Result<()> {
+    let (endpoint, _, server) = model_server(
+        0,
+        vec!["    total = 0\n    for item in items:\n        total += item\n    return total"],
+    )
+    .await;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("sample.py");
+    std::fs::write(&path, "")?;
+    let mut config = model_config(endpoint);
+    config.editor.default_line_ending = helix_view::editor::LineEndingConfig::LF;
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.predict_next = true;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(path, None)
+        .with_input_text("def total(items):#[|\n]#")
+        .build()?;
+    keys(&mut app, "i<ret>").await?;
+    wait_for_preview(&mut app).await;
+    assert_eq!(text(&app), "def total(items):\n    \n");
+    keys(&mut app, "<S-right>").await?;
+    assert_eq!(text(&app), "def total(items):\n    total = 0\n    for item in items:\n        total += item\n    return total\n");
+    keys(&mut app, "<esc>u").await?;
+    assert_eq!(text(&app), "def total(items):\n    \n");
+    server.await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_prediction_preserves_later_absolute_indentation() -> anyhow::Result<()> {
+    let (endpoint, _, server) = model_server(0, vec!["for value in values:\n        if value > 0:\n            result.append(value)\n    return result"]).await;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("sample.py");
+    std::fs::write(&path, "")?;
+    let mut config = model_config(endpoint);
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.predict_next = true;
+    let mut app = AppBuilder::new().with_config(config).with_file(path, None)
+        .with_input_text("def positives(values):\n    result = []\n    # Use an explicit for loop to append strictly positive values to result, then return result.\n   #[|\n]#").build()?;
+    keys(&mut app, "i<space>").await?;
+    wait_for_preview(&mut app).await;
+    assert_eq!(current_ref!(app.editor).1.ai_completion.as_ref().unwrap().annotation.text.as_str().replace("\r\n", "\n"), "for value in values:\n        if value > 0:\n            result.append(value)\n    return result");
+    server.await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_prediction_keeps_crlf_and_existing_code() -> anyhow::Result<()> {
+    let (endpoint, _, server) =
+        model_server(0, vec!["    result = x + 1\r\n    result *= 2"]).await;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("sample.py");
+    std::fs::write(&path, "")?;
+    let mut config = model_config(endpoint);
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.predict_next = true;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(path, None)
+        .with_input_text("def f(x):\r\n   #[|\r\n]#    return result\r\n")
+        .build()?;
+    keys(&mut app, "i<space>").await?;
+    wait_for_preview(&mut app).await;
+    assert_eq!(text(&app), "def f(x):\r\n    \r\n    return result\r\n");
+    keys(&mut app, "<S-right>").await?;
+    assert_eq!(
+        text(&app),
+        "def f(x):\r\n    result = x + 1\r\n    result *= 2\r\n    return result\r\n"
+    );
+    keys(&mut app, "<esc>u").await?;
+    assert_eq!(text(&app), "def f(x):\r\n    \r\n    return result\r\n");
+    server.await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_typing_cancels_a_pending_prediction() -> anyhow::Result<()> {
+    let (endpoint, mut requests, server) = model_server(250, vec!["    return sum(items)"]).await;
+    let mut config = model_config(endpoint);
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.predict_next = true;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("sample.py");
+    std::fs::write(&path, "")?;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(path, None)
+        .with_input_text("def total(items):\n   #[|\n]#")
+        .build()?;
+    keys(&mut app, "i<space>").await?;
+    tokio::time::timeout(std::time::Duration::from_secs(3), requests.recv())
+        .await?
+        .unwrap();
+    keys(&mut app, "x").await?;
+    server.await?;
+    idle(&mut app).await;
+    assert!(current_ref!(app.editor).1.ai_completion.is_none());
+    assert_eq!(text(&app), "def total(items):\n    x\n");
+    app.close().await;
+    Ok(())
+}
+
+async fn check_live_prediction(
+    name: &str,
+    input: &str,
+    checks: &str,
+    multiline: bool,
+) -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("sample.py");
+    std::fs::write(&path, "")?;
+    let mut config = model_config(std::env::var("HELIX_TEST_AI_ENDPOINT")?);
+    config.editor.ai_completion.model = std::env::var("HELIX_TEST_AI_MODEL")?;
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.predict_next = true;
+    config.editor.ai_completion.prompt_mode = AiCompletionPromptMode::Gap;
+    config.editor.ai_completion.timeout_ms = 15000;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(path.clone(), None)
+        .with_input_text(input)
+        .build()?;
+    keys(&mut app, "i<space>").await?;
+    wait_for_preview(&mut app).await;
+    let before = text(&app);
+    let preview = current_ref!(app.editor)
+        .1
+        .ai_completion
+        .as_ref()
+        .unwrap()
+        .annotation
+        .text
+        .to_string();
+    println!("{name} prediction: {preview:?}");
+    assert_eq!(text(&app), before);
+    if multiline {
+        assert!(preview.lines().count() > 1, "expected a loop block");
+    }
+    keys(&mut app, "<S-right>").await?;
+    let accepted = text(&app);
+    std::fs::write(&path, format!("{accepted}\n{checks}"))?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::process::Command::new("python")
+            .arg("-I")
+            .arg(&path)
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await??;
+    assert!(
+        output.status.success(),
+        "{name}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    keys(&mut app, "<esc>u").await?;
+    assert_eq!(text(&app), before);
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "requires HELIX_TEST_AI_ENDPOINT and HELIX_TEST_AI_MODEL"]
+async fn ai_completion_live_next_line_prediction() -> anyhow::Result<()> {
+    check_live_prediction(
+        "next line",
+        "def total(items):\n    \"\"\"Return the sum of every item.\"\"\"\n   #[|\n]#",
+        "assert total([1,2,3]) == 6\nassert total([]) == 0\nassert total([-4,2]) == -2\n",
+        false,
+    )
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "requires HELIX_TEST_AI_ENDPOINT and HELIX_TEST_AI_MODEL"]
+async fn ai_completion_live_next_block_prediction() -> anyhow::Result<()> {
+    check_live_prediction("short block", "def positives(values):\n    result = []\n    # Use an explicit for loop to append strictly positive values to result, then return result.\n   #[|\n]#", "assert positives([-2,0,3,1]) == [3,1]\nassert positives([]) == []\nassert positives([-1]) == []\n", true).await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_conservative_blank_line_does_not_send_a_request() -> anyhow::Result<()> {
+    let (endpoint, mut started, server) = model_server(0, vec!["unwanted()"]).await;
+    let mut config = model_config(endpoint);
+    config.editor.ai_completion.conservative = true;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("#[|\n]#")
+        .build()?;
+    keys(&mut app, "i<space>").await?;
+    idle(&mut app).await;
+    assert!(started.try_recv().is_err());
+    assert!(current_ref!(app.editor).1.ai_completion.is_none());
+    assert_eq!(text(&app), " \n");
+    server.abort();
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_conservative_short_preview_accepts_and_undoes() -> anyhow::Result<()> {
+    let (endpoint, _, server) = model_server(0, vec!["total = sum(items)"]).await;
+    let mut config = model_config(endpoint);
+    config.editor.ai_completion.conservative = true;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("    total =#[|\n]#")
+        .build()?;
+    keys(&mut app, "i<space>").await?;
+    wait_for_preview(&mut app).await;
+    assert_eq!(text(&app), "    total = \n");
+    assert_eq!(
+        current_ref!(app.editor)
+            .1
+            .ai_completion
+            .as_ref()
+            .unwrap()
+            .annotation
+            .text
+            .as_str(),
+        "sum(items)"
+    );
+    keys(&mut app, "<S-right>").await?;
+    assert_eq!(text(&app), "    total = sum(items)\n");
+    keys(&mut app, "<esc>u").await?;
+    assert_eq!(text(&app), "    total = \n");
+    server.await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_gap_accepts_only_the_missing_expression() -> anyhow::Result<()> {
+    let (endpoint, _, server) = model_server(0, vec!["sum(items)"]).await;
+    let mut config = model_config(endpoint);
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.prompt_mode = AiCompletionPromptMode::Gap;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("    total =#[|\n]#")
+        .build()?;
+    keys(&mut app, "i<space>").await?;
+    wait_for_preview(&mut app).await;
+    assert_eq!(text(&app), "    total = \n");
+    keys(&mut app, "<S-right>").await?;
+    assert_eq!(text(&app), "    total = sum(items)\n");
+    keys(&mut app, "<esc>u").await?;
+    assert_eq!(text(&app), "    total = \n");
+    server.await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_completion_recovers_distant_parameters_and_import_aliases() -> anyhow::Result<()> {
+    let (endpoint, mut requests, server) =
+        model_server(0, vec!["    return FilePath(base) / \"config.json\""]).await;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("sample.py");
+    std::fs::write(&path, "")?;
+    let input = format!(
+        "from pathlib import Path as FilePath\n\ndef config_path(base: str):\n    \"\"\"Return base / config.json without accessing the filesystem.\"\"\"\n{}    return#[|\n]#",
+        "    # Input has already been validated.\n".repeat(100)
+    );
+    let mut config = model_config(endpoint);
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.prefix_chars = 1500;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(path, None)
+        .with_input_text(input)
+        .build()?;
+    keys(&mut app, "i<space>").await?;
+    wait_for_preview(&mut app).await;
+    let request = requests.recv().await.unwrap();
+    let prompt = request["messages"][1]["content"].as_str().unwrap();
+    assert!(
+        prompt.contains("def config_path(base: str):"),
+        "enclosing parameters were omitted"
+    );
+    assert!(
+        prompt.contains("from pathlib import Path as FilePath"),
+        "import alias was omitted"
+    );
+    assert!(prompt.contains("    return <CURSOR>"));
+    assert!(prompt.contains("without accessing the filesystem"));
+    server.await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "requires clangd available on PATH"]
+async fn ai_completion_live_clangd_grounded_member() -> anyhow::Result<()> {
+    let (endpoint, mut requests, server) =
+        model_server(0, vec!["    switch (packet.category_code) {"]).await;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("packet.cpp");
+    std::fs::write(&path, "")?;
+    let input = format!("struct Packet {{ unsigned category_code; unsigned payload_size; }};\nchar classify(const Packet& packet) {{\n{}    // Classify using the packet category code.\n    switch (packet#[|)]# {{\n    case 1: return 'A';\n    default: return 'B';\n    }}\n}}\n", "    // Input has already been validated.\n".repeat(100));
+    let mut config = model_config(endpoint);
+    config.editor.lsp.enable = true;
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.prompt_mode = AiCompletionPromptMode::Line;
+    config.editor.ai_completion.prefix_chars = 3000;
+    config.editor.ai_completion.debounce_ms = 350;
+    config.editor.ai_completion.timeout_ms = 15000;
+    config.editor.ai_completion.max_tokens = 48;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(path, None)
+        .with_input_text(input)
+        .build()?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    while current_ref!(app.editor)
+        .1
+        .language_servers()
+        .next()
+        .is_none()
+    {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "clangd did not initialize"
+        );
+        idle(&mut app).await;
+    }
+    keys(&mut app, "i.").await?;
+    wait_for_preview(&mut app).await;
+    let request = requests.recv().await.unwrap();
+    let prompt = request["messages"].as_array().unwrap().last().unwrap()["content"]
+        .as_str()
+        .unwrap();
+    assert!(
+        prompt.contains("Language server member candidate"),
+        "LSP metadata was omitted: {prompt}"
+    );
+    assert!(
+        prompt.contains("payload_size"),
+        "the actual clangd field list was not sent"
+    );
+    let suggestion = current_ref!(app.editor)
+        .1
+        .ai_completion
+        .as_ref()
+        .unwrap()
+        .annotation
+        .text
+        .to_string();
+    assert_eq!(suggestion, "category_code");
+    keys(&mut app, "<S-right>").await?;
+    assert!(text(&app).contains("switch (packet.category_code) {"));
+    println!("Actual clangd member metadata reached the AI prompt; preview: {suggestion}");
     server.await?;
     app.close().await;
     Ok(())
@@ -566,7 +953,10 @@ async fn ai_completion_live_managed_local_model() -> anyhow::Result<()> {
         Some(std::env::var("HELIX_TEST_AI_MODEL_PATH")?.into());
     config.editor.ai_completion.server_path = std::env::var("HELIX_TEST_AI_SERVER_PATH")?.into();
     config.editor.ai_completion.model = "helix-managed-test-model".into();
-    config.editor.ai_completion.prompt_mode = AiCompletionPromptMode::Line;
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.prompt_mode = serde_json::from_value(serde_json::json!(
+        std::env::var("HELIX_TEST_AI_PROMPT_MODE").unwrap_or_else(|_| "line".into())
+    ))?;
     config.editor.ai_completion.timeout_ms = 15000;
     config.editor.ai_completion.max_tokens = 48;
     let mut app = AppBuilder::new()
@@ -590,6 +980,7 @@ async fn ai_completion_live_managed_local_model() -> anyhow::Result<()> {
         format!("items = [1, 2, 3]\ntotal = {suggestion}\n")
     );
     println!("Managed local model preview and acceptance: {suggestion:?}");
+    assert_eq!(suggestion, "sum(items)");
 
     let mut editor_config = (*app.editor.config()).clone();
     editor_config.ai_completion.enabled = false;

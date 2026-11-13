@@ -14,12 +14,16 @@ following to `%APPDATA%\helix\config.toml`, then launch this checkout's rebuilt
 ```toml
 [editor.ai-completion]
 enabled = true
-model = "Qwen2.5-Coder-7B-Instruct-Q6_K"
-model-path = '${USERPROFILE}\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf'
+model = "Qwen3.5-9B-Q6_K"
+conservative = true
+predict-next = true
+prediction-lines = 6
+prediction-tokens = 192
+model-path = '${USERPROFILE}\.local\share\junie-local\models\Qwen3.5-9B-Q6_K.gguf'
 server-path = '${USERPROFILE}\.local\share\junie-local\versions\0.3.5\runtime\llama.cpp-b11081\llama-server.exe'
 endpoint = "http://127.0.0.1:19240/v1/chat/completions"
-prompt-mode = "line"
-debounce-ms = 200
+prompt-mode = "gap"
+debounce-ms = 350
 timeout-ms = 5000
 max-tokens = 48
 prefix-chars = 3000
@@ -40,6 +44,19 @@ Adjust `server-path` if Junie is upgraded. The executable can also be omitted
 when `llama-server` is on PATH. No PowerShell startup command is needed.
 
 Logs are under `%LOCALAPPDATA%\helix\ai-completion\server-PID-PORT.log`.
+With conservative mode enabled, missing function signatures/imports and connected
+language-server member labels can support the model's predictions. Distant Python
+function docstrings and directly attached declaration comments also preserve the
+function's intended behavior. They share
+the existing prefix budget. Member metadata waits at most 200ms and falls back
+when unavailable; keep clangd or your language's normal completion server enabled
+to benefit from actual member names. No extra model setup is needed.
+With `prompt-mode = "gap"`, ordinary expressions request only the missing fragment;
+authoritative member lists use strict current-line prompting and name validation.
+With `predict-next = true`, block openers and useful indented blank lines can also
+produce a next line or a short block. Keep using Shift+Right to accept the entire
+gray preview; undo reverses that insertion. Typing/moving cancels it. Predictions
+have separate line/token limits; truncated or malformed blocks are discarded.
 External servers with the requested alias are reused and left running; another
 model occupying the port is reported instead. The standalone launcher below is
 an alternative for externally managed servers; do not use its default Q5 model

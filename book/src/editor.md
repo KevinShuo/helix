@@ -666,9 +666,29 @@ Accepting an AI suggestion closes an open completion menu without accepting its
 candidate. Selecting a menu candidate dismisses the AI preview. With no AI
 suggestion, `Shift-Right` inserts nothing and cancels any menu preview.
 
+Set `predict-next = true` to also predict a next line or a short coherent block
+after a block opener or on an indented blank line with useful preceding context.
+Predictions appear automatically after the same debounce; `Shift-Right` accepts
+the whole preview as one undo step. Typing or moving discards pending predictions.
+Empty files and ambiguous top-level blank lines do not trigger block predictions.
+The separate `prediction-lines` and `prediction-tokens` limits leave ordinary
+partial-line completion limits unchanged. Overlong/truncated blocks are rejected
+whole. Existing code after the cursor and document line endings are preserved.
+
+Conservative suggestions also receive a bounded background syntax check when a
+grammar is available and the document is at most 128 KiB. An ordinary suggestion
+cannot turn previously valid syntax into a parse error; next-line/block predictions
+must parse without errors. The check includes affected embedded language layers.
+Unavailable/oversized syntax checks fall back to output heuristics. It cannot
+establish type or semantic correctness, and may hide useful incomplete blocks.
+
 | Key | Description | Default |
 | --- | --- | --- |
 | `enabled` | Enable automatic AI suggestions | `false` |
+| `conservative` | Prefer short current-line suggestions and suppress weak contexts and overlong responses; see below | `false` |
+| `predict-next` | Automatically predict the next line or a short block at a block opener or an indented blank line with usable context | `false` |
+| `prediction-lines` | Maximum lines in one prediction; clamped to 1–12, overlong responses are rejected whole | `6` |
+| `prediction-tokens` | Separate output token limit for next-line/block prediction, clamped to 1–256 | `192` |
 | `endpoint` | Full HTTP(S) chat completions URL | `"http://127.0.0.1:19239/v1/chat/completions"` |
 | `model` | Model name sent to the server | `"Qwen3.8-27B-UD-Q5_K_M"` |
 | `model-path` | Optional local GGUF file; when set, Helix starts and manages llama.cpp | unset |
@@ -676,7 +696,7 @@ suggestion, `Shift-Right` inserts nothing and cancels any menu preview.
 | `context-size` | Local server context in tokens, clamped to 512–131072 | `4096` |
 | `gpu-layers` | Local server GPU layers, capped at 999; use `0` for CPU inference | `99` |
 | `startup-timeout-ms` | Local model loading timeout, clamped to 100–600000 ms | `120000` |
-| `prompt-mode` | `insertion` requests missing code directly; `line` requests a complete current line and extracts only the missing part, rejecting responses that change the typed prefix or omit the existing line suffix | `"insertion"` |
+| `prompt-mode` | `insertion` requests missing code directly; `line` requests a complete current line; `gap` requests a short missing fragment with format examples and echo/boundary checks | `"insertion"` |
 | `api-key-env` | Optional environment variable containing the bearer token | unset |
 | `debounce-ms` | Pause after editing before a request, capped at 5000 ms | `350` |
 | `timeout-ms` | Request timeout, clamped to 100–120000 ms | `5000` |
@@ -700,12 +720,16 @@ preserve backslashes):
 ```toml
 [editor.ai-completion]
 enabled = true
-model = "Qwen2.5-Coder-7B-Instruct-Q6_K"
-model-path = '${USERPROFILE}\.local\share\junie-local\models\Qwen2.5-Coder-7B-Instruct-Q6_K.gguf'
+model = "Qwen3.5-9B-Q6_K"
+conservative = true
+predict-next = true
+prediction-lines = 6
+prediction-tokens = 192
+model-path = '${USERPROFILE}\.local\share\junie-local\models\Qwen3.5-9B-Q6_K.gguf'
 server-path = '${USERPROFILE}\.local\share\junie-local\versions\0.3.5\runtime\llama.cpp-b11081\llama-server.exe'
 endpoint = "http://127.0.0.1:19240/v1/chat/completions"
-prompt-mode = "line"
-debounce-ms = 200
+prompt-mode = "gap"
+debounce-ms = 350
 timeout-ms = 5000
 max-tokens = 48
 prefix-chars = 3000
@@ -735,8 +759,10 @@ owned server; unrelated editor settings do not. Exiting also stops the owned
 server. Reused external servers remain running. With no `model-path`, the
 existing external HTTP endpoint behavior is preserved.
 
-Only the filename, language and bounded text around the cursor are sent to the
-configured endpoint. Requests disable thinking, use no tools, ignore HTTP proxy
+Requests send the filename, language and bounded text around the cursor to the
+configured endpoint; conservative mode can also include the supporting declarations
+and language-server member metadata described below. Requests disable thinking,
+use no tools, ignore HTTP proxy
 settings and redirects, and stop when the edit context changes. Connection errors
 silently leave regular editing available; debug logs contain a short error, not
 credentials or model response bodies. Choose context limits that fit your model.
@@ -748,6 +774,50 @@ asked for an insertion. It suggests at most the remainder of the current line;
 the default `insertion` mode supports multiline suggestions. Line mode preserves
 the exact text already typed and leaves text to the right of the cursor in place.
 These boundary checks do not verify the suggested code's logic.
+
+In conservative mode, Helix also recovers missing enclosing declarations,
+Python function docstrings, directly attached declaration comments and imports
+from the current file's syntax tree. Unrelated comments, oversized documentation
+and documentation already within the nearby prefix are omitted.
+For member access (`.`, `->`, `::`,
+including partly typed names), it asks the first connected completion language
+server for available members after debounce. It waits up to 200ms, cancels with
+the edit, and falls back if metadata is unavailable. Only bounded labels/type
+details are included; completion snippets, commands and edits are not used.
+No additional project files are opened. These source/LSP notes replace older
+prefix text within `prefix-chars`, with caps of 600 characters each and 1200
+combined; the exact typed current line takes priority. A usable complete small
+member list can reject an invented first member name. Incomplete/large/unfamiliar
+lists are hints only, and the model can still make incorrect logic/argument choices.
+
+For fewer speculative suggestions, set `conservative = true`. This uses current-
+line prompting for `insertion`/`line`, or the explicitly selected `gap` strategy.
+Gap requests also use current-line prompting when authoritative language-server
+member names are available, while retaining member-name validation. Both strategies
+ask the model to abstain when context is ambiguous; gap prompts prioritize the
+surrounding function's behavior and edge cases. Conservative mode skips
+blank/comment-only lines, single bare identifier characters, punctuation-only
+lines and lines ending in a statement/block terminator. C++ namespace access
+ending in `::` remains eligible. Comment detection covers leading `//` and leading
+`#` in Python, shell, Ruby, PowerShell, TOML and YAML.
+It also skips an expression ending directly at the cursor before an existing
+semicolon, reducing unwanted extensions of code such as `return value;`.
+Consequently some partial identifiers at that boundary will receive no suggestion.
+Python block-header colons suppress requests; lambda, slice and dictionary colons
+remain eligible. Gap mode rejects repeated typed prefixes/partial words, extra
+lines and unbalanced fragments, so it can omit valid complex continuations.
+Line mode tolerates omitted leading indentation when all typed code matches.
+The recommended profile uses a downloaded [Qwen3.5-9B Q6_K](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF).
+The repository includes an executable evaluation recipe in `contrib/ai-completion-eval.md`.
+
+Conservative responses use temperature zero and at most 64 output tokens (or
+your smaller `max-tokens` value). Truncated responses, extra nonblank lines,
+insertions longer than 160 characters and extra statements after an unquoted
+top-level semicolon are discarded. These are conservative heuristics and may
+hide useful suggestions; they do not establish semantic correctness or measure
+model confidence. Set `conservative = false` to restore the existing prompting
+and multiline behavior. A `debounce-ms` of 350 also gives you more time to type
+before a request begins.
 
 The theme scope is `ui.virtual.ai-completion`, with a grey fallback. To remap
 acceptance if your terminal does not transmit `Shift-Right`:

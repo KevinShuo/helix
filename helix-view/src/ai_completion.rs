@@ -26,6 +26,10 @@ pub fn completion_cursor(doc: &Document, view: ViewId) -> Option<usize> {
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct AiCompletionConfig {
     pub enabled: bool,
+    pub conservative: bool,
+    pub predict_next: bool,
+    pub prediction_lines: u32,
+    pub prediction_tokens: u32,
     pub endpoint: String,
     pub model: String,
     pub model_path: Option<PathBuf>,
@@ -48,12 +52,17 @@ pub enum AiCompletionPromptMode {
     #[default]
     Insertion,
     Line,
+    Gap,
 }
 
 impl Default for AiCompletionConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            conservative: false,
+            predict_next: false,
+            prediction_lines: 6,
+            prediction_tokens: 192,
             endpoint: "http://127.0.0.1:19239/v1/chat/completions".into(),
             model: "Qwen3.8-27B-UD-Q5_K_M".into(),
             model_path: None,

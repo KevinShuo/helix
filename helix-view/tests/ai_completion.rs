@@ -1,6 +1,50 @@
 use helix_view::{ai_completion::AiCompletionPromptMode, editor::Config};
 
 #[test]
+fn ai_completion_next_prediction_is_opt_in_with_separate_limits() {
+    let config: Config = toml::from_str(
+        "[ai-completion]\nenabled = true\nconservative = true\npredict-next = true\nprediction-lines = 4\nprediction-tokens = 160\nmax-tokens = 48\n",
+    ).expect("bounded next-line prediction must be configurable");
+    let settings = toml::Value::try_from(&config.ai_completion).unwrap();
+    assert_eq!(settings["predict-next"].as_bool(), Some(true));
+    assert_eq!(settings["prediction-lines"].as_integer(), Some(4));
+    assert_eq!(settings["prediction-tokens"].as_integer(), Some(160));
+    assert_eq!(settings["max-tokens"].as_integer(), Some(48));
+    let defaults = toml::Value::try_from(&Config::default().ai_completion).unwrap();
+    assert_eq!(defaults["predict-next"].as_bool(), Some(false));
+}
+
+#[test]
+fn ai_completion_accepts_explicit_gap_mode() {
+    let config: Config = toml::from_str(
+        "[ai-completion]\nenabled = true\nconservative = true\nprompt-mode = 'gap'\n",
+    )
+    .expect("gap mode must be an explicit supported configuration");
+    assert_eq!(
+        toml::Value::try_from(config.ai_completion).unwrap()["prompt-mode"].as_str(),
+        Some("gap")
+    );
+}
+
+#[test]
+fn ai_completion_conservative_mode_is_opt_in() {
+    let config: Config = toml::from_str(
+        r#"
+[ai-completion]
+enabled = true
+conservative = true
+prompt-mode = "line"
+"#,
+    )
+    .expect("conservative completion must be configurable");
+    let settings = toml::Value::try_from(&config.ai_completion).unwrap();
+    assert_eq!(settings["conservative"].as_bool(), Some(true));
+    let defaults = toml::Value::try_from(&Config::default().ai_completion).unwrap();
+    assert_eq!(defaults["conservative"].as_bool(), Some(false));
+    assert!(config.auto_completion);
+}
+
+#[test]
 fn ai_completion_configuration_keeps_regular_completion_enabled() {
     let config: Config = toml::from_str(
         r#"
