@@ -4,6 +4,7 @@
 - [`[editor.clipboard-provider]` Section](#editorclipboard-provider-section)
 - [`[editor.statusline]` Section](#editorstatusline-section)
 - [`[editor.lsp]` Section](#editorlsp-section)
+- [`[editor.ai-doc]` Section](#editorai-doc-section)
 - [`[editor.function-hints]` Section](#editorfunction-hints-section)
 - [`[editor.minimap]` Section](#editorminimap-section)
 - [`[editor.cursor-shape]` Section](#editorcursor-shape-section)
@@ -878,3 +879,65 @@ level = "servers"
 # under a matching path. `~` and environment variables are expanded.
 trusted = ["~/src/github.com/me/*"]
 ```
+
+
+### `[editor.ai-doc]` Section
+
+Generate Chinese reStructuredText documentation for the function at the cursor
+with `:ai-doc`. Supports C/C++ definitions and multiline Python functions,
+including methods, async functions, decorators and templates. Enable explicitly:
+
+```toml
+[editor.ai-doc]
+enabled = true
+language = "zh-CN"
+style = "rest"
+timeout-ms = 30000
+max-tokens = 768
+```
+
+The model connection and local server settings come from `[editor.ai-completion]`.
+Its `enabled` flag controls automatic completion only: `ai-doc` can use the same
+model with automatic completion disabled. Enabling either feature uses the one
+configured local model process. No model is downloaded or changed automatically.
+
+| Key | Description | Default |
+| --- | --- | --- |
+| `enabled` | Allow explicit documentation requests | `false` |
+| `language` | Description language: `zh-CN` or `en` | `"zh-CN"` |
+| `style` | Documentation style; currently only `rest` | `"rest"` |
+| `timeout-ms` | Generation timeout; model startup has its separate existing timeout | `30000` |
+| `max-tokens` | Output budget, bounded to 128–4096 tokens | `768` |
+
+Move into a function and run `:ai-doc`. The preview shows the exact insertion;
+Enter accepts, Escape/Ctrl-C cancels, `r` regenerates, and arrows/`j`/`k` or
+PageUp/PageDown scroll. Other editing keys do not reach the document. Before the
+preview appears, use `:ai-doc-cancel` to cancel an in-flight request. `u` undoes
+the whole insertion and `U` redoes the accepted text without another request.
+The command does not save the file. A custom normal-mode binding is optional:
+
+```toml
+[keys.normal.space]
+D = ":ai-doc"
+```
+
+The request uses the complete current function, including unsaved changes, and
+bounded declarations from the same buffer. It does not read other project files
+or execute model output. A function exceeding the model context budget is
+rejected rather than silently truncated. Generated descriptions still need review.
+Moving the cursor while generating preserves the original target; editing the
+buffer, changing views/buffers or configuration invalidates the request. A result
+waits while another prompt/picker is active. Automatic AI suggestions pause until
+the operation ends; ordinary completion settings remain independent.
+
+Python receives a first-statement docstring with `:param:`, source-derived
+`:type:`/`:rtype:`, `:returns:` and justified `:raises:` fields. C/C++ receives a
+`/* ... */` comment containing reST fields; C++ uses `:tparam:` and `:throws:`.
+C/C++ documentation extraction depends on your documentation tool configuration;
+this feature does not set up a Sphinx pipeline.
+
+Existing Python docstrings or adjacent C/C++ comments are left in place and the
+request is skipped. Initial limitations include declarations without bodies,
+macro-generated functions, anonymous lambdas, unnamed C/C++ parameters, single-line
+Python bodies, and functions sharing a line with other code. Multi-cursor,
+active snippets and macro recording/replay are unsupported.

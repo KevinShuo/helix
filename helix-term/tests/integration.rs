@@ -16,6 +16,7 @@ mod test {
     }
 
     mod ai_completion;
+    mod ai_doc;
     mod auto_pairs;
     mod command_line;
     mod commands;

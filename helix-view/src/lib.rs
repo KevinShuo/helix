@@ -3,6 +3,7 @@ pub mod macros;
 
 pub mod action;
 pub mod ai_completion;
+pub mod ai_doc;
 pub mod annotations;
 pub mod clipboard;
 pub mod document;

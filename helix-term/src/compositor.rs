@@ -40,6 +40,11 @@ impl Context<'_> {
 }
 
 pub trait Component: Any + AnyComponent {
+    /// A dock may remain visible while yielding keyboard interaction to the editor.
+    fn takes_keyboard_input(&self) -> bool {
+        true
+    }
+
     fn editor_area(&self, area: Rect) -> Rect {
         area
     }
@@ -235,6 +240,16 @@ impl Compositor {
 
     pub fn need_full_redraw(&mut self) {
         self.full_redraw = true;
+    }
+
+    pub(crate) fn editor_has_focus(&self) -> bool {
+        self.layers
+            .iter()
+            .rev()
+            .find(|layer| layer.takes_keyboard_input())
+            .is_some_and(|layer| {
+                layer.type_name() == std::any::type_name::<crate::ui::EditorView>()
+            })
     }
 
     pub fn layer_count(&self) -> usize {

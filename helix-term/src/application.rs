@@ -260,8 +260,9 @@ impl Application {
         ])
         .context("build signal handler")?;
 
-        let ai_completion_server =
-            handlers::ai_completion::server::LocalServer::new(&config.load().editor.ai_completion);
+        let ai_completion_server = handlers::ai_completion::server::LocalServer::new(
+            &config.load().editor.ai_model_config(),
+        );
         let app = Self {
             compositor,
             terminal,
@@ -278,6 +279,7 @@ impl Application {
     }
 
     async fn render(&mut self) {
+        handlers::ai_doc::refresh(&mut self.editor, &mut self.compositor);
         if self.compositor.full_redraw {
             self.terminal.clear().expect("Cannot clear the terminal");
             self.compositor.full_redraw = false;
@@ -426,7 +428,7 @@ impl Application {
         // the configuration.
         self.editor.refresh_config(&old_editor_config);
         self.ai_completion_server
-            .configure(&self.editor.config().ai_completion);
+            .configure(&self.editor.config().ai_model_config());
 
         // reset view position in case softwrap was enabled/disabled
         let scrolloff = self.editor.config().scrolloff;

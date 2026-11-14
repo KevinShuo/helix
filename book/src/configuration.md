@@ -40,6 +40,9 @@ Local-model inline suggestions can be enabled with
 [`[editor.ai-completion]`](./editor.md#editorai-completion-section).
 They appear as grey text and are accepted in full with `Shift-Right` in insert mode.
 
+On-demand Chinese reST function documentation can be enabled with
+[`[editor.ai-doc]`](./editor.md#editorai-doc-section), then requested with `:ai-doc`.
+
 Function reference counts and Git authors can be enabled independently in
 [`[editor.function-hints]`](./editor.md#editorfunction-hints-section).
 

@@ -1,8 +1,6 @@
-use anyhow::{bail, Context as _};
 use helix_view::ai_completion::{AiCompletionConfig, AiCompletionPromptMode};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::borrow::Cow;
-use std::time::Duration;
 
 #[derive(Debug)]
 pub(super) struct CompletionContext {
@@ -95,18 +93,6 @@ pub(super) async fn complete(
     if !should_request(config, context) {
         return Ok(None);
     }
-    let url = reqwest::Url::parse(&config.endpoint).context("Invalid AI endpoint")?;
-    if !matches!(url.scheme(), "http" | "https")
-        || !url.username().is_empty()
-        || url.password().is_some()
-    {
-        bail!("AI endpoint must be an HTTP(S) URL without embedded credentials");
-    }
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .context("Could not create AI client")?;
     let prompt_mode = if config.conservative
         && (config.prompt_mode != AiCompletionPromptMode::Gap || context.members.is_some())
     {
@@ -182,46 +168,7 @@ pub(super) async fn complete(
         "enable_thinking": false,
         "chat_template_kwargs": {"enable_thinking": false}
     });
-    let mut request = client
-        .post(url)
-        .json(&body)
-        .timeout(Duration::from_millis(config.timeout_ms.clamp(100, 120_000)));
-    if let Some(name) = config.api_key_env.as_deref().filter(|s| !s.is_empty()) {
-        let token = std::env::var(name)
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .context("AI API key environment variable is unset or empty")?;
-        request = request.bearer_auth(token);
-    }
-    let mut response = request.send().await.map_err(|err| {
-        if err.is_timeout() {
-            anyhow::anyhow!("AI request timed out")
-        } else {
-            anyhow::anyhow!("Could not connect to AI endpoint")
-        }
-    })?;
-    if !response.status().is_success() {
-        bail!("AI endpoint returned HTTP {}", response.status().as_u16());
-    }
-    const MAX_RESPONSE: usize = 262_144;
-    if response
-        .content_length()
-        .is_some_and(|n| n > MAX_RESPONSE as u64)
-    {
-        bail!("AI response exceeded size limit");
-    }
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| anyhow::anyhow!("Could not read AI response"))?
-    {
-        if bytes.len() + chunk.len() > MAX_RESPONSE {
-            bail!("AI response exceeded size limit");
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    let response: Value = serde_json::from_slice(&bytes).context("Invalid AI response JSON")?;
+    let response = crate::handlers::ai::post(config, &body, config.timeout_ms).await?;
     let choice = &response["choices"][0];
     if (predicting && choice["finish_reason"].as_str() != Some("stop"))
         || (config.conservative
@@ -543,7 +490,8 @@ fn clean_completion(content: &str, suffix: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::json;
+    use serde_json::Value;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,

@@ -3052,7 +3052,27 @@ const WRITE_NO_CODE_ACTIONS_FLAG: Flag = Flag {
     ..Flag::DEFAULT
 };
 
+fn ai_doc(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_doc::start(cx.editor)?;
+    }
+    Ok(())
+}
+fn ai_doc_cancel(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_doc::cancel(cx.editor);
+        cx.editor.set_status("已取消 AI 注释生成");
+    }
+    Ok(())
+}
+
 pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
+    TypableCommand { name: "ai-doc", aliases: &[], doc: "Generate a reST doc comment for the function at the cursor", fun: ai_doc, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-doc-cancel", aliases: &[], doc: "Cancel AI function documentation", fun: ai_doc_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand {
         name: "exit",
         aliases: &["x", "xit"],

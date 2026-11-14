@@ -31,7 +31,8 @@ pub fn clear(editor: &mut Editor) {
 pub fn trigger(editor: &mut Editor) {
     clear(editor);
     let config = editor.config().ai_completion.clone();
-    if !config.enabled
+    if editor.ai_doc.as_ref().is_some_and(|op| op.is_valid(editor))
+        || !config.enabled
         || editor.mode() != Mode::Insert
         || !editor.macro_replaying.is_empty()
         || matches!(
@@ -151,7 +152,9 @@ pub fn trigger(editor: &mut Editor) {
                     context.members = members.names;
                 }
             }
-            server::wait_ready(&config).await?;
+            let mut model = config.clone();
+            model.enabled = true;
+            server::wait_ready(&model).await?;
             let Some(text) = client::complete(&config, &context).await? else {
                 return Ok(None);
             };

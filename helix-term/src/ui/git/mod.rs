@@ -787,6 +787,10 @@ impl GitPanel {
 }
 
 impl Component for GitPanel {
+    fn takes_keyboard_input(&self) -> bool {
+        self.focused
+    }
+
     fn id(&self) -> Option<&'static str> {
         Some(ID)
     }

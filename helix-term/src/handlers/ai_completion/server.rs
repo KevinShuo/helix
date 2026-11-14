@@ -89,7 +89,7 @@ fn same_server(a: &AiCompletionConfig, b: &AiCompletionConfig) -> bool {
         && a.startup_timeout_ms == b.startup_timeout_ms
 }
 
-pub(super) async fn wait_ready(config: &AiCompletionConfig) -> anyhow::Result<()> {
+pub(crate) async fn wait_ready(config: &AiCompletionConfig) -> anyhow::Result<()> {
     if config.model_path.is_none() {
         return Ok(());
     }

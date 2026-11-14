@@ -15,7 +15,9 @@ pub use helix_view::handlers::{word_index, Handlers};
 use self::document_colors::DocumentColorsHandler;
 use self::document_links::DocumentLinksHandler;
 
+pub(crate) mod ai;
 pub mod ai_completion;
+pub(crate) mod ai_doc;
 mod auto_save;
 mod code_action_hint;
 pub mod completion;
@@ -59,6 +61,7 @@ pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
     helix_view::handlers::register_hooks(&handlers);
     completion::register_hooks(&handlers);
     ai_completion::register_hooks();
+    ai_doc::register_hooks();
     function_hints::register_hooks();
     git_conflicts::register_hooks();
     minimap::register_hooks();

@@ -20,6 +20,11 @@ No file or directory is created until you save. Use `:w` to save, or `:w!` if
 the path requires new parent directories. Escape cancels the prompt. The `:new`
 command continues to create an unnamed scratch buffer.
 
+Use `:ai-doc` to preview reST documentation for the function at the cursor,
+then Enter to insert or Escape to cancel. `:ai-doc-cancel` cancels a pending
+request. Requires `[editor.ai-doc] enabled = true`; see
+[AI documentation configuration](./editor.md#editorai-doc-section).
+
 ## Static Commands
 
 Static commands take no arguments and can be bound to keys. Static commands can also be executed from the command picker (`<space>?`). The built-in static commands are:

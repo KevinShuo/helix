@@ -1,5 +1,7 @@
 | Name | Description |
 | --- | --- |
+| `:ai-doc` | Generate a reST doc comment for the function at the cursor |
+| `:ai-doc-cancel` | Cancel AI function documentation |
 | `:exit`, `:x`, `:xit` | Write changes to disk if the buffer is modified and then quit. Accepts an optional path (:exit some/path.txt). |
 | `:exit!`, `:x!`, `:xit!` | Force write changes to disk, creating necessary subdirectories, if the buffer is modified and then quit. Accepts an optional path (:exit! some/path.txt). |
 | `:quit`, `:q` | Close the current view. |
