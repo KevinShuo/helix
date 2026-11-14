@@ -427,15 +427,48 @@ async fn test_write_scratch_no_path_fails() -> anyhow::Result<()> {
     Ok(())
 }
 
+// Use an actual formatter process without depending on Bash/WSL or shell quoting.
+// The input marker distinguishes a formatter error from failure to launch it.
+fn formatter_fixture(fail: bool) -> anyhow::Result<(tempfile::TempDir, String)> {
+    let dir = tempfile::Builder::new()
+        .prefix("helix formatter ")
+        .tempdir()?;
+    let executable = dir
+        .path()
+        .join(format!("formatter{}", std::env::consts::EXE_SUFFIX));
+    let source =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/write_formatter.rs");
+    let mut compiler =
+        std::process::Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()));
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        compiler.creation_flags(0x08000000);
+    }
+    let output = compiler
+        .arg("--edition=2021")
+        .arg(source)
+        .arg("-o")
+        .arg(&executable)
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let config = format!(
+        "[[language]]\nname = \"rust\"\nformatter = {{ command = {}, args = [{}, {}] }}\n",
+        serde_json::to_string(&executable)?,
+        serde_json::to_string(&dir.path().join("input.txt"))?,
+        if fail { "\"fail\"" } else { "\"success\"" },
+    );
+    Ok((dir, config))
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_write_auto_format_fails_still_writes() -> anyhow::Result<()> {
     let mut file = tempfile::Builder::new().suffix(".rs").tempfile()?;
-
-    let lang_conf = indoc! {r#"
-            [[language]]
-            name = "rust"
-            formatter = { command = "bash", args = [ "-c", "exit 1" ] }
-        "#};
+    let (fixture, lang_conf) = formatter_fixture(true)?;
 
     let mut app = helpers::AppBuilder::new()
         .with_file(file.path(), None)
@@ -447,6 +480,10 @@ async fn test_write_auto_format_fails_still_writes() -> anyhow::Result<()> {
 
     // file still saves
     helpers::assert_file_has_content(&mut file, "let foo = 0;\n")?;
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("input.txt"))?,
+        "let foo = 0;\n"
+    );
 
     Ok(())
 }
@@ -454,12 +491,7 @@ async fn test_write_auto_format_fails_still_writes() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_write_quit_auto_format_exits_after_format() -> anyhow::Result<()> {
     let mut file = tempfile::Builder::new().suffix(".rs").tempfile()?;
-
-    let lang_conf = indoc! {r#"
-            [[language]]
-            name = "rust"
-            formatter = { command = "bash", args = [ "-c", "echo new content" ] }
-        "#};
+    let (fixture, lang_conf) = formatter_fixture(false)?;
 
     let mut app = helpers::AppBuilder::new()
         .with_file(file.path(), None)
@@ -471,6 +503,10 @@ async fn test_write_quit_auto_format_exits_after_format() -> anyhow::Result<()> 
 
     // file saves with new content and editor exits after save
     helpers::assert_file_has_content(&mut file, "new content\n")?;
+    assert_eq!(
+        std::fs::read_to_string(fixture.path().join("input.txt"))?,
+        "let foo = 0;\n"
+    );
 
     Ok(())
 }
@@ -769,6 +805,10 @@ async fn test_write_all_insert_final_newline_do_not_add_if_unmodified() -> anyho
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(
+    windows,
+    ignore = "requires Windows symlink creation privilege; run explicitly with --ignored"
+)]
 async fn test_symlink_write() -> anyhow::Result<()> {
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
@@ -807,6 +847,10 @@ async fn test_symlink_write() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(
+    windows,
+    ignore = "requires Windows symlink creation privilege; run explicitly with --ignored"
+)]
 async fn test_symlink_write_fail() -> anyhow::Result<()> {
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
@@ -847,6 +891,10 @@ async fn test_symlink_write_fail() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(
+    windows,
+    ignore = "requires Windows symlink creation privilege; run explicitly with --ignored"
+)]
 async fn test_symlink_write_relative() -> anyhow::Result<()> {
     #[cfg(unix)]
     use std::os::unix::fs::symlink;

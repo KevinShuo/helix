@@ -113,6 +113,10 @@ fn directory() {
 /// produced (bad ui).
 #[cfg(any(unix, windows))]
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "requires Windows symlink creation privilege; run explicitly with --ignored"
+)]
 fn symlink() {
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
@@ -136,6 +140,10 @@ fn symlink() {
 /// another file that is in a git repo, but the symlink itself is not.
 #[cfg(any(unix, windows))]
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "requires Windows symlink creation privilege; run explicitly with --ignored"
+)]
 fn symlink_to_git_repo() {
     #[cfg(unix)]
     use std::os::unix::fs::symlink;

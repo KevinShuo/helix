@@ -59,6 +59,25 @@ Contributors using MacOS might encounter `Too many open files (os error 24)`
 failures while running integration tests. This can be resolved by increasing
 the default value (e.g. to `10240` from `256`) by running `ulimit -n 10240`.
 
+## Windows symlink tests
+
+The path normalization, VCS, and write tests that create symbolic links are
+ignored by default on Windows because ordinary accounts may lack symlink
+creation privilege (OS error 1314). Rust reports these tests as `ignored`,
+not passed. Their real symlink setup and assertions remain enabled when the
+tests are run explicitly on an account that can create symlinks:
+
+```shell
+cargo test -p helix-stdx --test path test_normalize_path -- --ignored
+cargo test -p helix-vcs symlink -- --ignored
+cargo integration-test test_symlink_write -- --ignored
+```
+
+The Windows CI jobs run these commands separately and require them to pass.
+They use the hosted runner's existing permissions; the workflow does not
+enable Developer Mode or change system privileges. The VCS and write symlink
+tests run as part of the default suite on Unix; the path test is Windows-specific.
+
 ## Minimum Stable Rust Version (MSRV) Policy
 
 Helix keeps an intentionally low MSRV for the sake of easy building and packaging

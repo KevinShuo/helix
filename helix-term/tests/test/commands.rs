@@ -663,16 +663,20 @@ async fn test_open_below_at_block_end_stays_in_block() -> anyhow::Result<()> {
     ))
     .await?;
 
-    // trailing comment
-    test_with_config(
-        AppBuilder::new().with_config(config.clone()),
-        (
-            "#[i|]#f (x) // c\n    foo();\n",
-            ":lang c<ret>ox<esc>",
-            "if (x) // c\n    x#[\n|]#    foo();\n",
-        ),
-    )
-    .await?;
+    // A trailing comment must not hide the brace-less body when the line
+    // ending puts the insertion point inside the comment's syntax node.
+    for line_ending in ["\n", "\r\n"] {
+        test_with_config(
+            AppBuilder::new().with_config(config.clone()),
+            (
+                format!("#[i|]#f (x) // c{line_ending}    foo();{line_ending}"),
+                ":lang c<ret>ox<esc>",
+                format!("if (x) // c{line_ending}    x#[{line_ending}|]#    foo();{line_ending}"),
+                LineFeedHandling::AsIs,
+            ),
+        )
+        .await?;
+    }
 
     Ok(())
 }

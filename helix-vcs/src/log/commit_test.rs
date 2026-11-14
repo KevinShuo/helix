@@ -620,7 +620,7 @@ async fn commit_git_timeout_stops_hook_descendants_before_releasing_guard() {
     hook(
         &r,
         "pre-commit",
-        "printf started > hook-started; sleep 1; printf late > late-file; git add -- late-file",
+        "printf started > hook-started; while ! test -f hook-release; do sleep 0.1; done; printf late > late-file; git add -- late-file",
     );
     let git = r.open().await;
     let guard = git.begin_operation().unwrap();
@@ -638,14 +638,25 @@ async fn commit_git_timeout_stops_hook_descendants_before_releasing_guard() {
         "Hook must have started before timeout"
     );
     drop(guard);
+    // Release any surviving hook only after termination and guard release.
+    // A fixed sleep can expire while Windows taskkill is still running under
+    // load, which permits an in-flight write rather than a surviving hook.
+    r.write("hook-release", "release\n");
     tokio::time::sleep(Duration::from_millis(1300)).await;
     assert!(
         !r.path().join("late-file").exists(),
         "Timed-out hook survived and wrote to disk"
     );
     assert!(!r.git(&["ls-files"]).lines().any(|p| p == "late-file"));
-    assert!(
-        git.begin_operation().is_ok(),
-        "Confirmed tree termination must permit future writes"
-    );
+    if error.contains("termination is unconfirmed") {
+        assert!(
+            git.begin_operation().is_err(),
+            "Unconfirmed tree termination must quarantine future writes: {error}"
+        );
+    } else {
+        assert!(
+            git.begin_operation().is_ok(),
+            "Confirmed tree termination must permit future writes: {error}"
+        );
+    }
 }

@@ -822,6 +822,17 @@ fn init_indent_query<'a, 'b>(
     Vec<std::ops::Range<u32>>,
     bool,
 )> {
+    // Some grammars include the CR of a CRLF line ending in line comments.
+    // Look past it when finding the surrounding syntax, just as for LF, while
+    // retaining the actual insertion point in `new_line_byte_pos`.
+    let byte_pos = if new_line_byte_pos.is_some()
+        && text.get_byte(byte_pos as usize) == Some(b'\r')
+        && text.get_byte(byte_pos as usize + 1) == Some(b'\n')
+    {
+        byte_pos + 1
+    } else {
+        byte_pos
+    };
     // The innermost tree-sitter node which is considered for the indent
     // computation. It may change if some preceding node is extended
     let mut node = root.descendant_for_byte_range(byte_pos, byte_pos)?;

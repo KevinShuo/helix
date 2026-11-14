@@ -38,6 +38,7 @@ fn test_case_folding_windows() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+#[ignore = "requires Windows symlink creation privilege; run explicitly with --ignored"]
 fn test_normalize_path() -> Result<(), Box<dyn Error>> {
     /*
     tmp/root/
