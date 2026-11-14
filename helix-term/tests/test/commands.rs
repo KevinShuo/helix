@@ -4,6 +4,7 @@ use super::*;
 
 mod insert;
 mod movement;
+mod new_file;
 mod reverse_selection_contents;
 mod rotate_selection_contents;
 mod write;

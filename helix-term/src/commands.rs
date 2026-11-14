@@ -432,6 +432,7 @@ impl MappableCommand {
         insert_mode, "Insert before selection",
         append_mode, "Append after selection",
         command_mode, "Enter command mode",
+        new_file_in_current_buffer_directory, "New file in the current buffer's directory",
         file_picker, "Open file picker",
         file_picker_in_current_buffer_directory, "Open file picker at current buffer's directory",
         file_picker_in_current_directory, "Open file picker at current working directory",
@@ -3217,6 +3218,79 @@ fn append_mode(cx: &mut Context) {
         )
     });
     doc.set_selection(view.id, selection);
+}
+
+fn new_file_directory(editor: &Editor) -> PathBuf {
+    doc!(editor)
+        .path()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(helix_stdx::env::current_working_dir)
+}
+
+fn open_new_file(editor: &mut Editor, directory: &Path, filename: &str) -> anyhow::Result<()> {
+    ensure!(!filename.trim().is_empty(), "File name cannot be empty");
+    ensure!(
+        !filename.ends_with(['/', std::path::MAIN_SEPARATOR]),
+        "Expected a file name, not a directory"
+    );
+
+    let filename = path::expand_tilde(Path::new(filename));
+    let path = path::canonicalize(directory.join(filename));
+    match std::fs::symlink_metadata(&path) {
+        Ok(_) => bail!("Path already exists: {}", path.display()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
+        Err(err) => return Err(err).with_context(|| format!("Cannot access {}", path.display())),
+    }
+    let buffer_exists = editor
+        .documents()
+        .filter_map(Document::path)
+        .any(|existing| {
+            #[cfg(windows)]
+            {
+                // A missing filename cannot be canonicalized to its on-disk case.
+                path::eq_ignore_case(existing, &path)
+            }
+            #[cfg(not(windows))]
+            {
+                existing == path
+            }
+        });
+    ensure!(
+        !buffer_exists,
+        "A buffer already exists for {}",
+        path.display()
+    );
+
+    // Opening a missing path creates only a named buffer. The existing save
+    // commands are responsible for creating the file and any parent directories.
+    editor.open(&path, Action::Replace)?;
+    editor.mode = Mode::Insert;
+    Ok(())
+}
+
+fn new_file_in_current_buffer_directory(cx: &mut Context) {
+    let directory = new_file_directory(cx.editor);
+    let display_directory = path::get_relative_path(&directory);
+    let display_directory = if display_directory.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        display_directory.as_ref()
+    };
+    ui::prompt(
+        cx,
+        format!("New file in {}: ", display_directory.display()).into(),
+        None,
+        ui::completers::none,
+        move |cx, input, event| {
+            if event != PromptEvent::Validate {
+                return;
+            }
+            if let Err(err) = open_new_file(cx.editor, &directory, input) {
+                cx.editor.set_error(err.to_string());
+            }
+        },
+    );
 }
 
 fn file_picker(cx: &mut Context) {

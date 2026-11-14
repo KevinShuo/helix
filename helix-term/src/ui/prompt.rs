@@ -618,10 +618,34 @@ impl Component for Prompt {
             _ => return EventResult::Ignored(None),
         };
 
-        let close_fn = EventResult::Consumed(Some(Box::new(|compositor: &mut Compositor, _| {
-            // remove the layer
-            compositor.pop();
-        })));
+        let old_mode = cx.editor.mode();
+        let close_fn =
+            EventResult::Consumed(Some(Box::new(move |compositor: &mut Compositor, cx| {
+                // remove the layer
+                compositor.pop();
+                if cx.editor.mode() != old_mode {
+                    let mut command_cx = crate::commands::Context {
+                        editor: cx.editor,
+                        jobs: cx.jobs,
+                        register: None,
+                        count: None,
+                        callback: Vec::new(),
+                        on_next_key_callback: None,
+                    };
+                    if let Some(editor_view) = compositor.find::<ui::EditorView>() {
+                        // Prompt callbacks may enter insert mode. Repeating their
+                        // insertion should replay typing, rather than the prompt.
+                        editor_view.handle_mode_switch(
+                            &mut command_cx,
+                            old_mode,
+                            &crate::commands::MappableCommand::insert_mode,
+                        );
+                    }
+                    for callback in command_cx.callback {
+                        callback(compositor, cx);
+                    }
+                }
+            })));
 
         match event {
             ctrl!('c') | key!(Esc) => {

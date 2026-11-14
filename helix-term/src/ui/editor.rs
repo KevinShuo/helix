@@ -1040,6 +1040,15 @@ impl EditorView {
             command.execute(cxt);
         }
         helix_event::dispatch(PostCommand { command, cx: cxt });
+        self.handle_mode_switch(cxt, old_mode, command);
+    }
+
+    pub(crate) fn handle_mode_switch(
+        &mut self,
+        cxt: &mut commands::Context,
+        old_mode: Mode,
+        command: &commands::MappableCommand,
+    ) {
         let new_mode = cxt.editor.mode();
         if new_mode != old_mode {
             helix_event::dispatch(OnModeSwitch {

@@ -223,6 +223,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "C-s" => save_selection,
 
         "space" => { "Space"
+            "n" => new_file_in_current_buffer_directory,
             "f" => file_picker,
             "F" => file_picker_in_current_directory,
             "e" => file_explorer,
