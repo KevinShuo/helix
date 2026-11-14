@@ -30,28 +30,28 @@
 **Interfaces:** exported `CommitSnapshot { head: Option<String>, head_name: String, files: Vec<CommitFile>, ..private }`; `CommitFile { id: usize, path: PathBuf, old_path: Option<PathBuf>, staged: bool, unstaged: bool, untracked: bool, partial: bool, staged_diff: String, worktree_diff: String, ai_eligible: bool, exclusion: Option<String> }`; `CommitOutcome { oid: String, message: String, changed_from_preview: bool }`.
 Methods: `commit_snapshot()`, `stage_files(&CommitSnapshot, &[usize])`, `unstage_files(&CommitSnapshot, &[usize])` return `anyhow::Result<CommitSnapshot>`; `commit_staged(&CommitSnapshot, &str) -> anyhow::Result<CommitOutcome>`.
 
-- [ ] Write tests for nonmutating snapshots, staged-vs-worktree diffs, partial stage preservation, exact Unicode/spaced paths and unborn repositories. Run and observe missing implementation failure.
-- [ ] Implement bounded snapshots and guarded path-level writes; stable pre/post snapshots; manual eligibility metadata for binary/sensitive/oversize inputs.
-- [ ] Add stale HEAD/index/content, rename/delete, failed and modifying hook, empty commit and retry tests. Run `cargo test -p helix-vcs commit` and require all new tests pass.
+- [x] Write tests for nonmutating snapshots, staged-vs-worktree diffs, partial stage preservation, exact Unicode/spaced paths and unborn repositories. Run and observe missing implementation failure.
+- [x] Implement bounded snapshots and guarded path-level writes; stable pre/post snapshots; manual eligibility metadata for binary/sensitive/oversize inputs.
+- [x] Add stale HEAD/index/content, rename/delete, failed and modifying hook, empty commit and retry tests. Run `cargo test -p helix-vcs commit` and require all new tests pass.
 
 ## Task 2: Independent configuration and AI client
 
 **Files:** create `helix-view/src/ai_commit.rs`, `helix-term/src/handlers/ai_commit.rs` and focused child modules if needed; wire `helix-view/src/lib.rs`, `editor.rs`, `helix-term/src/handlers.rs`.
 **Interfaces:** `AiCommitConfig`, `CommitLanguage::{Chinese,English}`; client input `AiFileInput { id: usize, path: String, staged: bool, partial: bool, diff: String, eligible: bool }`; `Recommendation { selected: Vec<usize>, reasons: BTreeMap<usize,String>, incomplete: bool }`; async `recommend(model,config,files,intent)` and `generate_message(model,config,files,intent) -> Result<GeneratedMessage { text: String, incomplete: bool }>`; `validate_message(&str) -> Result<()>`.
 
-- [ ] Write request/response/format tests before production implementation; observe RED for missing APIs.
-- [ ] Implement independent config (disabled, zh-CN, 30000ms,768 output tokens,4096 input bytes,64 files), explicit bounded serial batches, structured IDs, actual model context budgeting and shared transport/readiness.
-- [ ] Test Chinese/English, invalid IDs/types/JSON, skipped and overbudget inputs, no false complete message. Run `cargo test -p helix-term --lib ai_commit` and relevant view tests.
+- [x] Write request/response/format tests before production implementation; observe RED for missing APIs.
+- [x] Implement independent config (disabled, zh-CN, 30000ms,768 output tokens,4096 input bytes,64 files), explicit bounded serial batches, structured IDs, actual model context budgeting and shared transport/readiness.
+- [x] Test Chinese/English, invalid IDs/types/JSON, skipped and overbudget inputs, no false complete message. Run `cargo test -p helix-term --lib ai_commit` and relevant view tests.
 
 ## Task 3: Native commit workspace and integration
 
 **Files:** create `helix-term/src/ui/git/commit.rs` and children; modify Git menu/render, typed commands, shared explicit-AI arbitration and editor config integration as needed.
 **Interfaces:** `commit::open(&mut compositor::Context, intent: String) -> Result<()>`, `commit::cancel(&mut compositor::Context)`; component id `ai-commit`; session-bound async callbacks and draft revisions.
 
-- [ ] Add UI state tests first: partial stage default false, stale callbacks ignored, manual drafts retained, language switching non-destructive, commit blocked for stale/incomplete drafts. Observe RED.
-- [ ] Build docking/fullscreen workspace, file/staged/diff/message navigation, explicit stage/unstage/generate/commit actions, full manual fallback and existing Git menu entry.
-- [ ] Add trusted workspace and related dirty buffer checks, exact final staged preview, background mutation lifecycle, one explicit AI generation at a time, and cancellation limited to read/AI phases.
-- [ ] Run focused unit and temporary-repo integration tests; update book command/config/usage documentation and design approval status.
+- [x] Add UI state tests first: partial stage default false, stale callbacks ignored, manual drafts retained, language switching non-destructive, commit blocked for stale/incomplete drafts. Observe RED.
+- [x] Build docking/fullscreen workspace, file/staged/diff/message navigation, explicit stage/unstage/generate/commit actions, full manual fallback and existing Git menu entry.
+- [x] Add trusted workspace and related dirty buffer checks, exact final staged preview, background mutation lifecycle, one explicit AI generation at a time, and cancellation limited to read/AI phases.
+- [x] Run focused unit and temporary-repo integration tests; update book command/config/usage documentation and design approval status.
 
 ## Task 4: Review and verification
 

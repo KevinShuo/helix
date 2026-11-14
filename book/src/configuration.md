@@ -43,6 +43,10 @@ They appear as grey text and are accepted in full with `Shift-Right` in insert m
 On-demand Chinese reST function documentation can be enabled with
 [`[editor.ai-doc]`](./editor.md#editorai-doc-section), then requested with `:ai-doc`.
 
+AI-assisted file selection and Conventional Commits are available with
+[`[editor.ai-commit]`](./editor.md#editorai-commit-section) and `:ai-commit`.
+Chinese is the default; English can be selected in the commit workspace.
+
 Function reference counts and Git authors can be enabled independently in
 [`[editor.function-hints]`](./editor.md#editorfunction-hints-section).
 

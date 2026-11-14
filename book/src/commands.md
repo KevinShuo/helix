@@ -25,6 +25,14 @@ then Enter to insert or Escape to cancel. `:ai-doc-cancel` cancels a pending
 request. Requires `[editor.ai-doc] enabled = true`; see
 [AI documentation configuration](./editor.md#editorai-doc-section).
 
+Use `:ai-commit [intent]` to open the native Git commit workspace. AI recommends
+files without staging them. Review the file diffs, select candidates with Space,
+then press `s` to stage selected complete files. Existing staged changes are
+always included. Press `g` to generate a Conventional Commits message from the
+actual index, `l` to switch Chinese/English, `e` to edit, and `C` to commit.
+Escape finishes message editing; it does not commit. `:ai-commit-cancel` cancels
+analysis while keeping the index and draft. See [commit configuration](./editor.md#editorai-commit-section).
+
 ## Static Commands
 
 Static commands take no arguments and can be bound to keys. Static commands can also be executed from the command picker (`<space>?`). The built-in static commands are:

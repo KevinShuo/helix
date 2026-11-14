@@ -1,4 +1,5 @@
 mod actions;
+pub(crate) mod commit;
 pub(crate) mod conflicts;
 pub(crate) mod merge;
 mod render;
@@ -94,6 +95,7 @@ pub(crate) struct GitPanel {
     target: GitTarget,
     focus: Pane,
     focused: bool,
+    suspended: bool,
     fullscreen: bool,
     selected_branch: usize,
     branch_query: String,
@@ -252,6 +254,7 @@ impl GitPanel {
                 Pane::Commits
             },
             focused: true,
+            suspended: false,
             fullscreen: false,
             selected_branch: 0,
             selected_commit: 0,
@@ -788,7 +791,7 @@ impl GitPanel {
 
 impl Component for GitPanel {
     fn takes_keyboard_input(&self) -> bool {
-        self.focused
+        self.focused && !self.suspended
     }
 
     fn id(&self) -> Option<&'static str> {
@@ -796,7 +799,7 @@ impl Component for GitPanel {
     }
 
     fn editor_area(&self, area: Rect) -> Rect {
-        if self.fullscreen || area.height < 12 {
+        if self.suspended || self.fullscreen || area.height < 12 {
             area
         } else {
             area.clip_bottom(self.layout(area).panel.height)
@@ -812,6 +815,9 @@ impl Component for GitPanel {
     }
 
     fn render(&mut self, area: Rect, frame: &mut Buffer, cx: &mut Context) {
+        if self.suspended {
+            return;
+        }
         if cx.editor.active_merge().is_some() {
             return;
         }
@@ -838,6 +844,9 @@ impl Component for GitPanel {
     }
 
     fn handle_event(&mut self, event: &Event, cx: &mut Context) -> EventResult {
+        if self.suspended {
+            return EventResult::Ignored(None);
+        }
         if cx.editor.active_merge().is_some() {
             return EventResult::Ignored(None);
         }

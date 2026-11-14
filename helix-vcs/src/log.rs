@@ -2,6 +2,14 @@
 
 use std::path::{Path, PathBuf};
 
+#[path = "log/commit.rs"]
+mod commit;
+pub use commit::*;
+
+#[cfg(all(test, feature = "git"))]
+#[path = "log/commit_test.rs"]
+mod commit_test;
+
 #[path = "log/conflicts.rs"]
 mod conflicts;
 pub use conflicts::*;
@@ -169,6 +177,9 @@ mod implementation {
     pub(super) const QUERY_TIMEOUT: Duration = Duration::from_secs(20);
     pub(super) const OPERATION_TIMEOUT: Duration = Duration::from_secs(60);
     static OPERATIONS: OnceLock<parking_lot::Mutex<HashSet<PathBuf>>> = OnceLock::new();
+    // If process-tree termination cannot be confirmed, a later write must not
+    // race a surviving hook. Reconciliation is still readable for diagnostics.
+    static QUARANTINED_OPERATIONS: OnceLock<parking_lot::Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
     pub(super) struct OperationGuard(PathBuf);
 
@@ -269,6 +280,47 @@ mod implementation {
         Ok(bytes.as_bstr().to_path()?.to_path_buf())
     }
 
+    async fn terminate_git_tree(child: &mut tokio::process::Child, pid: u32) -> Result<()> {
+        #[cfg(windows)]
+        let mut terminate = {
+            let mut command = Command::new("taskkill.exe");
+            command.args(["/PID", &pid.to_string(), "/T", "/F"]);
+            command.creation_flags(0x08000000);
+            command
+        };
+        #[cfg(unix)]
+        let mut terminate = {
+            let mut command = Command::new("/bin/kill");
+            command.args(["-KILL", &format!("-{pid}")]);
+            command
+        };
+        #[cfg(not(any(windows, unix)))]
+        anyhow::bail!("This platform cannot terminate the Git process tree");
+        #[cfg(any(windows, unix))]
+        {
+            terminate.stdin(Stdio::null()).kill_on_drop(true);
+            // Terminate descendants while the parent is still alive: killing
+            // only Git first loses the ancestry Windows taskkill needs.
+            let tree = tokio::time::timeout(Duration::from_secs(5), terminate.output()).await;
+            // Reap Git even if the process-tree command failed. The caller
+            // quarantines the repository when any descendants are uncertain.
+            let parent = tokio::time::timeout(Duration::from_secs(5), child.kill()).await;
+            let output = tree.context("Timed out terminating Git process tree")??;
+            ensure!(
+                output.status.success(),
+                "Could not terminate Git process tree: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            match parent.context("Timed out awaiting Git termination")? {
+                Ok(()) => (),
+                Err(error) if error.kind() == std::io::ErrorKind::InvalidInput => (),
+                Err(error) => return Err(error).context("Await Git termination"),
+            }
+            Ok(())
+        }
+    }
+
     impl GitRepository {
         pub async fn open(path: PathBuf, trust_full: bool) -> Result<Self> {
             ensure!(trust_full, "Git tools require a trusted workspace (:trust)");
@@ -334,18 +386,40 @@ mod implementation {
                 .kill_on_drop(true);
             #[cfg(windows)]
             command.creation_flags(0x08000000);
+            #[cfg(unix)]
+            command.process_group(0);
             let mut child = command
                 .spawn()
                 .context("Run Git (is git installed on PATH?)")?;
-            let stdout = child.stdout.take().context("Git stdout unavailable")?;
-            let stderr = child.stderr.take().context("Git stderr unavailable")?;
-            let (stdout, stderr, status) = tokio::time::timeout(timeout, async {
-                tokio::try_join!(read_output(stdout), read_output(stderr), async {
+            let pid = child.id().context("Git process ID unavailable")?;
+            let mut stdout = child.stdout.take().context("Git stdout unavailable")?;
+            let mut stderr = child.stderr.take().context("Git stderr unavailable")?;
+            let execution = tokio::time::timeout(timeout, async {
+                tokio::try_join!(read_output(&mut stdout), read_output(&mut stderr), async {
                     Ok::<_, anyhow::Error>(child.wait().await?)
                 })
             })
-            .await
-            .context("Git command timed out")??;
+            .await;
+            let (stdout, stderr, status) = match execution {
+                Ok(Ok(result)) => result,
+                failed => {
+                    let failure = match failed {
+                        Err(_) => anyhow::anyhow!("Git command timed out"),
+                        Ok(Err(error)) => error,
+                        Ok(Ok(_)) => unreachable!(),
+                    };
+                    if let Err(termination) = terminate_git_tree(&mut child, pid).await {
+                        QUARANTINED_OPERATIONS
+                            .get_or_init(Default::default)
+                            .lock()
+                            .insert(self.git_dir.clone());
+                        anyhow::bail!("{failure:#}; Git process-tree termination is unconfirmed: {termination:#}. Further writes are disabled for this repository in this Helix session; inspect surviving processes and repository state before restarting Helix");
+                    }
+                    anyhow::bail!(
+                        "{failure:#}; Git and hook process tree terminated and Git exit awaited"
+                    );
+                }
+            };
             Ok(Output {
                 status,
                 stdout,
@@ -390,9 +464,17 @@ mod implementation {
                 .get_or_init(Default::default)
                 .lock()
                 .contains(&self.git_dir)
+                || QUARANTINED_OPERATIONS
+                    .get_or_init(Default::default)
+                    .lock()
+                    .contains(&self.git_dir)
         }
 
         pub(super) fn begin_operation(&self) -> Result<OperationGuard> {
+            ensure!(
+                !QUARANTINED_OPERATIONS.get_or_init(Default::default).lock().contains(&self.git_dir),
+                "A previous Git process tree could not be confirmed stopped; further writes are disabled. Inspect surviving processes and repository state before restarting Helix"
+            );
             let mut active = OPERATIONS.get_or_init(Default::default).lock();
             ensure!(
                 active.insert(self.git_dir.clone()),

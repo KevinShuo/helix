@@ -343,6 +343,7 @@ pub struct Config {
     /// Independent inline suggestions from an OpenAI-compatible model.
     pub ai_completion: crate::ai_completion::AiCompletionConfig,
     pub ai_doc: crate::ai_doc::AiDocConfig,
+    pub ai_commit: crate::ai_commit::AiCommitConfig,
     /// Function reference counts and latest Git authors beside declarations.
     pub function_hints: crate::function_hints::FunctionHintsConfig,
     /// Optional source overview at the right of each editing split.
@@ -1223,6 +1224,7 @@ impl Default for Config {
             auto_completion: true,
             ai_completion: crate::ai_completion::AiCompletionConfig::default(),
             ai_doc: crate::ai_doc::AiDocConfig::default(),
+            ai_commit: crate::ai_commit::AiCommitConfig::default(),
             function_hints: crate::function_hints::FunctionHintsConfig::default(),
             minimap: crate::minimap::MinimapConfig::default(),
             path_completion: true,
@@ -1313,6 +1315,7 @@ pub struct Editor {
     pub next_document_id: DocumentId,
     pub ai_doc: Option<crate::ai_doc::Operation>,
     pub ai_doc_serial: u64,
+    pub ai_commit_running: bool,
     pub documents: BTreeMap<DocumentId, Document>,
 
     // We Flatten<> to resolve the inner DocumentSavedEventFuture. For that we need a stream of streams, hence the Once<>.
@@ -1471,6 +1474,7 @@ impl Editor {
             next_document_id: DocumentId::default(),
             ai_doc: None,
             ai_doc_serial: 0,
+            ai_commit_running: false,
             documents: BTreeMap::new(),
             saves: HashMap::new(),
             save_queue: SelectAll::new(),
@@ -2790,10 +2794,10 @@ impl CursorCache {
 }
 
 impl Config {
-    /// Provider settings shared by explicit documentation and automatic completion.
+    /// Provider settings shared by explicit generation and automatic completion.
     pub fn ai_model_config(&self) -> crate::ai_completion::AiCompletionConfig {
         let mut model = self.ai_completion.clone();
-        model.enabled |= self.ai_doc.enabled;
+        model.enabled |= self.ai_doc.enabled || self.ai_commit.enabled;
         model
     }
 }

@@ -16,6 +16,7 @@ use self::document_colors::DocumentColorsHandler;
 use self::document_links::DocumentLinksHandler;
 
 pub(crate) mod ai;
+pub(crate) mod ai_commit;
 pub mod ai_completion;
 pub(crate) mod ai_doc;
 mod auto_save;

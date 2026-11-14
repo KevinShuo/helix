@@ -447,6 +447,7 @@ impl GitPanel {
                     "f  Fetch all remotes".into(),
                     "u  Pull (fast-forward only)".into(),
                     "P  Push current branch".into(),
+                    "A  AI 提交 / stage and commit".into(),
                     "Esc  Cancel".into(),
                 ],
             );

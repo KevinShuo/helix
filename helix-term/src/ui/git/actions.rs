@@ -388,6 +388,13 @@ impl GitPanel {
     pub(super) fn handle_action_menu(&mut self, key: KeyCode, cx: &mut Context) -> EventResult {
         self.action_menu = false;
         match key {
+            KeyCode::Char('A') => {
+                return EventResult::Consumed(Some(Box::new(|compositor, cx| {
+                    if let Err(error) = super::commit::open(compositor, cx.editor, String::new()) {
+                        cx.editor.set_error(error.to_string());
+                    }
+                })));
+            }
             KeyCode::Char('c') => {
                 if let Some(reference) = self.selected_reference().cloned() {
                     self.confirm(GitOperation::Checkout { reference }, cx.editor);

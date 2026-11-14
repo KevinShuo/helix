@@ -3070,7 +3070,33 @@ fn ai_doc_cancel(
     Ok(())
 }
 
+fn ai_commit(_cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        let intent = args.join(" ");
+        crate::job::dispatch_blocking(move |editor, compositor| {
+            if let Err(error) = crate::ui::git::commit::open(compositor, editor, intent) {
+                editor.set_error(error.to_string());
+            }
+        });
+    }
+    Ok(())
+}
+fn ai_commit_cancel(
+    _cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::job::dispatch_blocking(|editor, compositor| {
+            crate::ui::git::commit::cancel(compositor, editor)
+        });
+    }
+    Ok(())
+}
+
 pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
+    TypableCommand { name: "ai-commit", aliases: &[], doc: "Recommend files, stage and commit with Chinese or English Conventional Commits", fun: ai_commit, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-commit-cancel", aliases: &[], doc: "Cancel AI commit analysis while preserving staged files and message", fun: ai_commit_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-doc", aliases: &[], doc: "Generate a reST doc comment for the function at the cursor", fun: ai_doc, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-doc-cancel", aliases: &[], doc: "Cancel AI function documentation", fun: ai_doc_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand {

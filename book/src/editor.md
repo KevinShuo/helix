@@ -5,6 +5,7 @@
 - [`[editor.statusline]` Section](#editorstatusline-section)
 - [`[editor.lsp]` Section](#editorlsp-section)
 - [`[editor.ai-doc]` Section](#editorai-doc-section)
+- [`[editor.ai-commit]` Section](#editorai-commit-section)
 - [`[editor.function-hints]` Section](#editorfunction-hints-section)
 - [`[editor.minimap]` Section](#editorminimap-section)
 - [`[editor.cursor-shape]` Section](#editorcursor-shape-section)
@@ -184,6 +185,53 @@ The following statusline elements can be configured:
 [^1]: By default, a progress spinner is shown in the statusline beside the file path.
 
 [^2]: You may also have to activate them in the language server config for them to appear, not just in Helix. Inlay hints in Helix are still being improved on and may be a little bit laggy/janky under some circumstances. Please report any bugs you see so we can fix them!
+
+### `[editor.ai-commit]` Section
+
+Explicit AI-assisted staging and commits share the provider configuration from
+`[editor.ai-completion]`, independently of automatic completion and `ai-doc`.
+
+```toml
+[editor.ai-commit]
+enabled = true
+language = "zh-CN" # or "en"
+timeout-ms = 30000
+max-tokens = 768
+max-input-bytes = 4096
+max-files = 64
+```
+
+The feature is disabled by default. `max-input-bytes` bounds each batch's data,
+not tokens; the actual configured model context is checked separately. At most
+64 model calls are made for each explicit analysis/generation. Large diffs,
+binary files, symlinks, submodules and common credential paths require manual
+review; their contents are not sent to the model. These heuristics cannot
+identify every secret. The configured provider receives eligible diffs when
+you explicitly request analysis. Ignored files are not added.
+
+Open with `:ai-commit [optional intent]` or the Git action menu's `A` entry.
+The workspace defaults to the bottom dock; F11 toggles fullscreen. Space toggles
+candidate files, Tab switches file/diff navigation, and j/k or arrows move.
+`s` stages the selected complete disk versions, `u` unstages the selected staged
+file without changing disk contents. Existing staged files are all included;
+remaining edits of partially staged files are never selected automatically.
+
+`g` generates a message from the actual staged diff. `l` switches Chinese/English
+for the next generation while preserving the draft. `e` edits the message;
+Enter inserts a newline, Escape or Ctrl-s ends editing. `i` edits the intent.
+`C` commits the reviewed Conventional Commits message. `v` explicitly retains a
+manually checked draft after a scope change or incomplete AI analysis. `d` opens
+a local-only complete diff preview, including files withheld from AI. `r`
+refreshes. Ctrl-c or `:ai-commit-cancel` cancels reads/AI requests, preserving the
+draft and index. `q` closes the workspace; confirmed Git writes finish in the
+background and report their result. Ctrl-w releases keyboard focus to the editor;
+click the workspace or invoke `:ai-commit` again to return.
+
+Save related modified editor buffers before analyzing or staging them. Stale
+HEAD/index/file snapshots are rejected before writes. Git hooks and signing are
+respected; errors keep the draft and actual index for inspection. Commits do not
+automatically push. Manual selection, staging, editing and committing remain
+available when AI is disabled or unavailable.
 
 ### `[editor.function-hints]` Section
 
