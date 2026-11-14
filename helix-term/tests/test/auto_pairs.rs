@@ -27,6 +27,89 @@ async fn insert_basic() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn insert_python_string_prefix_quotes() -> anyhow::Result<()> {
+    for prefix in [
+        "r", "R", "b", "B", "u", "U", "f", "F", "t", "T", "br", "bR", "Br", "BR", "rb", "rB", "Rb",
+        "RB", "fr", "fR", "Fr", "FR", "rf", "rF", "Rf", "RF", "tr", "tR", "Tr", "TR", "rt", "rT",
+        "Rt", "RT",
+    ] {
+        for quote in ['\'', '"'] {
+            test((
+                "#[|\n]#",
+                format!(":lang python<ret>i{prefix}{quote}"),
+                format!("{prefix}{quote}#[|{quote}]#\n"),
+            ))
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn insert_python_string_prefix_closing_quote() -> anyhow::Result<()> {
+    for (keys, expected) in [
+        ("ir\"\"", "r\"\"#[|\n]#"),
+        ("ir\"path\"", "r\"path\"#[|\n]#"),
+        ("if'value'", "f'value'#[|\n]#"),
+    ] {
+        test(("#[|\n]#", format!(":lang python<ret>{keys}"), expected)).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn insert_python_string_prefix_boundaries() -> anyhow::Result<()> {
+    for prefix in ["bar", "_r", "1r", "变量r", "rr", "ur", "bf"] {
+        test((
+            "#[|\n]#",
+            format!(":lang python<ret>i{prefix}\""),
+            format!("{prefix}\"#[|\n]#"),
+        ))
+        .await?;
+    }
+    test((
+        "value = #[|\n]#",
+        ":lang python<ret>ir\"",
+        "value = r\"#[|\"]#\n",
+    ))
+    .await?;
+    test(("r#[|word]#\n", ":lang python<ret>i\"", "r\"#[|word]#\n")).await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn insert_python_string_prefix_multi_range() -> anyhow::Result<()> {
+    test((
+        "r#[|\n]#fr#(|\n)#bar#(|\n)#",
+        ":lang python<ret>i\"",
+        "r\"#[|\"]#\nfr\"#(|\")#\nbar\"#(|\n)#",
+    ))
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn insert_string_prefix_without_python() -> anyhow::Result<()> {
+    test(("#[|\n]#", "ir\"", "r\"#[|\n]#")).await?;
+    test(("#[|\n]#", ":lang rust<ret>ir\"", "r\"#[|\n]#")).await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn insert_python_string_prefix_auto_pairs_disabled() -> anyhow::Result<()> {
+    test_with_config(
+        AppBuilder::new().with_config(Config {
+            editor: helix_view::editor::Config {
+                auto_pairs: AutoPairConfig::Enable(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+        ("#[|\n]#", ":lang python<ret>ir\"", "r\"#[|\n]#"),
+    )
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn insert_whitespace() -> anyhow::Result<()> {
     for pair in DEFAULT_PAIRS {
         test((

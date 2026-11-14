@@ -115,12 +115,16 @@ pub fn hook_insert(
     range: &Range,
     ch: char,
     pairs: &AutoPairs,
+    language: Option<&str>,
 ) -> Option<(Change, Range)> {
     log::trace!("autopairs hook range: {:#?}", range);
 
     if let Some(pair) = pairs.get(ch) {
         if pair.same() {
-            return handle_insert_same(doc, range, pair);
+            let string_prefix = language == Some("python")
+                && matches!(ch, '\'' | '"')
+                && prev_is_python_string_prefix(doc, range);
+            return handle_insert_same(doc, range, pair, string_prefix);
         } else if pair.open == ch {
             return handle_insert_open(doc, range, pair);
         } else if pair.close == ch {
@@ -223,7 +227,27 @@ fn handle_insert_whitespace(
         close: ch,
     };
 
-    handle_insert_same(doc, range, &whitespace_pair)
+    handle_insert_same(doc, range, &whitespace_pair, false)
+}
+
+/// Recognize a complete Python string prefix, rather than the end of an identifier.
+fn prev_is_python_string_prefix(doc: &Rope, range: &Range) -> bool {
+    let cursor = range.cursor(doc.slice(..));
+    let mut chars = doc.chars_at(cursor);
+    let Some(last) = chars.prev().map(|ch| ch.to_ascii_lowercase()) else {
+        return false;
+    };
+    let mut before = chars.prev();
+
+    match (before.map(|ch| ch.to_ascii_lowercase()), last) {
+        (Some('b' | 'f' | 't'), 'r') | (Some('r'), 'b' | 'f' | 't') => {
+            before = chars.prev();
+        }
+        (_, 'r' | 'b' | 'u' | 'f' | 't') => (),
+        _ => return false,
+    }
+
+    before.is_none_or(|ch| !unicode_ident::is_xid_continue(ch))
 }
 
 fn prev_char(doc: &Rope, pos: usize) -> Option<char> {
@@ -390,7 +414,12 @@ fn handle_insert_close(doc: &Rope, range: &Range, pair: &Pair) -> Option<(Change
 }
 
 /// handle cases where open and close is the same, or in triples ("""docstring""")
-fn handle_insert_same(doc: &Rope, range: &Range, pair: &Pair) -> Option<(Change, Range)> {
+fn handle_insert_same(
+    doc: &Rope,
+    range: &Range,
+    pair: &Pair,
+    string_prefix: bool,
+) -> Option<(Change, Range)> {
     let cursor = range.cursor(doc.slice(..));
     let mut len_inserted = 0;
     let next_char = doc.get_char(cursor);
@@ -399,7 +428,8 @@ fn handle_insert_same(doc: &Rope, range: &Range, pair: &Pair) -> Option<(Change,
         // return transaction that moves past close
         (cursor, cursor, None) // no-op
     } else {
-        if !pair.should_close(doc, range) {
+        if !(pair.should_close(doc, range) || string_prefix && Pair::next_is_not_alpha(doc, range))
+        {
             return None;
         }
 
@@ -414,4 +444,21 @@ fn handle_insert_same(doc: &Rope, range: &Range, pair: &Pair) -> Option<(Change,
     log::debug!("auto pair change: {:#?}", &result);
 
     Some(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn python_string_prefix_does_not_split_unicode_identifiers() {
+        for identifier in ["a\u{301}r", "a\u{b7}r", "a\u{203f}r"] {
+            let doc = Rope::from_str(identifier);
+            let range = Range::point(doc.len_chars());
+            assert!(
+                hook_insert(&doc, &range, '"', &AutoPairs::default(), Some("python")).is_none(),
+                "must not pair quotes after identifier {identifier:?}"
+            );
+        }
+    }
 }

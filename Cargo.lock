@@ -1621,6 +1621,7 @@ dependencies = [
  "toml",
  "tree-house",
  "unicode-general-category",
+ "unicode-ident",
  "unicode-segmentation",
  "unicode-width 0.1.12",
 ]

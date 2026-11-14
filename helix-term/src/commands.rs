@@ -4487,7 +4487,11 @@ pub mod insert {
             auto_pairs
                 .as_ref()
                 .and_then(|ap| {
-                    auto_pairs::hook_insert(text, range, c, ap)
+                    let byte = text.char_to_byte(range.cursor(text.slice(..)));
+                    let language = doc
+                        .language_config_at(loader, byte)
+                        .map(|config| config.language_id.as_str());
+                    auto_pairs::hook_insert(text, range, c, ap, language)
                         .map(|(change, range)| (change, Some(range)))
                         .or_else(|| Some(insert_char(*range, c)))
                 })
