@@ -23,6 +23,7 @@ pub(crate) struct Recommendation {
     pub selected: Vec<usize>,
     pub reasons: BTreeMap<usize, String>,
     pub incomplete: bool,
+    pub excluded: usize,
 }
 
 #[derive(Debug)]
@@ -32,6 +33,7 @@ pub(crate) struct GeneratedMessage {
 }
 
 const MAX_REQUESTS: usize = 64;
+const MAX_SUMMARY_CHARS: usize = 160;
 const TYPES: &[&str] = &[
     "feat", "fix", "refactor", "docs", "test", "perf", "build", "ci", "chore", "style", "revert",
 ];
@@ -54,8 +56,15 @@ async fn recommend_inner(
     intent: &str,
 ) -> Result<Recommendation> {
     let analysis = analyze(model, config, files, intent).await?;
-    let system = instructions(config, "Recommend ONE coherent commit group. Already staged files are fixed; never select staged, partial or manual_review files. Return ONLY {\"selected\":[file IDs],\"reasons\":[{\"id\":file ID,\"reason\":brief explanation}]}. Give exactly one reason for every file, including excluded files. Use only supplied IDs, never paths or commands.");
-    let body = request(model, config, &system, &analysis.data(files, intent))?;
+    let selectable: BTreeSet<_> = files
+        .iter()
+        .filter(|file| !file.staged && !file.partial && analysis.summaries.contains_key(&file.id))
+        .map(|file| file.id)
+        .collect();
+    let system = instructions(config, "Recommend ONE coherent commit group. selected must be a subset of selectable_ids; return an empty selected array if selectable_ids is empty. Already staged files are fixed; never select staged, partial or manual_review files. Return ONLY {\"selected\":[file IDs],\"reasons\":[{\"id\":file ID,\"reason\":brief explanation}]}. Give exactly one reason for every file, including excluded files. Use only supplied IDs, never paths or commands.");
+    let mut data = analysis.data(files, intent);
+    data["selectable_ids"] = json!(selectable);
+    let body = request(model, config, &system, &data)?;
     let content = complete(model, config, &body).await?;
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -71,17 +80,29 @@ async fn recommend_inner(
     }
     let response: Response =
         serde_json::from_str(&content).context("Invalid AI recommendation JSON")?;
-    let mut selected = BTreeSet::new();
+    let mut seen = BTreeSet::new();
+    let mut selected = Vec::new();
+    let mut excluded = BTreeMap::new();
     for id in &response.selected {
         let file = files
             .iter()
             .find(|file| file.id == *id)
             .context("AI selected an unknown file ID")?;
-        ensure!(selected.insert(*id), "AI selected a duplicate file ID");
-        ensure!(
-            !file.staged && !file.partial && analysis.summaries.contains_key(id),
-            "AI selected a fixed, partial or unanalyzed file; select it manually after review"
-        );
+        ensure!(seen.insert(*id), "AI selected a duplicate file ID");
+        if selectable.contains(id) {
+            selected.push(*id);
+        } else {
+            // Model suggestions cannot override the local staging/coverage rules.
+            // Keep valid candidates and explain excluded ones without modifying Git.
+            let reason = if file.staged {
+                "已在暂存区，保留当前暂存内容；不重复暂存"
+            } else if file.partial {
+                "部分内容已暂存，请检查 diff 后手动选择"
+            } else {
+                "未完成内容分析，请检查 diff 后手动选择"
+            };
+            excluded.insert(*id, reason);
+        }
     }
     let mut reasons = BTreeMap::new();
     for reason in response.reasons {
@@ -89,7 +110,12 @@ async fn recommend_inner(
             files.iter().any(|file| file.id == reason.id),
             "AI reason has an unknown file ID"
         );
-        plain_text(&reason.reason, 1024, false)?;
+        plain_text(
+            &reason.reason,
+            1024,
+            false,
+            &format!("AI recommendation reason for file ID {}", reason.id),
+        )?;
         ensure!(
             reasons.insert(reason.id, reason.reason).is_none(),
             "AI returned duplicate reasons"
@@ -99,10 +125,13 @@ async fn recommend_inner(
         reasons.len() == files.len(),
         "AI did not explain every file"
     );
+    let excluded_count = excluded.len();
+    reasons.extend(excluded.into_iter().map(|(id, reason)| (id, reason.into())));
     Ok(Recommendation {
-        selected: response.selected,
+        selected,
         reasons,
         incomplete: analysis.incomplete(files),
+        excluded: excluded_count,
     })
 }
 
@@ -149,7 +178,7 @@ async fn generate_message_inner(
         TYPES.contains(&message.kind.as_str()),
         "AI returned an unsupported commit type"
     );
-    plain_text(&message.subject, 1024, false)?;
+    plain_text(&message.subject, 1024, false, "AI commit subject")?;
     let scope = match message.scope {
         Some(scope) => {
             ensure!(valid_scope(&scope), "AI returned an invalid English scope");
@@ -159,7 +188,7 @@ async fn generate_message_inner(
     };
     let mut text = format!("{}{scope}: {}", message.kind, message.subject);
     if let Some(body) = message.body.filter(|body| !body.trim().is_empty()) {
-        plain_text(&body, 8192, true)?;
+        plain_text(&body, 8192, true, "AI commit body")?;
         text.push_str("\n\n");
         text.push_str(body.trim());
     }
@@ -176,7 +205,7 @@ async fn generate_message_inner(
 
 /// Validate manual Conventional Commits, including user-written `!` and footers.
 pub(crate) fn validate_message(text: &str) -> Result<()> {
-    plain_text(text, 16_384, true)?;
+    plain_text(text, 16_384, true, "Commit message")?;
     let mut lines = text.lines();
     let title = lines.next().context("Commit message is empty")?;
     let (prefix, subject) = title
@@ -213,17 +242,19 @@ fn valid_scope(scope: &str) -> bool {
         && scope.bytes().any(|c| c.is_ascii_alphabetic())
 }
 
-fn plain_text(text: &str, max_bytes: usize, multiline: bool) -> Result<()> {
+fn plain_text(text: &str, max_bytes: usize, multiline: bool, field: &str) -> Result<()> {
+    ensure!(!text.trim().is_empty(), "{field} is empty");
     ensure!(
-        !text.trim().is_empty() && text.len() <= max_bytes,
-        "AI/commit text is empty or too long"
+        text.len() <= max_bytes,
+        "{field} is too long ({} UTF-8 bytes; maximum {max_bytes})",
+        text.len()
     );
     ensure!(
         !text.chars().any(
             |c| (c.is_control() && !(multiline && (c == '\n' || c == '\t')))
                 || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
         ),
-        "AI/commit text contains unsupported control characters"
+        "{field} contains unsupported control characters"
     );
     Ok(())
 }
@@ -377,7 +408,7 @@ async fn analyze(
     files: &[AiFileInput],
     intent: &str,
 ) -> Result<Analysis> {
-    let system = instructions(config, "Summarize each supplied complete file diff, noting only visible changes. Return ONLY {\"summaries\":[{\"id\":file ID,\"summary\":brief single-line description of at most 160 UTF-8 bytes}]}. Use exactly the supplied IDs once each. No test execution evidence is supplied.");
+    let system = instructions(config, &format!("Summarize each supplied complete file diff, noting only visible changes. Return ONLY {{\"summaries\":[{{\"id\":file ID,\"summary\":brief single-line description of at most {MAX_SUMMARY_CHARS} Unicode characters}}]}}. Use exactly the supplied IDs once each. No test execution evidence is supplied."));
     let mut batches: VecDeque<Vec<Value>> = VecDeque::new();
     let mut current = Vec::new();
     for file in files.iter().filter(|file| content_eligible(file)) {
@@ -469,7 +500,15 @@ async fn analyze(
                 expected.contains(&entry.id) && seen.insert(entry.id),
                 "AI summary has an unknown or duplicate file ID"
             );
-            plain_text(&entry.summary, 160, false)?;
+            let field = format!("AI summary for file ID {}", entry.id);
+            let chars = entry.summary.chars().count();
+            ensure!(
+                chars <= MAX_SUMMARY_CHARS,
+                "{field} is too long ({chars} characters; maximum {MAX_SUMMARY_CHARS})"
+            );
+            // Each Unicode scalar occupies at most four UTF-8 bytes. The final
+            // aggregation request still enforces the configured byte/context budgets.
+            plain_text(&entry.summary, MAX_SUMMARY_CHARS * 4, false, &field)?;
             ensure!(
                 !test_claim(&entry.summary),
                 "AI summary claimed test results without evidence"

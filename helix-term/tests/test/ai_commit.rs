@@ -373,6 +373,7 @@ async fn ai_commit_pasted_multiline_message_does_not_modify_underlying_source() 
 enum Reply {
     Summary,
     Recommend,
+    RecommendAll,
     Chinese,
     English,
 }
@@ -434,6 +435,9 @@ async fn server(
                 }
                 Reply::Recommend => {
                     json!({"selected":files.iter().filter(|file| file["staged"] == false && file["partial"] == false && file["manual_review"] == false).map(|file| file["id"].clone()).collect::<Vec<_>>(),"reasons":files.iter().map(|file| json!({"id":file["id"],"reason":"检查本次提交范围"})).collect::<Vec<_>>()})
+                }
+                Reply::RecommendAll => {
+                    json!({"selected":files.iter().map(|file| file["id"].clone()).collect::<Vec<_>>(),"reasons":files.iter().map(|file| json!({"id":file["id"],"reason":"检查本次提交范围"})).collect::<Vec<_>>()})
                 }
                 Reply::Chinese => {
                     json!({"type":"fix","scope":"fixture","subject":"保留暂存版本","body":"仅描述已暂存的改动。"})
@@ -513,6 +517,45 @@ async fn ai_commit_named_provider_ignores_legacy_local_model() -> anyhow::Result
         assert_eq!(body["thinking"]["type"], "disabled");
         assert_eq!(body["response_format"]["type"], "json_object");
     }
+    close(app).await?;
+    task.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_commit_invalid_recommendations_keep_valid_choices_and_preserve_partial_index(
+) -> anyhow::Result<()> {
+    let repo = repository();
+    fs::write(repo.path().join("a-choice.txt"), "candidate change\n")?;
+    fs::write(repo.path().join("b-partial.txt"), "staged change\n")?;
+    git(repo.path(), &["add", "--", "b-partial.txt"]);
+    fs::write(
+        repo.path().join("b-partial.txt"),
+        "staged change\nkeep this unstaged\n",
+    )?;
+    let before_index = fs::read(repo.path().join(".git/index"))?;
+    let before_head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let (endpoint, mut requests, task) = server(vec![Reply::Summary, Reply::RecommendAll], 0).await;
+    let mut app = open(repo.path(), Some(endpoint)).await?;
+    wait_for(&mut app, "已排除").await?;
+    request(&mut requests).await?;
+    request(&mut requests).await?;
+    assert!(
+        screen(&app).contains("[x] a-choice.txt"),
+        "{}",
+        screen(&app)
+    );
+    assert!(
+        !screen(&app).contains("[x] b-partial.txt"),
+        "{}",
+        screen(&app)
+    );
+    assert_eq!(fs::read(repo.path().join(".git/index"))?, before_index);
+    assert_eq!(git(repo.path(), &["rev-parse", "HEAD"]), before_head);
+    assert_eq!(
+        fs::read_to_string(repo.path().join("b-partial.txt"))?,
+        "staged change\nkeep this unstaged\n"
+    );
     close(app).await?;
     task.await?;
     Ok(())

@@ -187,8 +187,72 @@ async fn ai_commit_recommends_from_complete_diff_and_filters_sensitive_contents(
 }
 
 #[tokio::test]
-async fn ai_commit_rejects_unknown_duplicate_and_partial_recommendations() {
-    for selected in [vec![99], vec![1, 1], vec![2]] {
+async fn ai_commit_accepts_chinese_summary_within_character_limit() {
+    // 160 Chinese characters occupy 480 UTF-8 bytes.
+    let summary = "改".repeat(160);
+    let (model, rx) = provider(vec![
+        json!({"summaries":[{"id":1,"summary":summary}]}),
+        json!({"selected":[1],"reasons":[{"id":1,"reason":"同一功能"}]}),
+    ]);
+    let result = recommend(&model, &enabled(), &[file(1)], "").await.unwrap();
+    assert_eq!(result.selected, vec![1]);
+    assert!(!result.incomplete);
+    rx.recv().unwrap();
+    let request = rx.recv().unwrap();
+    let data: Value =
+        serde_json::from_str(request["messages"][1]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(data["files"][0]["summary"], summary);
+}
+
+#[tokio::test]
+async fn ai_commit_summary_errors_identify_file_and_length() {
+    for (summary, expected) in [
+        (" ".into(), "AI summary for file ID 1 is empty"),
+        (
+            "改".repeat(161),
+            "AI summary for file ID 1 is too long (161 characters; maximum 160)",
+        ),
+    ] {
+        let (model, _) = provider(vec![json!({"summaries":[{"id":1,"summary":summary}]})]);
+        let error = recommend(&model, &enabled(), &[file(1)], "")
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), expected);
+    }
+}
+
+#[tokio::test]
+async fn ai_commit_recommendation_errors_identify_reason_and_byte_limit() {
+    let (model, _) = provider(vec![
+        json!({"summaries":[{"id":1,"summary":"change"}]}),
+        json!({"selected":[1],"reasons":[{"id":1,"reason":"x".repeat(1025)}]}),
+    ]);
+    let error = recommend(&model, &enabled(), &[file(1)], "")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "AI recommendation reason for file ID 1 is too long (1025 UTF-8 bytes; maximum 1024)"
+    );
+}
+
+#[test]
+fn ai_commit_manual_message_errors_distinguish_empty_and_too_long() {
+    assert_eq!(
+        validate_message(" ").unwrap_err().to_string(),
+        "Commit message is empty"
+    );
+    assert_eq!(
+        validate_message(&"x".repeat(16385))
+            .unwrap_err()
+            .to_string(),
+        "Commit message is too long (16385 UTF-8 bytes; maximum 16384)"
+    );
+}
+
+#[tokio::test]
+async fn ai_commit_rejects_unknown_and_duplicate_recommendations() {
+    for selected in [vec![99], vec![1, 1], vec![2, 2]] {
         let (model, _) = provider(vec![
             json!({"summaries":[{"id":1,"summary":"first"},{"id":2,"summary":"partial"}]}),
             json!({"selected":selected,"reasons":[{"id":1,"reason":"one"},{"id":2,"reason":"two"}]}),
@@ -202,6 +266,68 @@ async fn ai_commit_rejects_unknown_duplicate_and_partial_recommendations() {
 }
 
 #[tokio::test]
+async fn ai_commit_filters_fixed_partial_and_unanalyzed_suggestions() {
+    let (model, rx) = provider(vec![
+        json!({"summaries":[{"id":1,"summary":"candidate"},{"id":2,"summary":"staged"},{"id":3,"summary":"partial"}]}),
+        json!({"selected":[5,2,1,3,4],"reasons":(1..=5).map(|id| json!({"id":id,"reason":"include this file"})).collect::<Vec<_>>()}),
+    ]);
+    let mut staged = file(2);
+    staged.staged = true;
+    let mut partial = file(3);
+    partial.partial = true;
+    let mut oversized = file(4);
+    oversized.diff = "+large\n".repeat(1000);
+    let mut sensitive = file(5);
+    sensitive.path = ".env.production".into();
+    let result = recommend(
+        &model,
+        &enabled(),
+        &[file(1), staged, partial, oversized, sensitive],
+        "",
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.selected, vec![1]);
+    assert!(result.incomplete);
+    assert_eq!(result.reasons[&1], "include this file");
+    assert_eq!(result.excluded, 4);
+    assert_eq!(
+        result.reasons[&2],
+        "已在暂存区，保留当前暂存内容；不重复暂存"
+    );
+    assert_eq!(result.reasons[&3], "部分内容已暂存，请检查 diff 后手动选择");
+    for id in [4, 5] {
+        assert_eq!(
+            result.reasons[&id],
+            "未完成内容分析，请检查 diff 后手动选择"
+        );
+    }
+    rx.recv().unwrap();
+    let request = rx.recv().unwrap();
+    let data: Value =
+        serde_json::from_str(request["messages"][1]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(data["selectable_ids"], json!([1]));
+}
+
+#[tokio::test]
+async fn ai_commit_all_fixed_suggestions_return_no_new_candidates() {
+    let (model, _) = provider(vec![
+        json!({"summaries":[{"id":1,"summary":"staged change"}]}),
+        json!({"selected":[1],"reasons":[{"id":1,"reason":"include this file"}]}),
+    ]);
+    let mut staged = file(1);
+    staged.staged = true;
+    let result = recommend(&model, &enabled(), &[staged], "").await.unwrap();
+    assert!(result.selected.is_empty());
+    assert!(!result.incomplete);
+    assert_eq!(result.excluded, 1);
+    assert_eq!(
+        result.reasons[&1],
+        "已在暂存区，保留当前暂存内容；不重复暂存"
+    );
+}
+
+#[tokio::test]
 async fn ai_commit_generates_staged_message_in_selected_language_without_test_claims() {
     for language in [CommitLanguage::Chinese, CommitLanguage::English] {
         let subject = if language == CommitLanguage::Chinese {
@@ -210,7 +336,7 @@ async fn ai_commit_generates_staged_message_in_selected_language_without_test_cl
             "add commit workspace"
         };
         let (model, rx) = provider(vec![
-            json!({"summaries":[{"id":1,"summary":"add workspace"}]}),
+            json!({"summaries":[{"id":1,"summary":"改".repeat(160)}]}),
             json!({"type":"feat","scope":"git","subject":subject,"body":"Allow explicit staging"}),
         ]);
         let mut staged = file(1);

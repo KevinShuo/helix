@@ -267,12 +267,16 @@ impl CommitWorkspace {
                             })
                             .collect();
                         p.reasons = r.reasons;
-                        p.message = if r.incomplete {
-                            "推荐完成，部分文件需手动检查；空格调整，s 暂存所选"
+                        p.message = if r.excluded > 0 {
+                            format!(
+                                "推荐完成，已排除 {} 项不可自动暂存的建议；请核对文件说明后手动调整",
+                                r.excluded
+                            )
+                        } else if r.incomplete {
+                            "推荐完成，部分文件需手动检查；空格调整，s 暂存所选".into()
                         } else {
-                            "推荐完成，尚未 add；空格调整，s 暂存所选"
-                        }
-                        .into();
+                            "推荐完成，尚未 add；空格调整，s 暂存所选".into()
+                        };
                     }
                     Ok(AiResult::Message(m)) => {
                         if p.draft.apply_generated(revision, m.text, m.incomplete) {
