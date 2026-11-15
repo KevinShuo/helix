@@ -252,6 +252,14 @@ impl Compositor {
             })
     }
 
+    pub(crate) fn component_has_focus(&self, id: &str) -> bool {
+        self.layers
+            .iter()
+            .rev()
+            .find(|layer| layer.takes_keyboard_input())
+            .is_some_and(|layer| layer.id() == Some(id))
+    }
+
     pub fn layer_count(&self) -> usize {
         self.layers.len()
     }

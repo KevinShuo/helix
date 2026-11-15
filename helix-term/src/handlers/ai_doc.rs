@@ -22,8 +22,8 @@ pub(crate) fn cancel(editor: &mut Editor) {
 
 pub(crate) fn start(editor: &mut Editor) -> Result<()> {
     ensure!(
-        !editor.ai_commit_running,
-        "AI 提交分析正在运行，请先完成或取消"
+        !editor.ai_commit_running && editor.ai_merge.is_none(),
+        "其他 AI 生成正在运行，请先完成或取消"
     );
     ensure!(
         editor.config().ai_doc.enabled,

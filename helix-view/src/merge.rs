@@ -28,6 +28,8 @@ pub struct MergeDocumentState {
     pub session: MergeSessionId,
     pub data: GitConflictData,
     pub model: MergeModel,
+    /// Selection shared by the native merge UI and synchronous typed commands.
+    pub selected_block: usize,
     /// Text and history cannot change while an explicitly requested write runs.
     pub busy: bool,
     pub write_status: MergeWriteStatus,
@@ -146,6 +148,7 @@ impl Editor {
             session: id,
             data,
             model,
+            selected_block: 0,
             busy: false,
             write_status: MergeWriteStatus::Draft,
         });
@@ -221,6 +224,7 @@ impl Editor {
         {
             bail!("Merge result is being applied; keep the draft until it finishes");
         }
+        self.cancel_ai_merge();
         self.enter_normal_mode();
         let (view, doc) = current!(self);
         doc.append_changes_to_history(view);

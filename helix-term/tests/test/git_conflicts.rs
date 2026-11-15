@@ -10,6 +10,9 @@ mod discovery;
 #[path = "git_conflicts_acceptance.rs"]
 mod acceptance;
 
+#[path = "ai_merge.rs"]
+mod ai_merge;
+
 fn git(root: &Path, args: &[&str]) -> std::process::Output {
     let mut command = Command::new("git");
     command

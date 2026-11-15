@@ -64,6 +64,7 @@ pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
     completion::register_hooks(&handlers);
     ai_completion::register_hooks();
     ai_doc::register_hooks();
+    ai_merge::register_hooks();
     function_hints::register_hooks();
     git_conflicts::register_hooks();
     minimap::register_hooks();

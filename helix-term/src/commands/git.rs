@@ -53,7 +53,7 @@ pub(super) fn git_merge_menu(cx: &mut Context) {
             .set_error("Open a conflict file first (Space v r)");
         return;
     }
-    cx.editor.set_status("Merge: n/p next/previous  l/r/b current/incoming/both  v base  m review  a apply  f files  L/R whole file  B rebuild  t retry  F refresh");
+    cx.editor.set_status("Merge: n/p next/previous  l/r/b current/incoming/both  v base  i AI Merge  m review  a apply  f files  L/R whole file  B rebuild  t retry  F refresh");
     cx.on_next_key(|cx, key| {
         use helix_view::input::KeyCode::Char;
         let action = match key.code {
@@ -63,6 +63,7 @@ pub(super) fn git_merge_menu(cx: &mut Context) {
             Char('r') => A::UseIncoming,
             Char('b') => A::KeepBoth,
             Char('v') => A::ShowBase,
+            Char('i') => A::AiMerge,
             Char('m') => A::MarkReviewed,
             Char('a') => A::Apply,
             Char('f') => A::Files,

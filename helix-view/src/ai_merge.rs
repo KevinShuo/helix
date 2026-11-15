@@ -59,3 +59,68 @@ pub struct Suggestion {
     pub code: Option<String>,
     pub explanation: String,
 }
+
+#[derive(Clone)]
+pub struct Operation {
+    pub id: u64,
+    pub doc: crate::DocumentId,
+    pub view: crate::ViewId,
+    pub version: i32,
+    pub session: crate::merge::MergeSessionId,
+    pub source_version: helix_vcs::git_tools::ConflictVersion,
+    pub model: crate::ai_completion::AiCompletionConfig,
+    pub config: AiMergeConfig,
+    pub target: Target,
+    pub handle: helix_event::TaskHandle,
+    pub suggestion: Option<Suggestion>,
+    pub preview: bool,
+}
+
+impl Operation {
+    pub fn is_valid(&self, editor: &crate::Editor) -> bool {
+        if self.handle.is_canceled()
+            || editor.active_merge() != Some(self.session)
+            || editor.tree.focus != self.view
+            || editor
+                .tree
+                .try_get(self.view)
+                .is_none_or(|v| v.doc != self.doc)
+            || editor.config().ai_model_config() != self.model
+            || editor.config().ai_merge != self.config
+        {
+            return false;
+        }
+        let Some(doc) = editor.document(self.doc) else {
+            return false;
+        };
+        let Some(state) = doc.merge() else {
+            return false;
+        };
+        !doc.readonly
+            && doc.version() == self.version
+            && doc.language_name().unwrap_or("") == self.target.language
+            && doc.active_snippet.is_none()
+            && !state.busy
+            && matches!(state.write_status, crate::merge::MergeWriteStatus::Draft)
+            && state.data.version == self.source_version
+            && state.selected_block == self.target.block
+            && state.model.mode() == helix_vcs::merge::MergeMode::Blockwise
+            && state
+                .model
+                .blocks()
+                .get(self.target.block)
+                .is_some_and(|b| b.result == self.target.range)
+            && self.target.range.end <= doc.text().len_chars()
+            && doc.text().slice(self.target.range.clone()) == self.target.result
+    }
+}
+
+impl crate::Editor {
+    pub fn cancel_ai_merge(&mut self) {
+        if let Some(op) = self.ai_merge.take() {
+            if let Some(doc) = self.document_mut(op.doc) {
+                doc.ai_merge_controller.cancel();
+            }
+        }
+    }
+}

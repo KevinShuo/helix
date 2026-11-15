@@ -338,6 +338,14 @@ impl MergeModel {
         }
     }
 
+    /// AI acceptance always requires review, even when its text is unchanged.
+    pub fn require_review(&mut self, block: usize) {
+        self.whole_reviewed = false;
+        if let Some(block) = self.blocks.get_mut(block) {
+            block.decision = BlockDecision::NeedsReview;
+        }
+    }
+
     pub fn ready_to_apply(&self) -> bool {
         match self.mode {
             MergeMode::WholeFileReview => self.whole_reviewed,

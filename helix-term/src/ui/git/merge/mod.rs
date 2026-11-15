@@ -33,6 +33,7 @@ pub(crate) enum MergeUiAction {
     Rebuild,
     RetryStage,
     Refresh,
+    AiMerge,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Preview {
@@ -131,11 +132,12 @@ impl MergeEditor {
     fn active(&self, editor: &Editor) -> bool {
         editor.active_merge().is_some()
     }
-    fn sync_session(&mut self, editor: &Editor) -> bool {
+    fn sync_session(&mut self, editor: &mut Editor) -> bool {
         let Some(session) = editor.active_merge() else {
             return false;
         };
         if session != self.session {
+            crate::handlers::ai_merge::cancel(editor);
             self.instance = super::NEXT_INSTANCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             self.session = session;
             self.selected = 0;
@@ -143,6 +145,10 @@ impl MergeEditor {
             self.scroll = [0; 3];
             self.maps = None;
             self.confirmation = None;
+        }
+        let (_, doc) = helix_view::current!(editor);
+        if let Some(state) = doc.merge_mut() {
+            state.selected_block = self.selected;
         }
         true
     }
@@ -176,6 +182,7 @@ impl MergeEditor {
                     | AcceptCurrentFile
                     | AcceptIncomingFile
                     | Rebuild
+                    | AiMerge
             )
         {
             cx.editor
@@ -198,6 +205,13 @@ impl MergeEditor {
             return EventResult::Consumed(None);
         }
         match action {
+            AiMerge => {
+                if let Err(error) =
+                    crate::handlers::ai_merge::start(cx.editor, self.selected, String::new())
+                {
+                    cx.editor.set_error(error.to_string());
+                }
+            }
             Files => {
                 let path = super::conflicts::root(cx.editor);
                 if let Err(error) = cx
@@ -219,6 +233,8 @@ impl MergeEditor {
             }
             Apply | RetryStage => writes::apply(cx, action == RetryStage),
             Refresh => {
+                crate::handlers::ai_merge::cancel(cx.editor);
+                let (_, doc) = helix_view::current_ref!(cx.editor);
                 let path = doc.merge().unwrap().data.file.path.clone();
                 let root = doc.merge().unwrap().data.version.root().to_owned();
                 let expected = (self.session, doc.version());
@@ -227,6 +243,8 @@ impl MergeEditor {
                 })));
             }
             Rebuild => {
+                crate::handlers::ai_merge::cancel(cx.editor);
+                let (_, doc) = helix_view::current_ref!(cx.editor);
                 // Read-only generation binds to both the active session and document version.
                 let id = doc.id();
                 let version = doc.version();
@@ -273,6 +291,8 @@ impl MergeEditor {
                 replace_model(cx.editor, model);
             }
             Next | Previous => {
+                crate::handlers::ai_merge::cancel(cx.editor);
+                let (_, doc) = helix_view::current_ref!(cx.editor);
                 self.scroll = [0; 3];
                 let len = doc.merge().unwrap().model.blocks().len();
                 if len > 0 {
@@ -283,6 +303,7 @@ impl MergeEditor {
                     };
                 }
                 let (view, doc) = helix_view::current!(cx.editor);
+                doc.merge_mut().unwrap().selected_block = self.selected;
                 if let Some(block) = doc.merge().unwrap().model.blocks().get(self.selected) {
                     let position = block.result.start.min(doc.text().len_chars());
                     doc.set_selection(view.id, Selection::point(position));

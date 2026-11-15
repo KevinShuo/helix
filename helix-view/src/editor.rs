@@ -1293,6 +1293,8 @@ pub struct Editor {
     pub next_document_id: DocumentId,
     pub ai_doc: Option<crate::ai_doc::Operation>,
     pub ai_doc_serial: u64,
+    pub ai_merge: Option<crate::ai_merge::Operation>,
+    pub ai_merge_serial: u64,
     pub ai_commit_running: bool,
     pub documents: BTreeMap<DocumentId, Document>,
 
@@ -1452,6 +1454,8 @@ impl Editor {
             next_document_id: DocumentId::default(),
             ai_doc: None,
             ai_doc_serial: 0,
+            ai_merge: None,
+            ai_merge_serial: 0,
             ai_commit_running: false,
             documents: BTreeMap::new(),
             saves: HashMap::new(),

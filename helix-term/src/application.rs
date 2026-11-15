@@ -280,6 +280,7 @@ impl Application {
 
     async fn render(&mut self) {
         handlers::ai_doc::refresh(&mut self.editor, &mut self.compositor);
+        handlers::ai_merge::refresh(&mut self.editor, &mut self.compositor);
         if self.compositor.full_redraw {
             self.terminal.clear().expect("Cannot clear the terminal");
             self.compositor.full_redraw = false;

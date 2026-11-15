@@ -21,6 +21,7 @@ const BUTTONS: &[(&str, MergeUiAction)] = &[
     ("Incoming", MergeUiAction::UseIncoming),
     ("Both L+R", MergeUiAction::KeepBoth),
     ("Base", MergeUiAction::ShowBase),
+    ("AI Merge", MergeUiAction::AiMerge),
     ("Review", MergeUiAction::MarkReviewed),
     ("Apply", MergeUiAction::Apply),
     ("Files", MergeUiAction::Files),

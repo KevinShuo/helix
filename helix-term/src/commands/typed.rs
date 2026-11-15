@@ -3044,6 +3044,28 @@ const WRITE_NO_CODE_ACTIONS_FLAG: Flag = Flag {
     ..Flag::DEFAULT
 };
 
+fn ai_merge(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        let block = helix_view::doc!(cx.editor)
+            .merge()
+            .ok_or_else(|| anyhow::anyhow!("请先打开 Merge 冲突文件（Space v r）"))?
+            .selected_block;
+        crate::handlers::ai_merge::start(cx.editor, block, args.join(" "))?;
+    }
+    Ok(())
+}
+fn ai_merge_cancel(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_merge::cancel(cx.editor);
+        cx.editor.set_status("已取消 AI 合并，Result 草稿已保留");
+    }
+    Ok(())
+}
+
 fn ai_doc(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
     if event == PromptEvent::Validate {
         crate::handlers::ai_doc::start(cx.editor)?;
@@ -3087,6 +3109,8 @@ fn ai_commit_cancel(
 }
 
 pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
+    TypableCommand { name: "ai-merge", aliases: &[], doc: "Preview an AI suggestion for the selected merge conflict block", fun: ai_merge, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-merge-cancel", aliases: &[], doc: "Cancel AI merge assistance and preserve the result draft", fun: ai_merge_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-commit", aliases: &[], doc: "Recommend files, stage and commit with Chinese or English Conventional Commits", fun: ai_commit, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-commit-cancel", aliases: &[], doc: "Cancel AI commit analysis while preserving staged files and message", fun: ai_commit_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-doc", aliases: &[], doc: "Generate a reST doc comment for the function at the cursor", fun: ai_doc, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },

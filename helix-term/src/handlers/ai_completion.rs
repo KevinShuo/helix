@@ -32,6 +32,7 @@ pub fn trigger(editor: &mut Editor) {
     clear(editor);
     let config = editor.config().ai_completion.clone();
     if editor.ai_commit_running
+        || editor.ai_merge.is_some()
         || editor.ai_doc.as_ref().is_some_and(|op| op.is_valid(editor))
         || !config.enabled
         || editor.mode() != Mode::Insert
