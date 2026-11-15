@@ -1034,7 +1034,7 @@ async fn git_conflicts_ui_trust_and_apply_completion_after_close() -> anyhow::Re
     let draft = current_ref!(app.editor).1.id();
     app.editor.workspace_trust.set_config(Default::default());
     let workspace = helix_loader::find_workspace_in(repo.path()).0;
-    app.editor.workspace_trust.deny_once(&workspace);
+    app.editor.workspace_trust.untrust(&workspace);
     keys(&mut app, "<space>vma").await?;
     assert!(app.editor.get_status().unwrap().0.contains("trusted"));
     assert!(!checked_git(repo.path(), &["ls-files", "-u", "--", "file.txt"]).is_empty());
