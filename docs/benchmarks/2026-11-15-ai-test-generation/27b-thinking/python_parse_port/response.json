@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"code\":\"from subject import parse_port\\nimport pytest\\n\\n\\ndef test_正常端口号():\\n    \\\"\\\"\\\"基本数字字符串应正确解析为整数\\\"\\\"\\\"\\n    assert parse_port(\\\"80\\\") == 80\\n\\n\\ndef test_首尾空白被去除():\\n    \\\"\\\"\\\"前后空格、制表符、换行应被 strip 后正常解析\\\"\\\"\\\"\\n    assert parse_port(\\\"  443  \\\") == 443\\n    assert parse_port(\\\"\\\\t8080\\\\n\\\") == 8080\\n\\n\\ndef test_前导零接受():\\n    \\\"\\\"\\\"前导零不影响数值解析\\\"\\\"\\\"\\n    assert parse_port(\\\"007\\\") == 7\\n    assert parse_port(\\\"00001\\\") == 1\\n\\n\\ndef test_最小有效端口():\\n    \\\"\\\"\\\"端口 1 为下边界，应合法\\\"\\\"\\\"\\n    assert parse_port(\\\"1\\\") == 1\\n\\n\\ndef test_最大有效端口():\\n    \\\"\\\"\\\"端口 65535 为上边界，应合法\\\"\\\"\\\"\\n    assert parse_port(\\\"65535\\\") == 65535\\n\\n\\ndef test_空字符串抛异常():\\n    \\\"\\\"\\\"空字符串应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"\\\")\\n\\n\\ndef test_纯空白抛异常():\\n    \\\"\\\"\\\"仅含空白字符，strip 后为空，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"   \\\\t\\\\n  \\\")\\n\\n\\ndef test_正号前缀抛异常():\\n    \\\"\\\"\\\"带正号的字符串非纯十进制数字，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"+80\\\")\\n\\n\\ndef test_负号前缀抛异常():\\n    \\\"\\\"\\\"带负号的字符串非纯十进制数字，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"-80\\\")\\n\\n\\ndef test_非ASCII全角数字抛异常():\\n    \\\"\\\"\\\"全角数字非 ASCII，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"８０\\\")\\n\\n\\ndef test_含字母抛异常():\\n    \\\"\\\"\\\"数字中混入字母，非纯十进制，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"8a\\\")\\n\\n\\ndef test_中间含空格抛异常():\\n    \\\"\\\"\\\"strip 后内部仍有空格，非纯十进制，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"8 0\\\")\\n\\n\\ndef test_零值抛异常():\\n    \\\"\\\"\\\"端口 0 低于下界 1，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"0\\\")\\n\\n\\ndef test_全零前导抛异常():\\n    \\\"\\\"\\\"全零字符串解析为 0，低于下界，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"00000\\\")\\n\\n\\ndef test_超出上限抛异常():\\n    \\\"\\\"\\\"端口 65536 超过上界，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"65536\\\")\\n\\n\\ndef test_非ASCII拉丁字符抛异常():\\n    \\\"\\\"\\\"含非 ASCII 拉丁字符，应抛出 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"é80\\\")\\n\",\"assumptions\":[\"import 路径为 from subject import parse_port，假设 subject.py 位于项目根目录且 tests/ 下可直接导入\",\"str.isdecimal() 对 Unicode 十进制数字（如阿拉伯-印度数字）返回 True，但 isascii() 会先拦截，因此非 ASCII 十进制数字均被拒绝\"]}",
+        "reasoning_content_chars": 4790,
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794706559,
+  "id": "chatcmpl-1zK06pgxHczx58u3t8xW72czSwA6Rb4Z",
+  "model": "Qwen3.8-27B-UD-Q5_K_M",
+  "object": "chat.completion",
+  "system_fingerprint": "b11081-161755f29",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 61665.464,
+    "predicted_n": 2358,
+    "predicted_per_second": 38.222367061083006,
+    "predicted_per_token_ms": 26.162691557064065,
+    "prompt_ms": 417.062,
+    "prompt_n": 704,
+    "prompt_per_second": 1687.9984270923749,
+    "prompt_per_token_ms": 0.5924176136363637
+  },
+  "usage": {
+    "completion_tokens": 2358,
+    "prompt_tokens": 704,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3062
+  }
+}

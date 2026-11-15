@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"#include \\\"subject.hpp\\\"\\n\\n#include <gtest/gtest.h>\\n\\n#include <algorithm>\\n#include <utility>\\n#include <vector>\\n\\nusing Ranges = std::vector<std::pair<int, int>>;\\n\\nTEST(HelixAi8BA3EAF619E8EE73, EmptyInputReturnsEmpty) {\\n    // 空输入返回空结果\\n    EXPECT_EQ(merge_ranges(Ranges{}), Ranges{});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, SingleRangeUnchanged) {\\n    // 单个区间原样返回\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 5}}), Ranges{{1, 5}});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, SinglePointRange) {\\n    // 单点区间\\n    EXPECT_EQ(merge_ranges(Ranges{{3, 3}}), Ranges{{3, 3}});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, DisjointRangesStaySeparate) {\\n    // 不相交区间保持分离\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 2}, {4, 5}}), (Ranges{{1, 2}, {4, 5}}));\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, AdjacentRangesNotMerged) {\\n    // 仅相邻（端点不共享）不合并\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 2}, {3, 4}}), (Ranges{{1, 2}, {3, 4}}));\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, SharedEndpointMerged) {\\n    // 共享端点视为重叠，合并\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 3}, {3, 5}}), Ranges{{1, 5}});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, OverlappingRangesMerged) {\\n    // 重叠区间合并\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 4}, {2, 6}}), Ranges{{1, 6}});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, ContainedRangeMerged) {\\n    // 被包含区间合并到外层\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 10}, {3, 5}}), Ranges{{1, 10}});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, UnsortedInputSorted) {\\n    // 乱序输入结果有序\\n    EXPECT_EQ(merge_ranges(Ranges{{5, 6}, {1, 2}, {3, 4}}), (Ranges{{1, 2}, {3, 4}, {5, 6}}));\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, ReversedEndpointsNormalized) {\\n    // 反向端点被规范化\\n    EXPECT_EQ(merge_ranges(Ranges{{5, 1}}), Ranges{{1, 5}});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, ReversedEndpointsMerged) {\\n    // 反向端点规范化后参与合并\\n    EXPECT_EQ(merge_ranges(Ranges{{6, 2}, {3, 4}}), Ranges{{2, 6}});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, MultipleMerges) {\\n    // 多组区间合并\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 3}, {2, 6}, {8, 10}, {15, 18}, {17, 20}}),\\n              (Ranges{{1, 6}, {8, 10}, {15, 20}}));\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, InputPreserved) {\\n    // 输入不被修改\\n    Ranges input{{5, 1}, {2, 3}};\\n    const Ranges original = input;\\n    merge_ranges(input);\\n    EXPECT_EQ(input, original);\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, NegativeValues) {\\n    // 负值区间合并\\n    EXPECT_EQ(merge_ranges(Ranges{{-5, -1}, {-3, 0}}), Ranges{{-5, 0}});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, DuplicateRanges) {\\n    // 重复区间合并为一个\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 2}, {1, 2}}), Ranges{{1, 2}});\\n}\\n\\nTEST(HelixAi8BA3EAF619E8EE73, ChainOverlap) {\\n    // 链式重叠合并\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 2}, {2, 3}, {3, 4}}), Ranges{{1, 4}});\\n}\\n\",\"assumptions\":[\"区间为闭区间，共享端点视为重叠（依据头文件注释）\",\"仅相邻但不共享端点（如 [1,2] 与 [3,4]）不合并（依据头文件注释）\",\"反向端点通过交换规范化（依据实现与注释）\",\"输入向量不被修改（依据注释 Preserve the input）\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794706632,
+  "id": "f5010c67-c050-476a-a41b-cfbeb39adba8",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 1278,
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 868,
+    "prompt_tokens": 868,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 2146
+  }
+}

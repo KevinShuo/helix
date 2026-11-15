@@ -1,0 +1,8 @@
+{
+  "helix-term/src/handlers/ai_test/project.rs": "b7667987d3c5e8502780a52947a6ff993a6a9426edaf9d2c912dfe3c9051da71",
+  "helix-term/src/handlers/ai_test/evaluation.rs": "221b63bbcb12038da1473957f986d8a551a835c40a876ebd0e207cd2f5f1b6db",
+  "helix-term/src/handlers/ai_test/project_tests.rs": "3a1043ba7062036eb0d038d2fcda6a60ff6fca54356229a4b6eb4023e0ba33c0",
+  "target/debug/deps/helix_term-35bce7f436acbfaf.exe": "e6cc36e31bc12a65e771600147a9bafabceda265c20347f16b17212067e820ac",
+  "contrib/ai-test-generation-supplement.py": "21fa2fa032f64e66a6b558341bb7368c2b4ffac41929e9ee381115d20efa1fe2",
+  "contrib/ai-test-generation-replay.py": "4f07bf14184b9c79753893c3bef348c445bc531bbc779aaf44222049fb7d709f"
+}

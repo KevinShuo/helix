@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"#include <gtest/gtest.h>\\n#include <cstring>\\n#include <string>\\n\\nextern \\\"C\\\" {\\n#include \\\"subject.h\\\"\\n}\\n\\n// 正常情况：容量足够，完整复制并返回源长度\\nTEST(HelixAiCC55F06B8AD1074F, CopiesFullStringWhenCapacitySufficient) {\\n    char dst[16];\\n    std::memset(dst, 'X', sizeof(dst));\\n    size_t n = copy_prefix(dst, sizeof(dst), \\\"hello\\\");\\n    EXPECT_EQ(n, 5u);\\n    EXPECT_STREQ(dst, \\\"hello\\\");\\n}\\n\\n// 正常情况：容量恰好等于长度+1，完整复制\\nTEST(HelixAiCC55F06B8AD1074F, CopiesFullStringWhenCapacityExactlyFits) {\\n    char dst[6];\\n    std::memset(dst, 'X', sizeof(dst));\\n    size_t n = copy_prefix(dst, sizeof(dst), \\\"hello\\\");\\n    EXPECT_EQ(n, 5u);\\n    EXPECT_STREQ(dst, \\\"hello\\\");\\n}\\n\\n// 边界：容量不足，截断为 capacity-1 字节并 NUL 结尾，返回完整长度\\nTEST(HelixAiCC55F06B8AD1074F, TruncatesWhenCapacityTooSmall) {\\n    char dst[4];\\n    std::memset(dst, 'X', sizeof(dst));\\n    size_t n = copy_prefix(dst, sizeof(dst), \\\"hello\\\");\\n    EXPECT_EQ(n, 5u);\\n    EXPECT_STREQ(dst, \\\"hel\\\");\\n    EXPECT_EQ(dst[3], '\\\\0');\\n}\\n\\n// 边界：容量为 1，只写入 NUL，返回完整长度\\nTEST(HelixAiCC55F06B8AD1074F, CapacityOneWritesOnlyNul) {\\n    char dst[1];\\n    dst[0] = 'X';\\n    size_t n = copy_prefix(dst, 1, \\\"hello\\\");\\n    EXPECT_EQ(n, 5u);\\n    EXPECT_EQ(dst[0], '\\\\0');\\n}\\n\\n// 边界：容量为 0，不写入任何内容，返回完整长度\\nTEST(HelixAiCC55F06B8AD1074F, CapacityZeroWritesNothing) {\\n    char dst[4];\\n    std::memset(dst, 'X', sizeof(dst));\\n    size_t n = copy_prefix(dst, 0, \\\"hello\\\");\\n    EXPECT_EQ(n, 5u);\\n    EXPECT_EQ(dst[0], 'X');\\n    EXPECT_EQ(dst[1], 'X');\\n    EXPECT_EQ(dst[2], 'X');\\n    EXPECT_EQ(dst[3], 'X');\\n}\\n\\n// 边界：空源字符串，返回 0 并写入 NUL\\nTEST(HelixAiCC55F06B8AD1074F, EmptySourceReturnsZeroAndNulTerminates) {\\n    char dst[4];\\n    std::memset(dst, 'X', sizeof(dst));\\n    size_t n = copy_prefix(dst, sizeof(dst), \\\"\\\");\\n    EXPECT_EQ(n, 0u);\\n    EXPECT_EQ(dst[0], '\\\\0');\\n}\\n\\n// 边界：NULL 源视为空字符串，返回 0 并写入 NUL\\nTEST(HelixAiCC55F06B8AD1074F, NullSourceTreatedAsEmpty) {\\n    char dst[4];\\n    std::memset(dst, 'X', sizeof(dst));\\n    size_t n = copy_prefix(dst, sizeof(dst), nullptr);\\n    EXPECT_EQ(n, 0u);\\n    EXPECT_EQ(dst[0], '\\\\0');\\n}\\n\\n// 边界：NULL 目标且容量为 0，不写入，返回完整长度\\nTEST(HelixAiCC55F06B8AD1074F, NullDestinationReturnsRequiredLength) {\\n    size_t n = copy_prefix(nullptr, 0, \\\"hello\\\");\\n    EXPECT_EQ(n, 5u);\\n}\\n\\n// 边界：NULL 目标但容量非 0，不写入，返回完整长度\\nTEST(HelixAiCC55F06B8AD1074F, NullDestinationWithCapacityReturnsRequiredLength) {\\n    size_t n = copy_prefix(nullptr, 8, \\\"hello\\\");\\n    EXPECT_EQ(n, 5u);\\n}\\n\\n// 边界：NULL 源与 NULL 目标，返回 0\\nTEST(HelixAiCC55F06B8AD1074F, NullSourceAndNullDestinationReturnsZero) {\\n    size_t n = copy_prefix(nullptr, 0, nullptr);\\n    EXPECT_EQ(n, 0u);\\n}\\n\\n// 正常情况：长字符串截断，返回完整长度\\nTEST(HelixAiCC55F06B8AD1074F, LongStringTruncatedReturnsFullLength) {\\n    std::string src(100, 'a');\\n    char dst[10];\\n    std::memset(dst, 'X', sizeof(dst));\\n    size_t n = copy_prefix(dst, sizeof(dst), src.c_str());\\n    EXPECT_EQ(n, 100u);\\n    EXPECT_EQ(std::strlen(dst), 9u);\\n    EXPECT_EQ(std::string(dst), std::string(9, 'a'));\\n}\\n\",\"assumptions\":[\"copy_prefix 返回源字符串完整长度（不含 NUL），即使发生截断\",\"dst 非 NULL 且 capacity>0 时最多复制 capacity-1 字节并总是 NUL 结尾\",\"dst 为 NULL 或 capacity 为 0 时不写入任何内容\",\"src 为 NULL 时视为空字符串，返回 0\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794706622,
+  "id": "a7676f52-111c-4064-9adb-f01bc2b48158",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 1359,
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 782,
+    "prompt_tokens": 782,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 2141
+  }
+}

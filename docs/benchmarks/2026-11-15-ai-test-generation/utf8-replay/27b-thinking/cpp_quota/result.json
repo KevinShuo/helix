@@ -1,0 +1,72 @@
+{
+  "arm": "27b-thinking",
+  "case": "cpp_quota",
+  "language": "cpp",
+  "primary_generation_ms": 42079,
+  "baseline": {
+    "success": false,
+    "stage": "Test",
+    "steps": [
+      {
+        "argv": [
+          "cmake",
+          "-S",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota",
+          "-B",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota\\.utf8-build",
+          "-DBUILD_TESTING=ON",
+          "-DCMAKE_CXX_FLAGS=/utf-8",
+          "-DCMAKE_TOOLCHAIN_FILE=C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\scripts\\buildsystems\\vcpkg.cmake"
+        ],
+        "stage": "Configure",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 3271,
+        "log": "-- Building for: Visual Studio 18 2026\n-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26300.\n-- The C compiler identification is MSVC 19.50.35728.0\n-- The CXX compiler identification is MSVC 19.50.35728.0\n-- Detecting C compiler ABI info\n-- Detecting C compiler ABI info - done\n-- Check for working C compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting C compile features\n-- Detecting C compile features - done\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Configuring done (3.1s)\n-- Generating done (0.1s)\n-- Build files have been written to: I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_quota/.utf8-build\n"
+      },
+      {
+        "argv": [
+          "cmake",
+          "--build",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota\\.utf8-build",
+          "--config",
+          "Debug",
+          "--target",
+          "helix_ai_consume_79da9fb5102f83d4"
+        ],
+        "stage": "Build",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 1539,
+        "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  1>Checking Build System\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_quota/CMakeLists.txt\r\n  subject.cpp\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota\\.utf8-build\\Debug\\subject.lib\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_quota/tests/helix-ai/consume_79da9fb5102f83d4/CMakeLists.txt\r\n  consume_test.cpp\r\nC:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9): warning C4530: 使用了 C++ 异常处理程序，但未启用展开语义。请指定 /EHsc [I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota\\.utf8-build\\tests\\helix-ai\\consume_79da9fb5102f83d4\\helix_ai_consume_79da9fb5102f83d4.vcxproj]\r\n  (编译源文件“../../../../tests/helix-ai/consume_79da9fb5102f83d4/consume_test.cpp”)\r\n      C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9):\r\n      模板实例化上下文(最早的实例化上下文)为\r\n          C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\include\\gtest\\gtest-message.h(118,10):\r\n          查看对正在编译的函数 模板 实例化“std::basic_ostream<char,std::char_traits<char>> &std::operator <<<std::char_traits<char>>(std::basic_ostream<char,std::char_traits<char>> &,const char *)”的引用\r\n  \r\n  helix_ai_consume_79da9fb5102f83d4.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota\\.utf8-build\\tests\\helix-ai\\consume_79da9fb5102f83d4\\Debug\\helix_ai_consume_79da9fb5102f83d4.exe\r\n  C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\debug\\bin\\gtest_main.dll -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota\\.utf8-build\\tests\\helix-ai\\consume_79da9fb5102f83d4\\Debug\\gtest_main.dll done\r\n  C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\debug\\bin\\gtest.dll -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota\\.utf8-build\\tests\\helix-ai\\consume_79da9fb5102f83d4\\Debug\\gtest.dll done\r\n"
+      },
+      {
+        "argv": [
+          "ctest",
+          "--test-dir",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota\\.utf8-build",
+          "-C",
+          "Debug",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "HelixAi79DA9FB5102F83D4"
+        ],
+        "stage": "Test",
+        "exit_code": 8,
+        "success": false,
+        "timeout": false,
+        "elapsed_ms": 382,
+        "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_quota/.utf8-build\n      Start  1: HelixAi79DA9FB5102F83D4.ConsumeZeroOnFreshQuota\n 1/12 Test  #1: HelixAi79DA9FB5102F83D4.ConsumeZeroOnFreshQuota ................   Passed    0.01 sec\n      Start  2: HelixAi79DA9FB5102F83D4.ConsumeValidAmountWithinQuota\n 2/12 Test  #2: HelixAi79DA9FB5102F83D4.ConsumeValidAmountWithinQuota ..........   Passed    0.01 sec\n      Start  3: HelixAi79DA9FB5102F83D4.ConsumeExactFit\n 3/12 Test  #3: HelixAi79DA9FB5102F83D4.ConsumeExactFit ........................   Passed    0.12 sec\n      Start  4: HelixAi79DA9FB5102F83D4.ConsumeExactFitOnRemaining\n 4/12 Test  #4: HelixAi79DA9FB5102F83D4.ConsumeExactFitOnRemaining .............   Passed    0.01 sec\n      Start  5: HelixAi79DA9FB5102F83D4.ConsumeExceedsRemainingRejected\n 5/12 Test  #5: HelixAi79DA9FB5102F83D4.ConsumeExceedsRemainingRejected ........   Passed    0.01 sec\n      Start  6: HelixAi79DA9FB5102F83D4.ConsumeNegativeRejected\n 6/12 Test  #6: HelixAi79DA9FB5102F83D4.ConsumeNegativeRejected ................   Passed    0.01 sec\n      Start  7: HelixAi79DA9FB5102F83D4.ConsumeExceedsFullQuotaRejected\n 7/12 Test  #7: HelixAi79DA9FB5102F83D4.ConsumeExceedsFullQuotaRejected ........   Passed    0.01 sec\n      Start  8: HelixAi79DA9FB5102F83D4.ConsumeOnZeroLimit\n 8/12 Test  #8: HelixAi79DA9FB5102F83D4.ConsumeOnZeroLimit .....................   Passed    0.01 sec\n      Start  9: HelixAi79DA9FB5102F83D4.ConsumeAfterFullQuotaExhausted\n 9/12 Test  #9: HelixAi79DA9FB5102F83D4.ConsumeAfterFullQuotaExhausted .........***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAi79DA9FB5102F83D4.ConsumeAfterFullQuotaExhausted\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAi79DA9FB5102F83D4\n[ RUN      ] HelixAi79DA9FB5102F83D4.ConsumeAfterFullQuotaExhausted\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_quota\\tests\\helix-ai\\consume_79da9fb5102f83d4\\consume_test.cpp(69): error: Value of: q.consume(0)\n  Actual: true\nExpected: false\n\n[  FAILED  ] HelixAi79DA9FB5102F83D4.ConsumeAfterFullQuotaExhausted (0 ms)\n[----------] 1 test from HelixAi79DA9FB5102F83D4 (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAi79DA9FB5102F83D4.ConsumeAfterFullQuotaExhausted\n\n 1 FAILED TEST\n\n      Start 10: HelixAi79DA9FB5102F83D4.NegativeLimitClampedToZero\n10/12 Test #10: HelixAi79DA9FB5102F83D4.NegativeLimitClampedToZero .............   Passed    0.01 sec\n      Start 11: HelixAi79DA9FB5102F83D4.MultipleSequentialConsumesAccumulate\n11/12 Test #11: HelixAi79DA9FB5102F83D4.MultipleSequentialConsumesAccumulate ...   Passed    0.01 sec\n      Start 12: HelixAi79DA9FB5102F83D4.RejectionLeavesStateUnchanged\n12/12 Test #12: HelixAi79DA9FB5102F83D4.RejectionLeavesStateUnchanged ..........   Passed    0.01 sec\n\n92% tests passed, 1 tests failed out of 12\n\nTotal Test time (real) =   0.31 sec\n\nThe following tests FAILED:\n\t  9 - HelixAi79DA9FB5102F83D4.ConsumeAfterFullQuotaExhausted (Failed)\nErrors while running CTest\n"
+      }
+    ],
+    "elapsed_ms": 5192
+  },
+  "mutants": [],
+  "unchanged_test_sha256": "0c551edf311712c0cf23f2bbb09c53c28e4a9fb543b8645f97231868a4851228",
+  "generation_error": null,
+  "primary_accepted": true,
+  "validation_bypassed": false
+}

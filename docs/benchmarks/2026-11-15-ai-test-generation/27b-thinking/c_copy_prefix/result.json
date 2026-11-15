@@ -1,0 +1,12 @@
+{
+  "accepted": false,
+  "arm": "27b-thinking",
+  "assumptions": [],
+  "baseline": null,
+  "case": "c_copy_prefix",
+  "generation_error": "Could not connect to AI endpoint",
+  "generation_ms": 0,
+  "language": "c",
+  "mutants": [],
+  "restored": null
+}

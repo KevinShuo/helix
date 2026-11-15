@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"import pytest\\n\\nfrom subject import parse_port\\n\\n\\ndef test_parse_port_普通十进制端口():\\n    \\\"\\\"\\\"普通十进制端口应返回对应整数\\\"\\\"\\\"\\n    assert parse_port(\\\"80\\\") == 80\\n    assert parse_port(\\\"443\\\") == 443\\n    assert parse_port(\\\"8080\\\") == 8080\\n\\n\\ndef test_parse_port_去除首尾空白():\\n    \\\"\\\"\\\"首尾空白应被去除后解析\\\"\\\"\\\"\\n    assert parse_port(\\\"  80  \\\") == 80\\n    assert parse_port(\\\"\\\\t443\\\\n\\\") == 443\\n    assert parse_port(\\\"\\\\r\\\\n8080\\\\t \\\") == 8080\\n\\n\\ndef test_parse_port_接受前导零():\\n    \\\"\\\"\\\"前导零应被接受\\\"\\\"\\\"\\n    assert parse_port(\\\"0080\\\") == 80\\n    assert parse_port(\\\"00000001\\\") == 1\\n    assert parse_port(\\\"065535\\\") == 65535\\n\\n\\ndef test_parse_port_边界值():\\n    \\\"\\\"\\\"1 与 65535 为合法边界\\\"\\\"\\\"\\n    assert parse_port(\\\"1\\\") == 1\\n    assert parse_port(\\\"65535\\\") == 65535\\n\\n\\ndef test_parse_port_超出范围():\\n    \\\"\\\"\\\"0 与 65536 超出范围应抛 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"0\\\")\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"65536\\\")\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"999999\\\")\\n\\n\\ndef test_parse_port_空字符串():\\n    \\\"\\\"\\\"空字符串应抛 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"\\\")\\n\\n\\ndef test_parse_port_仅空白():\\n    \\\"\\\"\\\"仅含空白字符应抛 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"   \\\")\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"\\\\t\\\\n\\\")\\n\\n\\ndef test_parse_port_带符号():\\n    \\\"\\\"\\\"带正负号应抛 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"+80\\\")\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"-80\\\")\\n\\n\\ndef test_parse_port_非十进制字符():\\n    \\\"\\\"\\\"含非十进制字符应抛 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"8a\\\")\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"80.0\\\")\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"1 2\\\")\\n\\n\\ndef test_parse_port_非ASCII数字():\\n    \\\"\\\"\\\"非 ASCII 数字字符应抛 ValueError\\\"\\\"\\\"\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"８０\\\")\\n    with pytest.raises(ValueError):\\n        parse_port(\\\"١٢٣\\\")\\n\",\"assumptions\":[\"isdecimal() 对全角数字返回 True，但 isascii() 为 False，因此全角数字应抛 ValueError\",\"阿拉伯-印度数字同样非 ASCII，应抛 ValueError\",\"strip() 去除的空白包括空格、制表符、换行、回车等\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794706652,
+  "id": "c358f962-2e5d-4b30-97c5-f7980a915ff1",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 833,
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 690,
+    "prompt_tokens": 690,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1523
+  }
+}

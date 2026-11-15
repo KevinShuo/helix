@@ -21,6 +21,7 @@ pub(crate) fn cancel(editor: &mut Editor) {
 }
 
 pub(crate) fn start(editor: &mut Editor) -> Result<()> {
+    ensure!(!super::ai_test::busy(editor), "请先完成或取消 AI 测试任务");
     ensure!(
         !editor.ai_commit_running,
         "AI 提交分析正在运行，请先完成或取消"
@@ -61,7 +62,9 @@ pub(crate) fn start(editor: &mut Editor) -> Result<()> {
 }
 
 fn launch(editor: &mut Editor, target: Target) -> Result<()> {
-    let model = editor.config().ai_model_config();
+    let model = editor
+        .config()
+        .ai_provider(helix_view::ai::AiFeature::Doc)?;
     let config = editor.config().ai_doc.clone();
     client::request(&model, &config, &target)?;
     // Manual generation has priority over automatic requests across all views.

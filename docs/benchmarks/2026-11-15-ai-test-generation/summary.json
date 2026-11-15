@@ -1,0 +1,190 @@
+{
+  "27b-thinking": {
+    "observations": 6,
+    "accepted": 5,
+    "baseline_pass": 3,
+    "median_generation_ms": 54160.5,
+    "total_generation_ms": 323415,
+    "mutants_killed": 9,
+    "mutants_exercised": 9,
+    "mutants_available": 18,
+    "cases": [
+      {
+        "case": "c_parse_u16",
+        "language": "c",
+        "generation_ms": 66474,
+        "accepted": true,
+        "baseline_pass": false,
+        "mutants_killed": 0,
+        "baseline_ms": 4570,
+        "generation_error": null
+      },
+      {
+        "case": "c_copy_prefix",
+        "language": "c",
+        "generation_ms": 0,
+        "accepted": false,
+        "baseline_pass": false,
+        "mutants_killed": 0,
+        "baseline_ms": null,
+        "generation_error": "Could not connect to AI endpoint"
+      },
+      {
+        "case": "cpp_merge_ranges",
+        "language": "cpp",
+        "generation_ms": 106541,
+        "accepted": true,
+        "baseline_pass": true,
+        "mutants_killed": 3,
+        "baseline_ms": 5877,
+        "generation_error": null
+      },
+      {
+        "case": "cpp_quota",
+        "language": "cpp",
+        "generation_ms": 42079,
+        "accepted": true,
+        "baseline_pass": false,
+        "mutants_killed": 0,
+        "baseline_ms": 5574,
+        "generation_error": null
+      },
+      {
+        "case": "python_parse_port",
+        "language": "python",
+        "generation_ms": 62396,
+        "accepted": true,
+        "baseline_pass": true,
+        "mutants_killed": 3,
+        "baseline_ms": 243,
+        "generation_error": null
+      },
+      {
+        "case": "python_unique_by",
+        "language": "python",
+        "generation_ms": 45925,
+        "accepted": true,
+        "baseline_pass": true,
+        "mutants_killed": 3,
+        "baseline_ms": 233,
+        "generation_error": null
+      }
+    ]
+  },
+  "deepseek": {
+    "observations": 6,
+    "accepted": 5,
+    "baseline_pass": 1,
+    "median_generation_ms": 4871.5,
+    "total_generation_ms": 30414,
+    "mutants_killed": 3,
+    "mutants_exercised": 3,
+    "mutants_available": 18,
+    "cases": [
+      {
+        "case": "c_parse_u16",
+        "language": "c",
+        "generation_ms": 7435,
+        "accepted": true,
+        "baseline_pass": false,
+        "mutants_killed": 0,
+        "baseline_ms": 4518,
+        "generation_error": null
+      },
+      {
+        "case": "c_copy_prefix",
+        "language": "c",
+        "generation_ms": 5538,
+        "accepted": true,
+        "baseline_pass": false,
+        "mutants_killed": 0,
+        "baseline_ms": 4400,
+        "generation_error": null
+      },
+      {
+        "case": "cpp_merge_ranges",
+        "language": "cpp",
+        "generation_ms": 5862,
+        "accepted": true,
+        "baseline_pass": false,
+        "mutants_killed": 0,
+        "baseline_ms": 4565,
+        "generation_error": null
+      },
+      {
+        "case": "cpp_quota",
+        "language": "cpp",
+        "generation_ms": 4205,
+        "accepted": true,
+        "baseline_pass": false,
+        "mutants_killed": 0,
+        "baseline_ms": 4402,
+        "generation_error": null
+      },
+      {
+        "case": "python_parse_port",
+        "language": "python",
+        "generation_ms": 4026,
+        "accepted": true,
+        "baseline_pass": true,
+        "mutants_killed": 3,
+        "baseline_ms": 232,
+        "generation_error": null
+      },
+      {
+        "case": "python_unique_by",
+        "language": "python",
+        "generation_ms": 3348,
+        "accepted": false,
+        "baseline_pass": false,
+        "mutants_killed": 0,
+        "baseline_ms": null,
+        "generation_error": "测试响应不符合 JSON 格式: missing field `assumptions` at line 1 column 2142"
+      }
+    ]
+  },
+  "prompt_equivalence": {
+    "c_parse_u16": {
+      "identical": true,
+      "hashes": [
+        "b26362212e10a9524ee9379a5a5650ecfb6e1c55197d1af86e3af3521c57dabe",
+        "b26362212e10a9524ee9379a5a5650ecfb6e1c55197d1af86e3af3521c57dabe"
+      ]
+    },
+    "c_copy_prefix": {
+      "identical": true,
+      "hashes": [
+        "5d251666edcfb33078fa36ec8c66aab127e24bff5a6e6374b99eb5a6b1200a50",
+        "5d251666edcfb33078fa36ec8c66aab127e24bff5a6e6374b99eb5a6b1200a50"
+      ]
+    },
+    "cpp_merge_ranges": {
+      "identical": true,
+      "hashes": [
+        "36d74d1b7deb4f012f786a856b212568eb9543d204743ee04823fb93f0c28ffa",
+        "36d74d1b7deb4f012f786a856b212568eb9543d204743ee04823fb93f0c28ffa"
+      ]
+    },
+    "cpp_quota": {
+      "identical": true,
+      "hashes": [
+        "2d76942daadc94b2b29741a8a05c3716df0a4dc360b91ae7c42bf30c203ecbe9",
+        "2d76942daadc94b2b29741a8a05c3716df0a4dc360b91ae7c42bf30c203ecbe9"
+      ]
+    },
+    "python_parse_port": {
+      "identical": true,
+      "hashes": [
+        "fc0fd510f53a0449917ec8e86244835e378953723054d00430f72d95be159652",
+        "fc0fd510f53a0449917ec8e86244835e378953723054d00430f72d95be159652"
+      ]
+    },
+    "python_unique_by": {
+      "identical": true,
+      "hashes": [
+        "53fcc496eb36032adc1d3dfd455c5ad2192621ea6fe7617f3f909a62a27b06e0",
+        "53fcc496eb36032adc1d3dfd455c5ad2192621ea6fe7617f3f909a62a27b06e0"
+      ]
+    }
+  }
+}

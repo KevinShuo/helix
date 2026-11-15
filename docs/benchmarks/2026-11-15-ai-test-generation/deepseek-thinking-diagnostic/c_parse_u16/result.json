@@ -1,0 +1,12 @@
+{
+  "accepted": false,
+  "arm": "deepseek-thinking-diagnostic",
+  "assumptions": [],
+  "baseline": null,
+  "case": "c_parse_u16",
+  "generation_error": "Model output incomplete: \"length\"",
+  "generation_ms": 21935,
+  "language": "c",
+  "mutants": [],
+  "restored": null
+}

@@ -37,6 +37,7 @@ impl Default for Config {
 #[derive(Debug)]
 pub enum ConfigLoadError {
     BadConfig(TomlError),
+    InvalidAiConfig(String),
     Error(IOError),
 }
 
@@ -50,6 +51,7 @@ impl Display for ConfigLoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConfigLoadError::BadConfig(err) => err.fmt(f),
+            ConfigLoadError::InvalidAiConfig(err) => err.fmt(f),
             ConfigLoadError::Error(err) => err.fmt(f),
         }
     }
@@ -79,9 +81,20 @@ impl Config {
                     (None, Some(val)) | (Some(val), None) => {
                         val.try_into().map_err(ConfigLoadError::BadConfig)?
                     }
-                    (Some(global), Some(local)) => merge_toml_values(global, local, 3)
-                        .try_into()
-                        .map_err(ConfigLoadError::BadConfig)?,
+                    (Some(global), Some(local)) => {
+                        // Named providers add one level below the usual editor settings.
+                        let ai = global
+                            .get("ai")
+                            .zip(local.get("ai"))
+                            .map(|(global, local)| {
+                                merge_toml_values(global.clone(), local.clone(), 3)
+                            });
+                        let mut merged = merge_toml_values(global, local, 3);
+                        if let Some(ai) = ai {
+                            merged.as_table_mut().unwrap().insert("ai".into(), ai);
+                        }
+                        merged.try_into().map_err(ConfigLoadError::BadConfig)?
+                    }
                 };
 
                 Config {
@@ -114,6 +127,9 @@ impl Config {
             (Err(err), Err(_)) => return Err(err),
         };
 
+        res.editor
+            .validate_ai()
+            .map_err(|err| ConfigLoadError::InvalidAiConfig(format!("{err:#}")))?;
         Ok(res)
     }
 
@@ -154,6 +170,54 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ai_provider_project_override_preserves_connection_and_other_providers() {
+        let global = r#"
+[editor.ai]
+default-provider = "cloud"
+[editor.ai.providers.cloud]
+type = "deepseek"
+endpoint = "https://api.deepseek.com/chat/completions"
+model = "default-model"
+api-key-env = "DEEPSEEK_API_KEY"
+[editor.ai.providers.local]
+type = "llama-cpp"
+endpoint = "http://127.0.0.1:19239/v1/chat/completions"
+model = "local"
+[editor.ai-doc]
+enabled = true
+"#
+        .to_owned();
+        let local = "[editor.ai.providers.cloud]\nmodel = 'project-model'\n[editor.ai-completion]\nprovider = 'local'\n".to_owned();
+        let config =
+            Config::load(Ok(&global), Ok(local)).expect("provider field overrides must merge");
+        let provider = config
+            .editor
+            .ai_provider(helix_view::ai::AiFeature::Doc)
+            .unwrap();
+        assert_eq!(provider.model, "project-model");
+        assert_eq!(
+            provider.endpoint,
+            "https://api.deepseek.com/chat/completions"
+        );
+        assert_eq!(provider.api_key_env.as_deref(), Some("DEEPSEEK_API_KEY"));
+        assert_eq!(
+            config
+                .editor
+                .ai_provider(helix_view::ai::AiFeature::Completion)
+                .unwrap()
+                .model,
+            "local"
+        );
+    }
+
+    #[test]
+    fn ai_provider_bad_reference_is_a_config_error() {
+        let config = "[editor.ai-doc]\nprovider = 'typo'\n".to_owned();
+        let error = Config::load(Ok(&config), Err(ConfigLoadError::default())).unwrap_err();
+        assert!(error.to_string().contains("typo"));
+    }
 
     impl Config {
         fn load_test(config: &str) -> Config {

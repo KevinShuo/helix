@@ -1,0 +1,9 @@
+{
+  "type": "deepseek",
+  "endpoint": "https://api.deepseek.com/chat/completions",
+  "model": "deepseek-flash",
+  "api-key-env": "DEEPSEEK_API_KEY",
+  "context-size": 16384,
+  "thinking": false,
+  "proxy": "system"
+}

@@ -1,0 +1,12 @@
+
+running 1 test
+test handlers::ai_test::client::evaluation::ai_test_quality_evaluation ... EVAL 27b-thinking/c_parse_u16: accepted=true pass=false generation=66474ms mutants=0/3
+EVAL 27b-thinking/c_copy_prefix: accepted=false pass=null generation=0ms mutants=0/3
+EVAL 27b-thinking/cpp_merge_ranges: accepted=true pass=true generation=106541ms mutants=3/3
+EVAL 27b-thinking/cpp_quota: accepted=true pass=false generation=42079ms mutants=0/3
+EVAL 27b-thinking/python_parse_port: accepted=true pass=true generation=62396ms mutants=3/3
+EVAL 27b-thinking/python_unique_by: accepted=true pass=true generation=45925ms mutants=3/3
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 162 filtered out; finished in 351.28s
+

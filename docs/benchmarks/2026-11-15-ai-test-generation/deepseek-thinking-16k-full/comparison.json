@@ -1,0 +1,120 @@
+{
+  "previous": {
+    "27b-thinking": {
+      "http_responses": 5,
+      "accepted": 5,
+      "raw_pipeline_pass": 3,
+      "response_median_ms": 62396,
+      "response_total_ms": 323415,
+      "utf8_strict_pass": 4,
+      "utf8_code_only_pass": 4,
+      "utf8_strict_mutants_killed": 12,
+      "utf8_code_only_mutants_killed": 12
+    },
+    "deepseek": {
+      "http_responses": 6,
+      "accepted": 5,
+      "raw_pipeline_pass": 1,
+      "response_median_ms": 4871.5,
+      "response_total_ms": 30414,
+      "utf8_strict_pass": 3,
+      "utf8_code_only_pass": 4,
+      "utf8_strict_mutants_killed": 9,
+      "utf8_code_only_mutants_killed": 12
+    }
+  },
+  "new": {
+    "arm": "deepseek-thinking-16k",
+    "observations": 6,
+    "http_responses": 6,
+    "accepted": 6,
+    "baseline_pass": 6,
+    "mutants_killed": 18,
+    "mutants_exercised": 18,
+    "mutants_available": 18,
+    "response_median_ms": 23185.5,
+    "response_total_ms": 130438,
+    "prompt_hashes": {
+      "c_parse_u16": "b26362212e10a9524ee9379a5a5650ecfb6e1c55197d1af86e3af3521c57dabe",
+      "c_copy_prefix": "5d251666edcfb33078fa36ec8c66aab127e24bff5a6e6374b99eb5a6b1200a50",
+      "cpp_merge_ranges": "36d74d1b7deb4f012f786a856b212568eb9543d204743ee04823fb93f0c28ffa",
+      "cpp_quota": "2d76942daadc94b2b29741a8a05c3716df0a4dc360b91ae7c42bf30c203ecbe9",
+      "python_parse_port": "fc0fd510f53a0449917ec8e86244835e378953723054d00430f72d95be159652",
+      "python_unique_by": "53fcc496eb36032adc1d3dfd455c5ad2192621ea6fe7617f3f909a62a27b06e0"
+    },
+    "daily_config_unchanged": true
+  },
+  "cases": [
+    {
+      "case": "c_parse_u16",
+      "language": "c",
+      "generation_ms": 24847,
+      "accepted": true,
+      "compile_test_pass": true,
+      "execution_ms": 6287,
+      "mutants_killed": 3,
+      "completion_tokens": 5700,
+      "finish_reason": "stop"
+    },
+    {
+      "case": "c_copy_prefix",
+      "language": "c",
+      "generation_ms": 26994,
+      "accepted": true,
+      "compile_test_pass": true,
+      "execution_ms": 5248,
+      "mutants_killed": 3,
+      "completion_tokens": 6265,
+      "finish_reason": "stop"
+    },
+    {
+      "case": "cpp_merge_ranges",
+      "language": "cpp",
+      "generation_ms": 11362,
+      "accepted": true,
+      "compile_test_pass": true,
+      "execution_ms": 5374,
+      "mutants_killed": 3,
+      "completion_tokens": 2382,
+      "finish_reason": "stop"
+    },
+    {
+      "case": "cpp_quota",
+      "language": "cpp",
+      "generation_ms": 21524,
+      "accepted": true,
+      "compile_test_pass": true,
+      "execution_ms": 5246,
+      "mutants_killed": 3,
+      "completion_tokens": 5072,
+      "finish_reason": "stop"
+    },
+    {
+      "case": "python_parse_port",
+      "language": "python",
+      "generation_ms": 17399,
+      "accepted": true,
+      "compile_test_pass": true,
+      "execution_ms": 406,
+      "mutants_killed": 3,
+      "completion_tokens": 3953,
+      "finish_reason": "stop"
+    },
+    {
+      "case": "python_unique_by",
+      "language": "python",
+      "generation_ms": 28312,
+      "accepted": true,
+      "compile_test_pass": true,
+      "execution_ms": 232,
+      "mutants_killed": 3,
+      "completion_tokens": 5944,
+      "finish_reason": "stop"
+    }
+  ],
+  "completion_tokens_total": 29316,
+  "completion_tokens_min": 2382,
+  "completion_tokens_max": 6265,
+  "same_messages": true,
+  "all_generated_code_bytes_match_model_output": true
+}

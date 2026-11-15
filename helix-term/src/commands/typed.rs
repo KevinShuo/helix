@@ -1,4 +1,5 @@
 use std::fmt::Write;
+mod problem_commands;
 use std::io::BufReader;
 use std::ops::{self, Deref};
 
@@ -3052,6 +3053,45 @@ const WRITE_NO_CODE_ACTIONS_FLAG: Flag = Flag {
     ..Flag::DEFAULT
 };
 
+fn ai_test(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_test::start(cx.editor)?;
+    }
+    Ok(())
+}
+fn ai_test_run(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_test::run_last(cx.editor)?;
+    }
+    Ok(())
+}
+fn ai_test_show(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_test::show(cx.editor)?;
+    }
+    Ok(())
+}
+fn ai_test_cancel(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_test::cancel(cx.editor);
+        cx.editor
+            .set_status("已取消 AI 测试任务，已接受的文件修改保留");
+    }
+    Ok(())
+}
+
 fn ai_doc(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
     if event == PromptEvent::Validate {
         crate::handlers::ai_doc::start(cx.editor)?;
@@ -3095,6 +3135,17 @@ fn ai_commit_cancel(
 }
 
 pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
+    TypableCommand { name: "compile", aliases: &[], doc: "Run a build shell command asynchronously in the current working directory", fun: problem_commands::compile, completer: CommandCompleter::none(), signature: Signature { positionals: (1, Some(1)), raw_after: Some(0), ..Signature::DEFAULT } },
+    TypableCommand { name: "recompile", aliases: &[], doc: "Repeat the previous build command and working directory", fun: problem_commands::recompile, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "compile-cancel", aliases: &[], doc: "Cancel the active build and its process tree, retaining received output", fun: problem_commands::cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "compile-log", aliases: &[], doc: "Show the current build log in a read-only split", fun: problem_commands::log, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "next-problem", aliases: &[], doc: "Go to next problem, optionally setting source, minimum severity and scope filters", fun: problem_commands::next, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
+    TypableCommand { name: "previous-problem", aliases: &[], doc: "Go to previous problem, optionally setting source, minimum severity and scope filters", fun: problem_commands::previous, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
+    TypableCommand { name: "problems", aliases: &[], doc: "Show filtered live diagnostics and compiler problems", fun: problem_commands::list, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
+    TypableCommand { name: "ai-test", aliases: &[], doc: "Generate pytest or GoogleTest tests and preview CMake integration for the current function", fun: ai_test, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-test-run", aliases: &[], doc: "Run saved generated tests; preview at most one compile/import repair", fun: ai_test_run, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-test-show", aliases: &[], doc: "Show the latest generated test changes or execution report", fun: ai_test_show, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-test-cancel", aliases: &[], doc: "Cancel AI test generation or execution, preserving accepted changes", fun: ai_test_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-commit", aliases: &[], doc: "Recommend files, stage and commit with Chinese or English Conventional Commits", fun: ai_commit, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-commit-cancel", aliases: &[], doc: "Cancel AI commit analysis while preserving staged files and message", fun: ai_commit_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-doc", aliases: &[], doc: "Generate a reST doc comment for the function at the cursor", fun: ai_doc, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },

@@ -1,0 +1,21 @@
+{
+  "accepted": true,
+  "arm": "27b-thinking-retry",
+  "assumptions": [
+    "NULL src 且 dst 非 NULL、capacity > 0 时，函数仍会执行 dst[0]='\\0'（因为 copied=0 进入 if(dst&&capacity>0) 分支），测试据此断言 buf[0] 为 '\\0'",
+    "capacity 为 0 或 dst 为 NULL 时函数不执行任何写入操作，缓冲区内容保持不变"
+  ],
+  "baseline": {
+    "elapsed_ms": 4393,
+    "log": "cmake [\"--build\", \"I:\\\\DEV\\\\helix\\\\.superpowers\\\\ai-test-eval\\\\projects\\\\27b-thinking-retry\\\\c_copy_prefix\\\\.helix-ai/build\", \"--config\", \"Debug\", \"--target\", \"helix_ai_copy_prefix_cc55f06b8ad1074f\"]\n适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  1>Checking Build System\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/projects/27b-thinking-retry/c_copy_prefix/CMakeLists.txt\r\n  subject.c\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\projects\\27b-thinking-retry\\c_copy_prefix\\.helix-ai\\build\\Debug\\subject.lib\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/projects/27b-thinking-retry/c_copy_prefix/tests/helix-ai/copy_prefix_cc55f06b8ad1074f/CMakeLists.txt\r\n  copy_prefix_test.cpp\r\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\projects\\27b-thinking-retry\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(8,8): error C2732: 链接规范与“copy_prefix”的早期规范冲突 [I:\\DEV\\helix\\.superpowers\\ai-test-eval\\projects\\27b-thinking-retry\\c_copy_prefix\\.helix-ai\\build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\helix_ai_copy_prefix_cc55f06b8ad1074f.vcxproj]\r\n      I:\\DEV\\helix\\.superpowers\\ai-test-eval\\projects\\27b-thinking-retry\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(8,8):\r\n      参见“copy_prefix”的声明\r\n  \r\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\projects\\27b-thinking-retry\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(21,21): warning C4838: 从“int”转换到“char”需要收缩转换 [I:\\DEV\\helix\\.superpowers\\ai-test-eval\\projects\\27b-thinking-retry\\c_copy_prefix\\.helix-ai\\build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\helix_ai_copy_prefix_cc55f06b8ad1074f.vcxproj]\r\n\n",
+    "repairable": true,
+    "stage": "Build",
+    "success": false
+  },
+  "case": "c_copy_prefix",
+  "generation_error": null,
+  "generation_ms": 61850,
+  "language": "c",
+  "mutants": [],
+  "restored": null
+}

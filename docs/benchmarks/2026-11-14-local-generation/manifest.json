@@ -1,0 +1,23 @@
+{
+  "context_size": 16384,
+  "final_token_allowance": 1024,
+  "thinking_budget": 2048,
+  "thinking_effort": "medium",
+  "request_timeout_ms": 120000,
+  "temperature": 0.0,
+  "cases_per_feature": 6,
+  "repetitions": 1,
+  "arms": [
+    "9b-direct",
+    "27b-direct",
+    "27b-thinking"
+  ],
+  "sources": {
+    "helix-term/src/handlers/ai_doc/client/evaluation.rs": "bbcc33964e31c00faa2b5ed4c5b04512d4c65cf09af8725caa9e14800908bd1e",
+    "helix-term/src/handlers/ai_commit/evaluation.rs": "e8e2546f39bc101c169bac81a1c3fd658bcc01f937815a342d54dc9ab76abe95"
+  },
+  "load_ms": {
+    "9b": 2935.5191000004197,
+    "27b": 8838.368000000628
+  }
+}

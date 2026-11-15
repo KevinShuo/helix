@@ -26,9 +26,49 @@ fn enabled() -> AiCommitConfig {
     }
 }
 
+#[test]
+fn ai_commit_thinking_reserves_final_json_and_accounts_for_reasoning_context() {
+    let mut model =
+        AiProviderConfig::from_legacy(&helix_view::ai_completion::AiCompletionConfig::default());
+    model.thinking = true;
+    model.thinking_budget = Some(2048);
+    model.context_size = 16384;
+    let config = AiCommitConfig {
+        max_tokens: 1024,
+        ..enabled()
+    };
+    let body = request(
+        &model,
+        &config,
+        "Return JSON only",
+        &json!({"data":"source"}),
+    )
+    .unwrap();
+    assert_eq!(
+        body["max_tokens"], 3072,
+        "reasoning must not consume the final JSON allowance"
+    );
+    model.context_size = 2500;
+    assert!(
+        request(
+            &model,
+            &config,
+            "Return JSON only",
+            &json!({"data":"source"})
+        )
+        .is_err(),
+        "context check must include reasoning tokens"
+    );
+    model.thinking = false;
+    assert_eq!(
+        request(&model, &config, "Return JSON only", &json!({})).unwrap()["max_tokens"],
+        1024
+    );
+}
+
 // The only fake is the external HTTP service. Planning, transport, response
 // validation, formatting and privacy filtering all run as production code.
-fn provider(responses: Vec<Value>) -> (AiCompletionConfig, mpsc::Receiver<Value>) {
+fn provider(responses: Vec<Value>) -> (AiProviderConfig, mpsc::Receiver<Value>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let endpoint = format!(
         "http://{}/v1/chat/completions",
@@ -74,9 +114,8 @@ fn provider(responses: Vec<Value>) -> (AiCompletionConfig, mpsc::Receiver<Value>
         }
     });
     (
-        AiCompletionConfig {
+        AiProviderConfig {
             endpoint,
-            enabled: true,
             ..Default::default()
         },
         rx,
@@ -106,7 +145,7 @@ fn ai_commit_manual_messages_allow_breaking_footers_and_english_scopes() {
 
 #[tokio::test]
 async fn ai_commit_disabled_and_empty_requests_fail_without_contacting_provider() {
-    let model = AiCompletionConfig {
+    let model = AiProviderConfig {
         endpoint: "invalid://should-not-connect".into(),
         ..Default::default()
     };
@@ -230,7 +269,7 @@ async fn ai_commit_oversize_diff_is_metadata_only_and_message_is_incomplete() {
 
 #[tokio::test]
 async fn ai_commit_refuses_over_file_limit_and_duplicate_ids_before_http() {
-    let model = AiCompletionConfig::default();
+    let model = AiProviderConfig::default();
     let files: Vec<_> = (0..65).map(file).collect();
     assert!(recommend(&model, &enabled(), &files, "")
         .await
@@ -320,7 +359,7 @@ async fn ai_commit_request_cap_marks_unanalyzed_file_and_never_exceeds_64_calls(
 
 #[tokio::test]
 async fn ai_commit_actual_model_window_and_aggregation_budget_are_checked() {
-    let model = AiCompletionConfig {
+    let model = AiProviderConfig {
         context_size: 64,
         endpoint: "invalid://no-http".into(),
         ..Default::default()
@@ -329,7 +368,7 @@ async fn ai_commit_actual_model_window_and_aggregation_budget_are_checked() {
         .await
         .unwrap_err();
     assert!(error.to_string().contains("context-size"));
-    let model = AiCompletionConfig {
+    let model = AiProviderConfig {
         endpoint: "invalid://no-http".into(),
         ..Default::default()
     };

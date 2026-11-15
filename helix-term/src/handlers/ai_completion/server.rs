@@ -1,10 +1,10 @@
 //! Application-owned llama.cpp process for a configured local GGUF model.
 
-use std::{path::PathBuf, process::Stdio, time::Duration};
+use std::{collections::BTreeMap, path::PathBuf, process::Stdio, time::Duration};
 
 use anyhow::{bail, Context as _};
 use helix_event::{runtime_local, status};
-use helix_view::ai_completion::AiCompletionConfig;
+use helix_view::ai::AiProviderConfig;
 use tokio::{
     process::{Child, Command},
     sync::watch,
@@ -14,39 +14,47 @@ use tokio::{
 
 #[derive(Clone)]
 struct ServerState {
-    config: AiCompletionConfig,
+    config: AiProviderConfig,
     ready: Option<Result<(), String>>,
+    owned: bool,
 }
 
 runtime_local! {
-    static STATE: parking_lot::Mutex<Option<watch::Receiver<ServerState>>> = parking_lot::Mutex::new(None);
+    static STATE: parking_lot::Mutex<BTreeMap<String, watch::Receiver<ServerState>>> = parking_lot::Mutex::new(BTreeMap::new());
 }
+
+mod pool;
+pub(crate) use pool::{with_model, LocalServers};
 
 /// The application owns this task, rather than a keystroke's cancelable request.
 /// Aborting the task drops its kill-on-drop child even during model loading.
 pub(crate) struct LocalServer {
-    config: watch::Sender<AiCompletionConfig>,
+    config: watch::Sender<AiProviderConfig>,
     state: watch::Sender<ServerState>,
     task: Option<JoinHandle<()>>,
+    shutdown: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl LocalServer {
-    pub(crate) fn new(config: &AiCompletionConfig) -> Self {
+    pub(crate) fn new(config: &AiProviderConfig) -> Self {
         let (config_tx, config_rx) = watch::channel(config.clone());
         let (state_tx, state_rx) = watch::channel(ServerState {
             config: config.clone(),
             ready: None,
+            owned: false,
         });
-        *STATE.lock() = Some(state_rx);
-        let task = tokio::spawn(supervise(config_rx, state_tx.clone()));
+        STATE.lock().insert(config.endpoint.clone(), state_rx);
+        let (shutdown, stop) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(supervise(config_rx, state_tx.clone(), stop));
         Self {
             config: config_tx,
             state: state_tx,
             task: Some(task),
+            shutdown: Some(shutdown),
         }
     }
 
-    pub(crate) fn configure(&mut self, config: &AiCompletionConfig) {
+    pub(crate) fn configure(&mut self, config: &AiProviderConfig) {
         let failed = matches!(self.state.borrow().ready, Some(Err(_)));
         if same_server(&self.config.borrow(), config) && !failed {
             return;
@@ -54,6 +62,7 @@ impl LocalServer {
         self.state.send_replace(ServerState {
             config: config.clone(),
             ready: None,
+            owned: false,
         });
         self.config.send_replace(config.clone());
     }
@@ -62,24 +71,29 @@ impl LocalServer {
         self.state.send_modify(|state| {
             state.ready = Some(Err("Local AI server stopped".into()));
         });
-        if let Some(task) = self.task.take() {
-            task.abort();
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ = shutdown.send(());
+        }
+        if let Some(task) = self.task.as_mut() {
             let _ = task.await;
         }
+        self.task = None;
     }
 }
 
 impl Drop for LocalServer {
     fn drop(&mut self) {
+        STATE
+            .lock()
+            .retain(|_, state| !state.same_channel(&self.state.subscribe()));
         if let Some(task) = &self.task {
             task.abort();
         }
     }
 }
 
-fn same_server(a: &AiCompletionConfig, b: &AiCompletionConfig) -> bool {
-    a.enabled == b.enabled
-        && a.model_path == b.model_path
+fn same_server(a: &AiProviderConfig, b: &AiProviderConfig) -> bool {
+    a.model_path == b.model_path
         && a.server_path == b.server_path
         && a.endpoint == b.endpoint
         && a.model == b.model
@@ -89,18 +103,19 @@ fn same_server(a: &AiCompletionConfig, b: &AiCompletionConfig) -> bool {
         && a.startup_timeout_ms == b.startup_timeout_ms
 }
 
-pub(crate) async fn wait_ready(config: &AiCompletionConfig) -> anyhow::Result<()> {
+pub(crate) async fn wait_ready(config: &AiProviderConfig) -> anyhow::Result<()> {
     if config.model_path.is_none() {
         return Ok(());
     }
     let mut state = STATE
         .lock()
-        .clone()
+        .get(&config.endpoint)
+        .cloned()
         .context("Local AI server is not initialized")?;
     loop {
         {
             let state = state.borrow_and_update();
-            if !same_server(&state.config, config) || !config.enabled {
+            if !same_server(&state.config, config) {
                 bail!("AI completion configuration changed");
             }
             if let Some(result) = &state.ready {
@@ -119,65 +134,73 @@ pub(crate) async fn wait_ready(config: &AiCompletionConfig) -> anyhow::Result<()
 }
 
 async fn supervise(
-    mut configs: watch::Receiver<AiCompletionConfig>,
+    mut configs: watch::Receiver<AiProviderConfig>,
     states: watch::Sender<ServerState>,
+    mut shutdown: tokio::sync::oneshot::Receiver<()>,
 ) {
     let mut child = None;
-    loop {
-        let config = configs.borrow_and_update().clone();
-        let result = if config.enabled && config.model_path.is_some() {
-            tokio::select! {
-                result = prepare(&config, &mut child) => result,
-                changed = configs.changed() => {
-                    stop_child(&mut child).await;
-                    if changed.is_err() { break; }
-                    continue;
-                }
-            }
-        } else {
-            Ok(())
-        };
-        let ready = result.map_err(|error| format!("{error:#}"));
-        if let Err(error) = &ready {
-            report_error(error).await;
-            stop_child(&mut child).await;
-        }
-        // configure() can publish a new pending state while prepare() finishes.
-        // Never overwrite that newer state with the old model's readiness.
-        states.send_if_modified(|state| {
-            if same_server(&state.config, &config) {
-                state.ready = Some(ready.clone());
-                true
-            } else {
-                false
-            }
-        });
-
-        let changed = if let Some(process) = child.as_mut() {
-            tokio::select! {
-                changed = configs.changed() => changed,
-                exit = process.wait() => {
-                    let error = format!("Local AI server exited ({exit:?}); reload the config to retry");
-                    states.send_if_modified(|state| {
-                        if same_server(&state.config, &config) {
-                            state.ready = Some(Err(error.clone()));
-                            true
-                        } else {
-                            false
+    {
+        let run = async {
+            loop {
+                let config = configs.borrow_and_update().clone();
+                let result = if config.model_path.is_some() {
+                    tokio::select! {
+                        result = prepare(&config, &mut child) => result,
+                        changed = configs.changed() => {
+                            stop_child(&mut child).await;
+                            if changed.is_err() { break; }
+                            continue;
                         }
-                    });
-                    report_error(&error).await;
+                    }
+                } else {
+                    Ok(())
+                };
+                let ready = result.map_err(|error| format!("{error:#}"));
+                if let Err(error) = &ready {
+                    report_error(error).await;
+                    stop_child(&mut child).await;
+                }
+                // configure() can publish a new pending state while prepare() finishes.
+                // Never overwrite that newer state with the old model's readiness.
+                states.send_if_modified(|state| {
+                    if same_server(&state.config, &config) {
+                        state.ready = Some(ready.clone());
+                        state.owned = child.is_some();
+                        true
+                    } else {
+                        false
+                    }
+                });
+
+                let changed = if let Some(process) = child.as_mut() {
+                    tokio::select! {
+                        changed = configs.changed() => changed,
+                        exit = process.wait() => {
+                            let error = format!("Local AI server exited ({exit:?}); reload the config to retry");
+                            states.send_if_modified(|state| {
+                                if same_server(&state.config, &config) {
+                                    state.ready = Some(Err(error.clone()));
+                                    true
+                                } else {
+                                    false
+                                }
+                            });
+                            report_error(&error).await;
+                            configs.changed().await
+                        }
+                    }
+                } else {
                     configs.changed().await
+                };
+                stop_child(&mut child).await;
+                if changed.is_err() {
+                    break;
                 }
             }
-        } else {
-            configs.changed().await
         };
-        stop_child(&mut child).await;
-        if changed.is_err() {
-            break;
-        }
+        tokio::select! { _ = run => {}, _ = &mut shutdown => {} }
     }
+    stop_child(&mut child).await;
 }
 
 async fn report_error(error: &str) {
@@ -195,9 +218,9 @@ async fn stop_child(child: &mut Option<Child>) {
     }
 }
 
-async fn prepare(config: &AiCompletionConfig, child: &mut Option<Child>) -> anyhow::Result<()> {
+pub(super) fn local_url(config: &AiProviderConfig) -> anyhow::Result<reqwest::Url> {
     let url = reqwest::Url::parse(&config.endpoint).ok();
-    let url = url.filter(|url| {
+    url.filter(|url| {
         url.scheme() == "http"
             && url.host_str() == Some("127.0.0.1")
             && url.username().is_empty()
@@ -205,7 +228,11 @@ async fn prepare(config: &AiCompletionConfig, child: &mut Option<Child>) -> anyh
             && url.path() == "/v1/chat/completions"
             && url.query().is_none()
             && url.fragment().is_none()
-    }).context("Local model endpoint must be http://127.0.0.1:PORT/v1/chat/completions without credentials")?;
+    }).context("Local model endpoint must be http://127.0.0.1:PORT/v1/chat/completions without credentials")
+}
+
+async fn prepare(config: &AiProviderConfig, child: &mut Option<Child>) -> anyhow::Result<()> {
+    let url = local_url(config)?;
     let port = url.port_or_known_default().unwrap();
     let model_path = config
         .model_path
@@ -225,6 +252,9 @@ async fn prepare(config: &AiCompletionConfig, child: &mut Option<Child>) -> anyh
     match std::net::TcpListener::bind(("127.0.0.1", port)) {
         Ok(listener) => drop(listener),
         Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+            if config.on_demand {
+                bail!("On-demand local AI endpoint is externally owned or in use; close its server before switching models");
+            }
             if serves_model(&request, &config.model).await {
                 return Ok(());
             }
@@ -309,14 +339,10 @@ async fn prepare(config: &AiCompletionConfig, child: &mut Option<Child>) -> anyh
         })?
 }
 
-fn models_request(config: &AiCompletionConfig) -> anyhow::Result<reqwest::RequestBuilder> {
+fn models_request(config: &AiProviderConfig) -> anyhow::Result<reqwest::RequestBuilder> {
     let url = reqwest::Url::parse(&config.endpoint)?.join("/v1/models")?;
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_millis(500))
-        .build()?;
-    let mut request = client.get(url);
+    let client = crate::handlers::ai::client(helix_view::ai::AiProxy::None)?;
+    let mut request = client.get(url).timeout(Duration::from_millis(500));
     if let Some(name) = config
         .api_key_env
         .as_deref()
@@ -360,13 +386,70 @@ mod tests {
         net::TcpListener,
     };
 
-    fn local_config(model: &std::path::Path) -> AiCompletionConfig {
-        AiCompletionConfig {
-            enabled: true,
+    #[tokio::test]
+    async fn ai_online_provider_needs_no_managed_server() {
+        let provider = AiProviderConfig {
+            kind: helix_view::ai::AiProviderType::Deepseek,
+            endpoint: "https://api.deepseek.com/chat/completions".into(),
+            model: "test-online".into(),
+            ..Default::default()
+        };
+        let mut pool = LocalServers::new(&[provider.clone()]);
+        assert_eq!(pool.resident_count().await, 0);
+        wait_ready(&provider).await.unwrap();
+        pool.stop().await;
+    }
+
+    #[tokio::test]
+    async fn ai_local_provider_pool_keeps_multiple_models_and_removes_unused_on_reload() {
+        let _messages = status::setup();
+        let model = tempfile::NamedTempFile::new().unwrap();
+        let (endpoint_a, external_a, _) = model_list_server("local-code-model").await;
+        let (endpoint_b, external_b, _) = model_list_server("other-code-model").await;
+        let mut a = local_config(model.path());
+        a.endpoint = endpoint_a;
+        let mut b = a.clone();
+        b.endpoint = endpoint_b;
+        b.model = "other-code-model".into();
+        let mut pool = LocalServers::new(&[a.clone(), b.clone()]);
+        timeout(Duration::from_secs(5), wait_ready(&a))
+            .await
+            .unwrap()
+            .unwrap();
+        timeout(Duration::from_secs(5), wait_ready(&b))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(pool.resident_count().await, 2);
+        pool.configure(&[b.clone()]);
+        timeout(Duration::from_secs(5), async {
+            while pool.resident_count().await != 1 {
+                sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(
+            wait_ready(&a).await.is_err(),
+            "removed provider must not remain ready"
+        );
+        wait_ready(&b).await.unwrap();
+        pool.stop().await;
+        assert!(!STATE.lock().contains_key(&a.endpoint));
+        assert!(!STATE.lock().contains_key(&b.endpoint));
+        assert!(wait_ready(&b).await.is_err());
+        external_a.abort();
+        external_b.abort();
+    }
+
+    fn local_config(model: &std::path::Path) -> AiProviderConfig {
+        AiProviderConfig {
+            kind: helix_view::ai::AiProviderType::LlamaCpp,
+            endpoint: "http://127.0.0.1:19239/v1/chat/completions".into(),
             model: "local-code-model".into(),
             model_path: Some(model.to_owned()),
             server_path: "missing-llama-server".into(),
-            ..AiCompletionConfig::default()
+            ..AiProviderConfig::default()
         }
     }
 
@@ -546,8 +629,7 @@ mod tests {
             .unwrap()
             .unwrap();
         // Unrelated completion tuning must keep the loaded provider available.
-        config.debounce_ms += 1;
-        config.max_tokens += 1;
+        config.thinking = !config.thinking;
         server.configure(&config);
         wait_ready(&config).await.unwrap();
         *served_model.write() = "different-model".into();
@@ -559,3 +641,6 @@ mod tests {
         external.abort();
     }
 }
+
+#[cfg(test)]
+mod lease_tests;

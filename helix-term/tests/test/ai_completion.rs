@@ -270,6 +270,67 @@ fn model_config(endpoint: String) -> helix_term::config::Config {
     config
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_completion_named_provider_overrides_default_and_legacy_local_model(
+) -> anyhow::Result<()> {
+    use helix_view::ai::{AiProviderConfig, AiProviderType, AiProxy};
+    let (endpoint, mut requests, server) = model_server(0, vec![" + 1"]).await;
+    let mut config = model_config("http://127.0.0.1:1/v1/chat/completions".into());
+    config.editor.ai_completion.model_path = Some("missing-unused-legacy.gguf".into());
+    config.editor.ai.providers.insert(
+        "completion-cloud".into(),
+        AiProviderConfig {
+            kind: AiProviderType::Deepseek,
+            endpoint,
+            model: "completion-model".into(),
+            proxy: AiProxy::None,
+            ..Default::default()
+        },
+    );
+    config.editor.ai.providers.insert(
+        "default-cloud".into(),
+        AiProviderConfig {
+            endpoint: "http://127.0.0.1:1/chat/completions".into(),
+            model: "wrong-default".into(),
+            ..Default::default()
+        },
+    );
+    config.editor.ai.default_provider = Some("default-cloud".into());
+    config.editor.ai_completion.provider = Some("completion-cloud".into());
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_input_text("#[|\n]#")
+        .build()?;
+    keys(&mut app, "ix").await?;
+    wait_for_preview(&mut app).await;
+    let body = requests.recv().await.unwrap();
+    assert_eq!(body["model"], "completion-model");
+    assert_eq!(body["thinking"]["type"], "disabled");
+    assert!(body.get("chat_template_kwargs").is_none());
+    keys(&mut app, "<S-right>").await?;
+    assert_eq!(text(&app), "x + 1\n");
+    app.close().await;
+    server.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_provider_invalid_runtime_update_preserves_working_configuration() -> anyhow::Result<()>
+{
+    let mut app = AppBuilder::new().with_input_text("#[|\n]#").build()?;
+    let before = (*app.editor.config()).clone();
+    let mut invalid = before.clone();
+    invalid.ai_doc.provider = Some("missing-provider".into());
+    app.handle_config_events(helix_view::editor::ConfigEvent::Update(Box::new(invalid)));
+    assert_eq!(
+        *app.editor.config(),
+        before,
+        "invalid provider update must be rejected atomically"
+    );
+    app.close().await;
+    Ok(())
+}
+
 async fn wait_for_preview(app: &mut Application) {
     let config = &app.editor.config().ai_completion;
     let startup_ms = if config.model_path.is_some() {

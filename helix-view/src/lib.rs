@@ -2,9 +2,11 @@
 pub mod macros;
 
 pub mod action;
+pub mod ai;
 pub mod ai_commit;
 pub mod ai_completion;
 pub mod ai_doc;
+pub mod ai_test;
 pub mod annotations;
 pub mod clipboard;
 pub mod document;
@@ -22,6 +24,7 @@ pub mod keyboard;
 pub mod macro_input;
 pub mod merge;
 pub mod minimap;
+pub mod problems;
 pub mod register;
 pub mod theme;
 pub mod tree;

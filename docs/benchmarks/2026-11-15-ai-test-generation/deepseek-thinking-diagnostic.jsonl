@@ -1,0 +1,3 @@
+{"accepted":false,"arm":"deepseek-thinking-diagnostic","assumptions":[],"baseline":null,"case":"c_parse_u16","generation_error":"Model output incomplete: \"length\"","generation_ms":21935,"language":"c","mutants":[],"restored":null}
+{"accepted":false,"arm":"deepseek-thinking-diagnostic","assumptions":[],"baseline":null,"case":"cpp_merge_ranges","generation_error":"Model output incomplete: \"length\"","generation_ms":23319,"language":"cpp","mutants":[],"restored":null}
+{"accepted":false,"arm":"deepseek-thinking-diagnostic","assumptions":[],"baseline":null,"case":"python_unique_by","generation_error":"Model output incomplete: \"length\"","generation_ms":23611,"language":"python","mutants":[],"restored":null}

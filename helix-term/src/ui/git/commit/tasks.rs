@@ -125,7 +125,9 @@ impl CommitWorkspace {
             "请先在 [editor.ai-commit] 中启用 enabled = true；仍可手动暂存和提交"
         );
         ensure!(
-            !editor.ai_commit_running && editor.ai_doc.is_none(),
+            !editor.ai_commit_running
+                && editor.ai_doc.is_none()
+                && !crate::handlers::ai_test::busy(editor),
             "已有 AI 显式生成任务，请先完成或取消"
         );
         let repo = self
@@ -179,7 +181,9 @@ impl CommitWorkspace {
                 eligible: f.ai_eligible,
             })
             .collect::<Vec<_>>();
-        let model = editor.config().ai_model_config();
+        let model = editor
+            .config()
+            .ai_provider(helix_view::ai::AiFeature::Commit)?;
         for doc in editor.documents_mut() {
             doc.ai_completion_controller.cancel();
             doc.ai_completion = None;
@@ -239,7 +243,12 @@ impl CommitWorkspace {
                 let mut current = editor.config().ai_commit.clone();
                 current.language = p.language;
                 if current != config
-                    || editor.config().ai_model_config() != model
+                    || editor
+                        .config()
+                        .ai_provider(helix_view::ai::AiFeature::Commit)
+                        .ok()
+                        .as_ref()
+                        != Some(&model)
                     || !super::super::trusted(editor, &p.root)
                 {
                     p.message = "模型、语言或工作区配置已变化，旧结果已丢弃".into();

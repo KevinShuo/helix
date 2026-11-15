@@ -19,6 +19,7 @@ mod test {
     mod ai_commit;
     mod ai_completion;
     mod ai_doc;
+    mod ai_test;
     mod auto_pairs;
     mod command_line;
     mod commands;
@@ -31,5 +32,6 @@ mod test {
     mod git_tools;
     mod minimap;
     mod movement;
+    mod problems;
     mod splits;
 }

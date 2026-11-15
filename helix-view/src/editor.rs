@@ -340,9 +340,11 @@ pub struct Config {
     pub auto_pairs: AutoPairConfig,
     /// Automatic auto-completion, automatically pop up without user trigger. Defaults to true.
     pub auto_completion: bool,
+    pub ai: crate::ai::AiConfig,
     /// Independent inline suggestions from an OpenAI-compatible model.
     pub ai_completion: crate::ai_completion::AiCompletionConfig,
     pub ai_doc: crate::ai_doc::AiDocConfig,
+    pub ai_test: crate::ai_test::AiTestConfig,
     pub ai_commit: crate::ai_commit::AiCommitConfig,
     /// Function reference counts and latest Git authors beside declarations.
     pub function_hints: crate::function_hints::FunctionHintsConfig,
@@ -1222,8 +1224,10 @@ impl Default for Config {
             middle_click_paste: true,
             auto_pairs: AutoPairConfig::default(),
             auto_completion: true,
+            ai: crate::ai::AiConfig::default(),
             ai_completion: crate::ai_completion::AiCompletionConfig::default(),
             ai_doc: crate::ai_doc::AiDocConfig::default(),
+            ai_test: crate::ai_test::AiTestConfig::default(),
             ai_commit: crate::ai_commit::AiCommitConfig::default(),
             function_hints: crate::function_hints::FunctionHintsConfig::default(),
             minimap: crate::minimap::MinimapConfig::default(),
@@ -1315,6 +1319,9 @@ pub struct Editor {
     pub next_document_id: DocumentId,
     pub ai_doc: Option<crate::ai_doc::Operation>,
     pub ai_doc_serial: u64,
+    pub ai_test: Option<crate::ai_test::Operation>,
+    pub ai_test_serial: u64,
+    pub ai_test_controller: helix_event::TaskController,
     pub ai_commit_running: bool,
     pub documents: BTreeMap<DocumentId, Document>,
 
@@ -1331,6 +1338,7 @@ pub struct Editor {
     pub macro_replaying: Vec<char>,
     pub language_servers: helix_lsp::Registry,
     pub diagnostics: Diagnostics,
+    pub problems: crate::problems::ProblemState,
     pub diff_providers: DiffProviderRegistry,
 
     pub debug_adapters: dap::registry::Registry,
@@ -1474,6 +1482,9 @@ impl Editor {
             next_document_id: DocumentId::default(),
             ai_doc: None,
             ai_doc_serial: 0,
+            ai_test: None,
+            ai_test_serial: 0,
+            ai_test_controller: helix_event::TaskController::new(),
             ai_commit_running: false,
             documents: BTreeMap::new(),
             saves: HashMap::new(),
@@ -1486,6 +1497,7 @@ impl Editor {
             theme: theme_loader.default(),
             language_servers,
             diagnostics: Diagnostics::new(),
+            problems: crate::problems::ProblemState::default(),
             diff_providers: DiffProviderRegistry::default(),
             debug_adapters: dap::registry::Registry::new(),
             breakpoints: HashMap::new(),
@@ -2023,6 +2035,7 @@ impl Editor {
                 let remove_empty_scratch = !doc.is_modified()
                     // If the buffer has no path and is not modified, it is an empty scratch buffer.
                     && doc.path().is_none()
+                    && !doc.is_readonly_output()
                     // If the buffer we are changing to is not this buffer
                     && id != doc.id
                     // Ensure the buffer is not displayed in any other splits.
@@ -2794,10 +2807,10 @@ impl CursorCache {
 }
 
 impl Config {
-    /// Provider settings shared by explicit generation and automatic completion.
+    /// Legacy provider settings. New callers should resolve `ai_provider` per feature.
     pub fn ai_model_config(&self) -> crate::ai_completion::AiCompletionConfig {
         let mut model = self.ai_completion.clone();
-        model.enabled |= self.ai_doc.enabled || self.ai_commit.enabled;
+        model.enabled |= self.ai_doc.enabled || self.ai_commit.enabled || self.ai_test.enabled;
         model
     }
 }

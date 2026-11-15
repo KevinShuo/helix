@@ -1,0 +1,260 @@
+{
+  "arm": "deepseek",
+  "case": "c_copy_prefix",
+  "language": "c",
+  "primary_generation_ms": 5538,
+  "baseline": {
+    "success": true,
+    "stage": "Test",
+    "steps": [
+      {
+        "argv": [
+          "cmake",
+          "-S",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix",
+          "-B",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+          "-DBUILD_TESTING=ON",
+          "-DCMAKE_CXX_FLAGS=/utf-8",
+          "-DCMAKE_TOOLCHAIN_FILE=C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\scripts\\buildsystems\\vcpkg.cmake"
+        ],
+        "stage": "Configure",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 3267,
+        "log": "-- Building for: Visual Studio 18 2026\n-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26300.\n-- The C compiler identification is MSVC 19.50.35728.0\n-- The CXX compiler identification is MSVC 19.50.35728.0\n-- Detecting C compiler ABI info\n-- Detecting C compiler ABI info - done\n-- Check for working C compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting C compile features\n-- Detecting C compile features - done\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Configuring done (3.1s)\n-- Generating done (0.1s)\n-- Build files have been written to: I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_copy_prefix/.utf8-build\n"
+      },
+      {
+        "argv": [
+          "cmake",
+          "--build",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+          "--config",
+          "Debug",
+          "--target",
+          "helix_ai_copy_prefix_cc55f06b8ad1074f"
+        ],
+        "stage": "Build",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 1546,
+        "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  1>Checking Build System\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_copy_prefix/CMakeLists.txt\r\n  subject.c\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\Debug\\subject.lib\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_copy_prefix/tests/helix-ai/copy_prefix_cc55f06b8ad1074f/CMakeLists.txt\r\n  copy_prefix_test.cpp\r\nC:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9): warning C4530: 使用了 C++ 异常处理程序，但未启用展开语义。请指定 /EHsc [I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\helix_ai_copy_prefix_cc55f06b8ad1074f.vcxproj]\r\n  (编译源文件“../../../../tests/helix-ai/copy_prefix_cc55f06b8ad1074f/copy_prefix_test.cpp”)\r\n      C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9):\r\n      模板实例化上下文(最早的实例化上下文)为\r\n          C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\include\\gtest\\gtest-message.h(118,10):\r\n          查看对正在编译的函数 模板 实例化“std::basic_ostream<char,std::char_traits<char>> &std::operator <<<std::char_traits<char>>(std::basic_ostream<char,std::char_traits<char>> &,const char *)”的引用\r\n  \r\n  helix_ai_copy_prefix_cc55f06b8ad1074f.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\Debug\\helix_ai_copy_prefix_cc55f06b8ad1074f.exe\r\n  C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\debug\\bin\\gtest_main.dll -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\Debug\\gtest_main.dll done\r\n  C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\debug\\bin\\gtest.dll -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\Debug\\gtest.dll done\r\n"
+      },
+      {
+        "argv": [
+          "ctest",
+          "--test-dir",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+          "-C",
+          "Debug",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "HelixAiCC55F06B8AD1074F"
+        ],
+        "stage": "Test",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 391,
+        "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_copy_prefix/.utf8-build\n      Start  1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient\n 1/11 Test  #1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient .............   Passed    0.01 sec\n      Start  2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits\n 2/11 Test  #2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits ............   Passed    0.01 sec\n      Start  3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\n 3/11 Test  #3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall ......................   Passed    0.01 sec\n      Start  4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n 4/11 Test  #4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul ...........................   Passed    0.01 sec\n      Start  5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing\n 5/11 Test  #5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing ..........................   Passed    0.12 sec\n      Start  6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates\n 6/11 Test  #6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates .............   Passed    0.01 sec\n      Start  7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty\n 7/11 Test  #7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty ...........................   Passed    0.01 sec\n      Start  8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength\n 8/11 Test  #8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength ...............   Passed    0.01 sec\n      Start  9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength\n 9/11 Test  #9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength ...   Passed    0.01 sec\n      Start 10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero\n10/11 Test #10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero ............   Passed    0.01 sec\n      Start 11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\n11/11 Test #11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength ...............   Passed    0.01 sec\n\n100% tests passed out of 11\n\nTotal Test time (real) =   0.31 sec\n"
+      }
+    ],
+    "elapsed_ms": 5204
+  },
+  "mutants": [
+    {
+      "id": "required_length",
+      "meaning": "截断时错误返回实际复制长度",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "cmake",
+              "--build",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+              "--config",
+              "Debug",
+              "--target",
+              "helix_ai_copy_prefix_cc55f06b8ad1074f"
+            ],
+            "stage": "Build",
+            "exit_code": 0,
+            "success": true,
+            "timeout": false,
+            "elapsed_ms": 1284,
+            "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  subject.c\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\Debug\\subject.lib\r\n  helix_ai_copy_prefix_cc55f06b8ad1074f.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\Debug\\helix_ai_copy_prefix_cc55f06b8ad1074f.exe\r\n"
+          },
+          {
+            "argv": [
+              "ctest",
+              "--test-dir",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+              "-C",
+              "Debug",
+              "--output-on-failure",
+              "--no-tests=error",
+              "-R",
+              "HelixAiCC55F06B8AD1074F"
+            ],
+            "stage": "Test",
+            "exit_code": 8,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 522,
+            "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_copy_prefix/.utf8-build\n      Start  1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient\n 1/11 Test  #1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient .............   Passed    0.02 sec\n      Start  2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits\n 2/11 Test  #2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits ............   Passed    0.02 sec\n      Start  3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\n 3/11 Test  #3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall ......................***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(33): error: Expected equality of these values:\n  n\n    Which is: 3\n  5u\n    Which is: 5\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\n\n 1 FAILED TEST\n\n      Start  4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n 4/11 Test  #4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul ...........................***Failed    0.02 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(43): error: Expected equality of these values:\n  n\n    Which is: 0\n  5u\n    Which is: 5\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n\n 1 FAILED TEST\n\n      Start  5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing\n 5/11 Test  #5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing ..........................   Passed    0.02 sec\n      Start  6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates\n 6/11 Test  #6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates .............   Passed    0.01 sec\n      Start  7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty\n 7/11 Test  #7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty ...........................   Passed    0.02 sec\n      Start  8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength\n 8/11 Test  #8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength ...............   Passed    0.02 sec\n      Start  9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength\n 9/11 Test  #9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength ...   Passed    0.01 sec\n      Start 10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero\n10/11 Test #10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero ............   Passed    0.02 sec\n      Start 11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\n11/11 Test #11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength ...............***Failed    0.02 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(101): error: Expected equality of these values:\n  n\n    Which is: 9\n  100u\n    Which is: 100\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\n\n 1 FAILED TEST\n\n\n73% tests passed, 3 tests failed out of 11\n\nTotal Test time (real) =   0.38 sec\n\nThe following tests FAILED:\n\t  3 - HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall (Failed)\n\t  4 - HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul (Failed)\n\t 11 - HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength (Failed)\nErrors while running CTest\n"
+          }
+        ],
+        "elapsed_ms": 1806
+      }
+    },
+    {
+      "id": "termination",
+      "meaning": "遗漏NUL终止",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "cmake",
+              "--build",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+              "--config",
+              "Debug",
+              "--target",
+              "helix_ai_copy_prefix_cc55f06b8ad1074f"
+            ],
+            "stage": "Build",
+            "exit_code": 0,
+            "success": true,
+            "timeout": false,
+            "elapsed_ms": 987,
+            "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  subject.c\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\Debug\\subject.lib\r\n  helix_ai_copy_prefix_cc55f06b8ad1074f.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\Debug\\helix_ai_copy_prefix_cc55f06b8ad1074f.exe\r\n"
+          },
+          {
+            "argv": [
+              "ctest",
+              "--test-dir",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+              "-C",
+              "Debug",
+              "--output-on-failure",
+              "--no-tests=error",
+              "-R",
+              "HelixAiCC55F06B8AD1074F"
+            ],
+            "stage": "Test",
+            "exit_code": 8,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 694,
+            "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_copy_prefix/.utf8-build\n      Start  1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient\n 1/11 Test  #1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient .............***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(16): error: Expected equality of these values:\n  dst\n    Which is: \"helloXXXXXXXXXXX\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\x5\"\n  \"hello\"\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient\n\n 1 FAILED TEST\n\n      Start  2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits\n 2/11 Test  #2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits ............***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(25): error: Expected equality of these values:\n  dst\n    Which is: \"helloX\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\x5\"\n  \"hello\"\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits\n\n 1 FAILED TEST\n\n      Start  3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\n 3/11 Test  #3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall ......................***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(34): error: Expected equality of these values:\n  dst\n    Which is: \"helX\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\x5\"\n  \"hel\"\n\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(35): error: Expected equality of these values:\n  dst[3]\n    Which is: 'X' (88, 0x58)\n  '\\0'\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\n\n 1 FAILED TEST\n\n      Start  4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n 4/11 Test  #4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul ...........................***Failed    0.12 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(44): error: Expected equality of these values:\n  dst[0]\n    Which is: 'X' (88, 0x58)\n  '\\0'\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n\n 1 FAILED TEST\n\n      Start  5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing\n 5/11 Test  #5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing ..........................   Passed    0.01 sec\n      Start  6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates\n 6/11 Test  #6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates .............***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(65): error: Expected equality of these values:\n  dst[0]\n    Which is: 'X' (88, 0x58)\n  '\\0'\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates\n\n 1 FAILED TEST\n\n      Start  7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty\n 7/11 Test  #7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty ...........................***Failed    0.11 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(74): error: Expected equality of these values:\n  dst[0]\n    Which is: 'X' (88, 0x58)\n  '\\0'\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty\n\n 1 FAILED TEST\n\n      Start  8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength\n 8/11 Test  #8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength ...............   Passed    0.12 sec\n      Start  9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength\n 9/11 Test  #9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength ...   Passed    0.11 sec\n      Start 10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero\n10/11 Test #10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero ............   Passed    0.01 sec\n      Start 11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\n11/11 Test #11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength ...............***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(102): error: Expected equality of these values:\n  std::strlen(dst)\n    Which is: 49\n  9u\n    Which is: 9\n\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(103): error: Expected equality of these values:\n  std::string(dst)\n    Which is: \"aaaaaaaaaX\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\\xCC\" \"d\"\n  std::string(9, 'a')\n    Which is: \"aaaaaaaaa\"\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\n\n 1 FAILED TEST\n\n\n36% tests passed, 7 tests failed out of 11\n\nTotal Test time (real) =   0.62 sec\n\nThe following tests FAILED:\n\t  1 - HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient (Failed)\n\t  2 - HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits (Failed)\n\t  3 - HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall (Failed)\n\t  4 - HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul (Failed)\n\t  6 - HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates (Failed)\n\t  7 - HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty (Failed)\n\t 11 - HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength (Failed)\nErrors while running CTest\n"
+          }
+        ],
+        "elapsed_ms": 1681
+      }
+    },
+    {
+      "id": "capacity_one",
+      "meaning": "容量1时未写入终止符",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "cmake",
+              "--build",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+              "--config",
+              "Debug",
+              "--target",
+              "helix_ai_copy_prefix_cc55f06b8ad1074f"
+            ],
+            "stage": "Build",
+            "exit_code": 0,
+            "success": true,
+            "timeout": false,
+            "elapsed_ms": 692,
+            "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  subject.c\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\Debug\\subject.lib\r\n  helix_ai_copy_prefix_cc55f06b8ad1074f.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\Debug\\helix_ai_copy_prefix_cc55f06b8ad1074f.exe\r\n"
+          },
+          {
+            "argv": [
+              "ctest",
+              "--test-dir",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+              "-C",
+              "Debug",
+              "--output-on-failure",
+              "--no-tests=error",
+              "-R",
+              "HelixAiCC55F06B8AD1074F"
+            ],
+            "stage": "Test",
+            "exit_code": 8,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 797,
+            "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_copy_prefix/.utf8-build\n      Start  1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient\n 1/11 Test  #1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient .............   Passed    0.11 sec\n      Start  2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits\n 2/11 Test  #2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits ............   Passed    0.11 sec\n      Start  3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\n 3/11 Test  #3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall ......................   Passed    0.11 sec\n      Start  4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n 4/11 Test  #4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul ...........................***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAiCC55F06B8AD1074F\n[ RUN      ] HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\copy_prefix_test.cpp(44): error: Expected equality of these values:\n  dst[0]\n    Which is: 'X' (88, 0x58)\n  '\\0'\n\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul (0 ms)\n[----------] 1 test from HelixAiCC55F06B8AD1074F (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n\n 1 FAILED TEST\n\n      Start  5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing\n 5/11 Test  #5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing ..........................   Passed    0.01 sec\n      Start  6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates\n 6/11 Test  #6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates .............   Passed    0.01 sec\n      Start  7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty\n 7/11 Test  #7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty ...........................   Passed    0.01 sec\n      Start  8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength\n 8/11 Test  #8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength ...............   Passed    0.01 sec\n      Start  9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength\n 9/11 Test  #9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength ...   Passed    0.12 sec\n      Start 10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero\n10/11 Test #10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero ............   Passed    0.12 sec\n      Start 11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\n11/11 Test #11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength ...............   Passed    0.01 sec\n\n91% tests passed, 1 tests failed out of 11\n\nTotal Test time (real) =   0.72 sec\n\nThe following tests FAILED:\n\t  4 - HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul (Failed)\nErrors while running CTest\n"
+          }
+        ],
+        "elapsed_ms": 1489
+      }
+    }
+  ],
+  "unchanged_test_sha256": "2bf0406d0f2f760851b5c69a71b40e0413cf5b8ce965d3beaa0b9275935a0d32",
+  "generation_error": null,
+  "primary_accepted": true,
+  "validation_bypassed": false,
+  "restored": {
+    "success": true,
+    "stage": "Test",
+    "steps": [
+      {
+        "argv": [
+          "cmake",
+          "--build",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+          "--config",
+          "Debug",
+          "--target",
+          "helix_ai_copy_prefix_cc55f06b8ad1074f"
+        ],
+        "stage": "Build",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 693,
+        "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  subject.c\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\Debug\\subject.lib\r\n  helix_ai_copy_prefix_cc55f06b8ad1074f.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build\\tests\\helix-ai\\copy_prefix_cc55f06b8ad1074f\\Debug\\helix_ai_copy_prefix_cc55f06b8ad1074f.exe\r\n"
+      },
+      {
+        "argv": [
+          "ctest",
+          "--test-dir",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_copy_prefix\\.utf8-build",
+          "-C",
+          "Debug",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "HelixAiCC55F06B8AD1074F"
+        ],
+        "stage": "Test",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 580,
+        "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_copy_prefix/.utf8-build\n      Start  1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient\n 1/11 Test  #1: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacitySufficient .............   Passed    0.12 sec\n      Start  2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits\n 2/11 Test  #2: HelixAiCC55F06B8AD1074F.CopiesFullStringWhenCapacityExactlyFits ............   Passed    0.01 sec\n      Start  3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall\n 3/11 Test  #3: HelixAiCC55F06B8AD1074F.TruncatesWhenCapacityTooSmall ......................   Passed    0.01 sec\n      Start  4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul\n 4/11 Test  #4: HelixAiCC55F06B8AD1074F.CapacityOneWritesOnlyNul ...........................   Passed    0.01 sec\n      Start  5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing\n 5/11 Test  #5: HelixAiCC55F06B8AD1074F.CapacityZeroWritesNothing ..........................   Passed    0.12 sec\n      Start  6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates\n 6/11 Test  #6: HelixAiCC55F06B8AD1074F.EmptySourceReturnsZeroAndNulTerminates .............   Passed    0.01 sec\n      Start  7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty\n 7/11 Test  #7: HelixAiCC55F06B8AD1074F.NullSourceTreatedAsEmpty ...........................   Passed    0.01 sec\n      Start  8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength\n 8/11 Test  #8: HelixAiCC55F06B8AD1074F.NullDestinationReturnsRequiredLength ...............   Passed    0.01 sec\n      Start  9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength\n 9/11 Test  #9: HelixAiCC55F06B8AD1074F.NullDestinationWithCapacityReturnsRequiredLength ...   Passed    0.01 sec\n      Start 10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero\n10/11 Test #10: HelixAiCC55F06B8AD1074F.NullSourceAndNullDestinationReturnsZero ............   Passed    0.11 sec\n      Start 11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength\n11/11 Test #11: HelixAiCC55F06B8AD1074F.LongStringTruncatedReturnsFullLength ...............   Passed    0.01 sec\n\n100% tests passed out of 11\n\nTotal Test time (real) =   0.51 sec\n"
+      }
+    ],
+    "elapsed_ms": 1273
+  }
+}

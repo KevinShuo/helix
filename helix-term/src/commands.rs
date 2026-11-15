@@ -1,6 +1,7 @@
 pub(crate) mod dap;
 mod folding;
 mod git;
+pub(crate) mod problems;
 pub(crate) mod lsp;
 pub(crate) mod syntax;
 pub(crate) mod typed;
@@ -10,6 +11,7 @@ pub(crate) use folding::toggle_fold_at_line;
 use folding::*;
 use futures_util::FutureExt;
 use git::*;
+use problems::{next_problem, previous_problem, problems_picker};
 use helix_event::status;
 use helix_stdx::{
     path::{self, find_paths},
@@ -462,6 +464,9 @@ impl MappableCommand {
         lsp_or_syntax_workspace_symbol_picker, "Open workspace symbol picker from LSP or syntax information",
         diagnostics_picker, "Open diagnostic picker",
         workspace_diagnostics_picker, "Open workspace diagnostic picker",
+        next_problem, "Go to next problem across files",
+        previous_problem, "Go to previous problem across files",
+        problems_picker, "Open problems picker",
         last_picker, "Open last picker",
         insert_at_line_start, "Insert at start of line",
         insert_at_line_end, "Insert at end of line",

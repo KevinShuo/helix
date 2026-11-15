@@ -1,0 +1,12 @@
+{
+  "accepted": false,
+  "arm": "deepseek-thinking-diagnostic",
+  "assumptions": [],
+  "baseline": null,
+  "case": "cpp_merge_ranges",
+  "generation_error": "Model output incomplete: \"length\"",
+  "generation_ms": 23319,
+  "language": "cpp",
+  "mutants": [],
+  "restored": null
+}

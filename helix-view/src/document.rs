@@ -168,6 +168,8 @@ pub struct Document {
     pub inlay_hints_oudated: bool,
 
     path: Option<PathBuf>,
+    /// Internally generated output, protected from user text transactions.
+    readonly_output: Option<&'static str>,
     relative_path: OnceLock<Option<PathBuf>>,
     /// Lazily-computed workspace root for this document (the ancestor that contains a `.git` /
     /// `.svn` / `.jj` / `.helix`). Avoids per-call `find_workspace_in` ancestor walks for hot
@@ -746,6 +748,7 @@ impl Document {
             merge: None,
             active_snippet: None,
             path: None,
+            readonly_output: None,
             relative_path: OnceLock::new(),
             workspace_root: OnceLock::new(),
             encoding,
@@ -1506,7 +1509,8 @@ impl Document {
     ) -> bool {
         use helix_core::Assoc;
 
-        if self.merge.as_ref().is_some_and(|m| m.text_is_locked())
+        if (self.readonly_output.is_some()
+            || self.merge.as_ref().is_some_and(|m| m.text_is_locked()))
             && !transaction.changes().is_empty()
         {
             return false;
@@ -1714,7 +1718,8 @@ impl Document {
         view_id: ViewId,
         emit_lsp_notification: bool,
     ) -> bool {
-        if self.merge.as_ref().is_some_and(|m| m.text_is_locked())
+        if (self.readonly_output.is_some()
+            || self.merge.as_ref().is_some_and(|m| m.text_is_locked()))
             && !transaction.changes().is_empty()
         {
             return false;
@@ -1741,6 +1746,27 @@ impl Document {
     /// Apply a [`Transaction`] to the [`Document`] to change its text.
     pub fn apply(&mut self, transaction: &Transaction, view_id: ViewId) -> bool {
         self.apply_inner(transaction, view_id, true)
+    }
+
+    /// Mark a scratch document as persistent, named, read-only tool output.
+    pub fn set_readonly_output(&mut self, name: &'static str) {
+        self.readonly_output = Some(name);
+        self.readonly = true;
+    }
+
+    pub fn is_readonly_output(&self) -> bool {
+        self.readonly_output.is_some()
+    }
+
+    /// Internal output updates bypass the user transaction lock, but otherwise
+    /// follow the same position mapping and change notification path.
+    pub fn update_readonly_output(&mut self, transaction: &Transaction, view_id: ViewId) -> bool {
+        let Some(name) = self.readonly_output.take() else {
+            return false;
+        };
+        let applied = self.apply_inner(transaction, view_id, false);
+        self.readonly_output = Some(name);
+        applied
     }
 
     /// Apply a [`Transaction`] to the [`Document`] to change its text
@@ -2208,6 +2234,9 @@ impl Document {
     }
 
     pub fn display_name(&self) -> Cow<'_, str> {
+        if let Some(name) = self.readonly_output {
+            return name.into();
+        }
         if let Some(merge) = &self.merge {
             return format!("[merge result] {}", merge.data.file.path.display()).into();
         }

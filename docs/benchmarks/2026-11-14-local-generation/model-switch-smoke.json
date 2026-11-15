@@ -1,0 +1,1 @@
+{"elapsed_ms":36442,"message":"fix(stats): 修复mean函数空列表输入导致除零错误\n\n当输入为空列表时，mean函数原先会触发除零异常。现添加空列表前置检查，空输入直接返回0.0。","reasoning_effort":"medium","released_27b":true,"restored_9b":true,"thinking_budget":2048}

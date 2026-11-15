@@ -1,0 +1,12 @@
+{
+  "accepted": false,
+  "arm": "deepseek",
+  "assumptions": [],
+  "baseline": null,
+  "case": "python_unique_by",
+  "generation_error": "测试响应不符合 JSON 格式: missing field `assumptions` at line 1 column 2142",
+  "generation_ms": 3348,
+  "language": "python",
+  "mutants": [],
+  "restored": null
+}

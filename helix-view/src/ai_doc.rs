@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct AiDocConfig {
+    pub provider: Option<String>,
+    pub local_provider: Option<String>,
     pub enabled: bool,
     pub language: DocLanguage,
     pub style: DocStyle,
@@ -30,6 +32,8 @@ pub enum DocStyle {
 impl Default for AiDocConfig {
     fn default() -> Self {
         Self {
+            provider: None,
+            local_provider: None,
             enabled: false,
             language: DocLanguage::Chinese,
             style: DocStyle::Rest,
@@ -69,7 +73,7 @@ pub struct Operation {
     pub doc: crate::DocumentId,
     pub view: crate::ViewId,
     pub version: i32,
-    pub model: crate::ai_completion::AiCompletionConfig,
+    pub model: crate::ai::AiProviderConfig,
     pub config: AiDocConfig,
     pub target: Target,
     pub handle: helix_event::TaskHandle,
@@ -80,7 +84,12 @@ pub struct Operation {
 impl Operation {
     pub fn is_valid(&self, editor: &crate::Editor) -> bool {
         if self.handle.is_canceled()
-            || editor.config().ai_model_config() != self.model
+            || editor
+                .config()
+                .ai_provider(crate::ai::AiFeature::Doc)
+                .ok()
+                .as_ref()
+                != Some(&self.model)
             || editor.config().ai_doc != self.config
             || editor.tree.focus != self.view
         {

@@ -1,0 +1,29 @@
+{
+  "primary_observations_per_arm": 6,
+  "independent_gold_mutants": 18,
+  "arms": {
+    "27b-thinking": {
+      "http_responses": 5,
+      "accepted": 5,
+      "raw_pipeline_pass": 3,
+      "response_median_ms": 62396,
+      "response_total_ms": 323415,
+      "utf8_strict_pass": 4,
+      "utf8_code_only_pass": 4,
+      "utf8_strict_mutants_killed": 12,
+      "utf8_code_only_mutants_killed": 12
+    },
+    "deepseek": {
+      "http_responses": 6,
+      "accepted": 5,
+      "raw_pipeline_pass": 1,
+      "response_median_ms": 4871.5,
+      "response_total_ms": 30414,
+      "utf8_strict_pass": 3,
+      "utf8_code_only_pass": 4,
+      "utf8_strict_mutants_killed": 9,
+      "utf8_code_only_mutants_killed": 12
+    }
+  },
+  "supplement_excluded_from_primary": true
+}

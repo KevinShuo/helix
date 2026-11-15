@@ -1,0 +1,32 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"#include <gtest/gtest.h>\\n\\nextern \\\"C\\\" {\\n#include \\\"subject.h\\\"\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, ParseZero) {\\n    unsigned short out = 0xFFFF;\\n    EXPECT_EQ(parse_u16(\\\"0\\\", &out), 1);\\n    EXPECT_EQ(out, 0);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, ParseOne) {\\n    unsigned short out = 0;\\n    EXPECT_EQ(parse_u16(\\\"1\\\", &out), 1);\\n    EXPECT_EQ(out, 1);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, ParseSimple) {\\n    unsigned short out = 0;\\n    EXPECT_EQ(parse_u16(\\\"42\\\", &out), 1);\\n    EXPECT_EQ(out, 42);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, ParseMaxU16) {\\n    unsigned short out = 0;\\n    EXPECT_EQ(parse_u16(\\\"65535\\\", &out), 1);\\n    EXPECT_EQ(out, 65535);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, ParseBoundaryBelowMax) {\\n    unsigned short out = 0;\\n    EXPECT_EQ(parse_u16(\\\"65534\\\", &out), 1);\\n    EXPECT_EQ(out, 65534);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, ParseLeadingZeros) {\\n    unsigned short out = 0;\\n    EXPECT_EQ(parse_u16(\\\"000123\\\", &out), 1);\\n    EXPECT_EQ(out, 123);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, ParseLeadingZerosZero) {\\n    unsigned short out = 0xFFFF;\\n    EXPECT_EQ(parse_u16(\\\"00000\\\", &out), 1);\\n    EXPECT_EQ(out, 0);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, ParseLeadingZerosMax) {\\n    unsigned short out = 0;\\n    EXPECT_EQ(parse_u16(\\\"00065535\\\", &out), 1);\\n    EXPECT_EQ(out, 65535);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, ParseManyLeadingZeros) {\\n    unsigned short out = 0xFFFF;\\n    EXPECT_EQ(parse_u16(\\\"000000000000000000000000000000000000\\\", &out), 1);\\n    EXPECT_EQ(out, 0);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, RejectOverflowBoundary) {\\n    unsigned short out = 777;\\n    EXPECT_EQ(parse_u16(\\\"65536\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, RejectOverflowLarge) {\\n    unsigned short out = 777;\\n    EXPECT_EQ(parse_u16(\\\"99999999999999999999\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, RejectOverflowWithLeadingZeros) {\\n    unsigned short out = 777;\\n    EXPECT_EQ(parse_u16(\\\"00065536\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, RejectNullText) {\\n    unsigned short out = 777;\\n    EXPECT_EQ(parse_u16(nullptr, &out), 0);\\n    EXPECT_EQ(out, 777);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, RejectNullOut) {\\n    EXPECT_EQ(parse_u16(\\\"42\\\", nullptr), 0);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, RejectEmptyString) {\\n    unsigned short out = 777;\\n    EXPECT_EQ(parse_u16(\\\"\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, RejectSigns) {\\n    unsigned short out = 777;\\n    EXPECT_EQ(parse_u16(\\\"+42\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n    EXPECT_EQ(parse_u16(\\\"-42\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, RejectWhitespace) {\\n    unsigned short out = 777;\\n    EXPECT_EQ(parse_u16(\\\" 42\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n    EXPECT_EQ(parse_u16(\\\"42 \\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n    EXPECT_EQ(parse_u16(\\\"4 2\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n}\\n\\nTEST(HelixAi0BDFF2059B49C097, RejectNonDigits) {\\n    unsigned short out = 777;\\n    EXPECT_EQ(parse_u16(\\\"42a\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n    EXPECT_EQ(parse_u16(\\\"a42\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n    EXPECT_EQ(parse_u16(\\\"1.0\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n    EXPECT_EQ(parse_u16(\\\"0x10\\\", &out), 0);\\n    EXPECT_EQ(out, 777);\\n}\\n\",\"assumptions\":[\"subject.h 未声明 extern \\\"C\\\"，测试中用 extern \\\"C\\\" 包裹 include 以保持 C 链接。\",\"契约要求失败时输出值保持不变，因此所有失败路径（空串、NULL、溢出、符号、空白、非数字）都断言 out 保持哨兵值。\",\"NULL 输出指针时函数直接返回 0，无法检查输出值。\",\"接受任意长度的前导零，只要解析出的数值不超过 65535。\"]}",
+        "reasoning_content_chars": 14864,
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794735621,
+  "id": "6d7ef691-f692-4eda-9bf5-1fb0fd9fe02d",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 5700,
+    "completion_tokens_details": {
+      "reasoning_tokens": 4211
+    },
+    "prompt_cache_hit_tokens": 640,
+    "prompt_cache_miss_tokens": 207,
+    "prompt_tokens": 847,
+    "prompt_tokens_details": {
+      "cached_tokens": 640
+    },
+    "total_tokens": 6547
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "cases": 6,
+  "mutants_per_case": 3,
+  "repetitions": 1,
+  "first_shot": true,
+  "automatic_repairs": 0,
+  "context_size": 16384,
+  "final_tokens": 4096,
+  "local_thinking_budget": 2048,
+  "local_thinking_effort": "medium",
+  "deepseek_thinking": false,
+  "request_timeout_ms": 120000,
+  "local_model": "Qwen3.8-27B-UD-Q5_K_M",
+  "deepseek_model": "deepseek-flash",
+  "weights_size_bytes": 19771509664,
+  "sources": {
+    "contrib\\ai-test-generation-eval.py": "ac18353ba5057b4338b9e96da65caeb1d347cc2667819fda6ea28f8277f7b53c",
+    "contrib\\ai_test_eval_fixtures.py": "fbca41627764ab37e346febced378e8a105b59471c4a84c5306764acb81ac06f",
+    "helix-term\\src\\handlers\\ai_test\\evaluation.rs": "5c9ebe853b37b0f8fb1f42066420c5c7cf97af944b416de629c79f9ca05eb947",
+    "helix-term\\src\\handlers\\ai_test\\client.rs": "025de9b41c2d24634db2d44730752793ab214bcb342f74727c213f87b00f982a",
+    "helix-term\\src\\handlers\\ai_test\\project.rs": "831e64adc6bb1fd785908c965863d8da7d227afd3434c754e2f6c75c70ad69e1",
+    "helix-term\\src\\handlers\\ai_test\\runner.rs": "61b0cd3c6c7ff2fb012b8cc1454b16b3eb949c0baaf617a9af40a884ae0cca7f",
+    "docs\\benchmarks\\2026-11-15-ai-test-generation\\cases.json": "18f8060783c010efe82e181ed241f3625a8e01fcc1359960cf6acbecd6517377",
+    "target\\debug\\deps\\helix_term-35bce7f436acbfaf.exe": "30ecbf7652ef6c52b2e4845d77559ff9b5735b6b6da099f12aca60f2ca3ddeea"
+  },
+  "load_ms": 8725.61020000012
+}

@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"code\":\"#include <gtest/gtest.h>\\n#include <cstdint>\\n\\nextern \\\"C\\\" {\\n#include \\\"subject.h\\\"\\n}\\n\\n// 正常解析：最小值 0\\nTEST(HelixAi0BDFF2059B49C097, ParseZero) {\\n    unsigned short out = 0xFFFF;\\n    int rc = parse_u16(\\\"0\\\", &out);\\n    EXPECT_EQ(rc, 1);\\n    EXPECT_EQ(out, 0);\\n}\\n\\n// 正常解析：最大值 65535\\nTEST(HelixAi0BDFF2059B49C097, ParseMaxValue) {\\n    unsigned short out = 0;\\n    int rc = parse_u16(\\\"65535\\\", &out);\\n    EXPECT_EQ(rc, 1);\\n    EXPECT_EQ(out, 65535);\\n}\\n\\n// 正常解析：中间值\\nTEST(HelixAi0BDFF2059B49C097, ParseMiddleValue) {\\n    unsigned short out = 0;\\n    int rc = parse_u16(\\\"12345\\\", &out);\\n    EXPECT_EQ(rc, 1);\\n    EXPECT_EQ(out, 12345);\\n}\\n\\n// 正常解析：前导零\\nTEST(HelixAi0BDFF2059B49C097, ParseLeadingZeros) {\\n    unsigned short out = 0;\\n    int rc = parse_u16(\\\"007\\\", &out);\\n    EXPECT_EQ(rc, 1);\\n    EXPECT_EQ(out, 7);\\n}\\n\\n// 正常解析：全零字符串\\nTEST(HelixAi0BDFF2059B49C097, ParseAllZeros) {\\n    unsigned short out = 0xFFFF;\\n    int rc = parse_u16(\\\"000\\\", &out);\\n    EXPECT_EQ(rc, 1);\\n    EXPECT_EQ(out, 0);\\n}\\n\\n// 正常解析：单位数\\nTEST(HelixAi0BDFF2059B49C097, ParseSingleDigit) {\\n    unsigned short out = 0;\\n    int rc = parse_u16(\\\"9\\\", &out);\\n    EXPECT_EQ(rc, 1);\\n    EXPECT_EQ(out, 9);\\n}\\n\\n// 边界：65535 是合法上限\\nTEST(HelixAi0BDFF2059B49C097, BoundaryAt65535) {\\n    unsigned short out = 0;\\n    int rc = parse_u16(\\\"65535\\\", &out);\\n    EXPECT_EQ(rc, 1);\\n    EXPECT_EQ(out, 65535);\\n}\\n\\n// 边界：65536 溢出，应拒绝\\nTEST(HelixAi0BDFF2059B49C097, Overflow65536) {\\n    unsigned short out = 0xABCD;\\n    int rc = parse_u16(\\\"65536\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0xABCD);\\n}\\n\\n// 溢出：99999\\nTEST(HelixAi0BDFF2059B49C097, Overflow99999) {\\n    unsigned short out = 0x1234;\\n    int rc = parse_u16(\\\"99999\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x1234);\\n}\\n\\n// 错误：NULL text\\nTEST(HelixAi0BDFF2059B49C097, NullText) {\\n    unsigned short out = 0x5555;\\n    int rc = parse_u16(nullptr, &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x5555);\\n}\\n\\n// 错误：NULL out\\nTEST(HelixAi0BDFF2059B49C097, NullOut) {\\n    int rc = parse_u16(\\\"123\\\", nullptr);\\n    EXPECT_EQ(rc, 0);\\n}\\n\\n// 错误：空字符串\\nTEST(HelixAi0BDFF2059B49C097, EmptyString) {\\n    unsigned short out = 0x7777;\\n    int rc = parse_u16(\\\"\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x7777);\\n}\\n\\n// 错误：负号\\nTEST(HelixAi0BDFF2059B49C097, NegativeSign) {\\n    unsigned short out = 0x1111;\\n    int rc = parse_u16(\\\"-1\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x1111);\\n}\\n\\n// 错误：正号\\nTEST(HelixAi0BDFF2059B49C097, PositiveSign) {\\n    unsigned short out = 0x2222;\\n    int rc = parse_u16(\\\"+1\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x2222);\\n}\\n\\n// 错误：前导空格\\nTEST(HelixAi0BDFF2059B49C097, LeadingSpace) {\\n    unsigned short out = 0x3333;\\n    int rc = parse_u16(\\\" 1\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x3333);\\n}\\n\\n// 错误：尾随空格\\nTEST(HelixAi0BDFF2059B49C097, TrailingSpace) {\\n    unsigned short out = 0x4444;\\n    int rc = parse_u16(\\\"1 \\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x4444);\\n}\\n\\n// 错误：包含字母\\nTEST(HelixAi0BDFF2059B49C097, ContainsLetter) {\\n    unsigned short out = 0x5555;\\n    int rc = parse_u16(\\\"1a\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x5555);\\n}\\n\\n// 错误：以字母开头\\nTEST(HelixAi0BDFF2059B49C097, StartsWithLetter) {\\n    unsigned short out = 0x6666;\\n    int rc = parse_u16(\\\"a1\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x6666);\\n}\\n\\n// 错误：包含小数点\\nTEST(HelixAi0BDFF2059B49C097, ContainsDot) {\\n    unsigned short out = 0x7777;\\n    int rc = parse_u16(\\\"12.3\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0x7777);\\n}\\n\\n// 失败时 out 保持不变（哨兵值验证）\\nTEST(HelixAi0BDFF2059B49C097, OutUnchangedOnFailure) {\\n    unsigned short out = 0xBEEF;\\n    int rc = parse_u16(\\\"xyz\\\", &out);\\n    EXPECT_EQ(rc, 0);\\n    EXPECT_EQ(out, 0xBEEF);\\n}\\n\\n// 正常解析：前导零加多位数\\nTEST(HelixAi0BDFF2059B49C097, LeadingZerosMultiDigit) {\\n    unsigned short out = 0;\\n    int rc = parse_u16(\\\"000123\\\", &out);\\n    EXPECT_EQ(rc, 1);\\n    EXPECT_EQ(out, 123);\\n}\\n\",\"assumptions\":[\"函数在失败时不修改 out 指针所指向的值，这与头文件注释一致\",\"溢出判断基于 unsigned long 累加后与 65535UL 比较，因此 \\\"65536\\\" 在累加到 65536 时即被拒绝\",\"前导零被视为合法输入（头文件明确说明 including leading zeros）\"]}",
+        "reasoning_content_chars": 1510,
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794706322,
+  "id": "chatcmpl-YadNVFwYPxYvgHaN7dZLVpH4yrYwwMb3",
+  "model": "Qwen3.8-27B-UD-Q5_K_M",
+  "object": "chat.completion",
+  "system_fingerprint": "b11081-161755f29",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 65522.378,
+    "predicted_n": 2508,
+    "predicted_per_second": 38.26173708164255,
+    "predicted_per_token_ms": 26.13577104108496,
+    "prompt_ms": 515.682,
+    "prompt_n": 862,
+    "prompt_per_second": 1671.5727909835907,
+    "prompt_per_token_ms": 0.5982389791183295
+  },
+  "usage": {
+    "completion_tokens": 2508,
+    "prompt_tokens": 862,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3370
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "type": "llama-cpp",
+  "model": "Qwen3.8-27B-UD-Q5_K_M",
+  "server-path": "${USERPROFILE}\\.local\\share\\junie-local\\versions\\0.3.5\\runtime\\llama.cpp-b11081\\llama-server.exe",
+  "endpoint": "http://127.0.0.1:12829/v1/chat/completions",
+  "context-size": 16384,
+  "gpu-layers": 99,
+  "startup-timeout-ms": 180000,
+  "proxy": "none",
+  "thinking": true,
+  "thinking-budget": 2048,
+  "reasoning-effort": "medium"
+}

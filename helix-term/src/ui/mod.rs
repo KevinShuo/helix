@@ -1,4 +1,5 @@
 pub(crate) mod ai_doc;
+pub(crate) mod ai_test;
 mod completion;
 mod document;
 pub(crate) mod editor;

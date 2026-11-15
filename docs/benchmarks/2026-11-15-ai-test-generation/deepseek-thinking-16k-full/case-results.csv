@@ -1,0 +1,7 @@
+﻿case,language,generation_ms,accepted,compile_test_pass,execution_ms,mutants_killed,completion_tokens,finish_reason
+c_parse_u16,c,24847,True,True,6287,3,5700,stop
+c_copy_prefix,c,26994,True,True,5248,3,6265,stop
+cpp_merge_ranges,cpp,11362,True,True,5374,3,2382,stop
+cpp_quota,cpp,21524,True,True,5246,3,5072,stop
+python_parse_port,python,17399,True,True,406,3,3953,stop
+python_unique_by,python,28312,True,True,232,3,5944,stop

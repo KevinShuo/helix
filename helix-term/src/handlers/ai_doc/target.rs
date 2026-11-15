@@ -70,6 +70,25 @@ pub(crate) fn locate(
     cursor: usize,
     language: &str,
 ) -> Result<Target> {
+    locate_mode(text, syntax, cursor, language, false)
+}
+
+pub(crate) fn locate_for_test(
+    text: RopeSlice,
+    syntax: &Syntax,
+    cursor: usize,
+    language: &str,
+) -> Result<Target> {
+    locate_mode(text, syntax, cursor, language, true)
+}
+
+fn locate_mode(
+    text: RopeSlice,
+    syntax: &Syntax,
+    cursor: usize,
+    language: &str,
+    for_test: bool,
+) -> Result<Target> {
     ensure!(
         matches!(language, "c" | "cpp" | "python"),
         "仅支持 C、C++ 和 Python"
@@ -173,12 +192,13 @@ pub(crate) fn locate(
             .find(|n| n.kind() != "comment")
             .context("函数体为空")?;
         ensure!(
-            !is_docstring(first.clone(), text),
+            for_test || !is_docstring(first.clone(), text),
             "当前函数已有文档注释，未修改"
         );
         ensure!(
-            text.byte_to_line(first.start_byte() as usize)
-                > text.byte_to_line(function.start_byte() as usize),
+            for_test
+                || text.byte_to_line(first.start_byte() as usize)
+                    > text.byte_to_line(function.start_byte() as usize),
             "请先将单行 Python 函数改成多行函数"
         );
         target.insert = text.line_to_char(text.byte_to_line(first.start_byte() as usize));
@@ -186,7 +206,9 @@ pub(crate) fn locate(
             .slice(target.insert..text.byte_to_char(first.start_byte() as usize))
             .to_string();
         ensure!(
-            target.indent.chars().all(|c| matches!(c, ' ' | '\t')) && !target.indent.is_empty(),
+            for_test
+                || (target.indent.chars().all(|c| matches!(c, ' ' | '\t'))
+                    && !target.indent.is_empty()),
             "无法确定函数体缩进"
         );
         let params = function
@@ -281,7 +303,7 @@ pub(crate) fn locate(
         let line_start = text.line_to_char(text.char_to_line(start));
         target.indent = text.slice(line_start..start).to_string();
         ensure!(
-            target.indent.chars().all(|c| matches!(c, ' ' | '\t')),
+            for_test || target.indent.chars().all(|c| matches!(c, ' ' | '\t')),
             "函数与其他代码共享同一行，暂不支持"
         );
         let line_end = text
@@ -291,7 +313,7 @@ pub(crate) fn locate(
             .slice(text.line_to_char(text.char_to_line(end.saturating_sub(1)))..end)
             .len_chars();
         ensure!(
-            line_end.chars().skip(end_column).all(char::is_whitespace),
+            for_test || line_end.chars().skip(end_column).all(char::is_whitespace),
             "函数与其他代码共享同一行，暂不支持"
         );
         target.insert = line_start;
@@ -304,7 +326,10 @@ pub(crate) fn locate(
                 let gap = text
                     .byte_slice(previous.end_byte() as usize..declaration.start_byte() as usize)
                     .to_string();
-                if gap.chars().all(char::is_whitespace) && gap.matches('\n').count() <= 1 {
+                if !for_test
+                    && gap.chars().all(char::is_whitespace)
+                    && gap.matches('\n').count() <= 1
+                {
                     bail!("当前函数前已有注释，未修改");
                 }
             }

@@ -1,0 +1,32 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"'''parse_port 的单元测试。'''\\n\\nimport pytest\\n\\nfrom subject import parse_port\\n\\n\\ndef test_strip_whitespace_and_parse():\\n    '''去除首尾空白后按十进制解析。'''\\n    assert parse_port(' 8080 ') == 8080\\n    assert parse_port('\\\\t443\\\\n') == 443\\n    assert parse_port('  80') == 80\\n    assert parse_port('80  ') == 80\\n\\n\\ndef test_accept_leading_zeros():\\n    '''接受前导零。'''\\n    assert parse_port('0080') == 80\\n    assert parse_port('0000000000008080') == 8080\\n\\n\\ndef test_port_range_boundaries():\\n    '''端口合法范围边界 1 与 65535。'''\\n    assert parse_port('1') == 1\\n    assert parse_port('65535') == 65535\\n\\n\\n@pytest.mark.parametrize('text', ['', '   ', '\\\\t\\\\n', '\\\\n  \\\\t'])\\ndef test_empty_or_whitespace_raises(text):\\n    '''空字符串或仅空白字符应抛出 ValueError。'''\\n    with pytest.raises(ValueError):\\n        parse_port(text)\\n\\n\\n@pytest.mark.parametrize('text', ['0', '0000', '65536', '99999'])\\ndef test_out_of_range_raises(text):\\n    '''超出 1..65535 范围应抛出 ValueError。'''\\n    with pytest.raises(ValueError):\\n        parse_port(text)\\n\\n\\n@pytest.mark.parametrize('text', ['+80', '-80', '  -1 ', '+0', '-0'])\\ndef test_signed_numbers_raise(text):\\n    '''带正负号的数字应抛出 ValueError。'''\\n    with pytest.raises(ValueError):\\n        parse_port(text)\\n\\n\\n@pytest.mark.parametrize(\\n    'text',\\n    ['80.5', '80a', '0x50', '8 0', '8,0', '８０', '٨٠', '١٢٣'],\\n)\\ndef test_non_ascii_or_non_decimal_raises(text):\\n    '''非 ASCII 数字或非十进制形式应抛出 ValueError。'''\\n    with pytest.raises(ValueError):\\n        parse_port(text)\\n\",\"assumptions\":[\"测试通过 `from subject import parse_port` 导入，依赖项目根目录位于导入路径中（与 subject.py 和 pyproject.toml 的布局一致）。\",\"ValueError 的具体消息不属于文档契约，测试仅断言异常类型。\",\"文档仅定义 str 输入；未定义 None、非字符串等类型的行为，因此不做测试。\",\"测试仅验证纯函数解析语义，不涉及网络操作。\"]}",
+        "reasoning_content_chars": 12410,
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794735755,
+  "id": "9b41e93f-e73d-4a68-9059-d94a8398d434",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 3953,
+    "completion_tokens_details": {
+      "reasoning_tokens": 3306
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 715,
+    "prompt_tokens": 715,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 4668
+  }
+}
