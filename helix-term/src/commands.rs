@@ -1,8 +1,8 @@
 pub(crate) mod dap;
 mod folding;
 mod git;
-pub(crate) mod problems;
 pub(crate) mod lsp;
+pub(crate) mod problems;
 pub(crate) mod syntax;
 pub(crate) mod typed;
 
@@ -11,7 +11,6 @@ pub(crate) use folding::toggle_fold_at_line;
 use folding::*;
 use futures_util::FutureExt;
 use git::*;
-use problems::{next_problem, previous_problem, problems_picker};
 use helix_event::status;
 use helix_stdx::{
     path::{self, find_paths},
@@ -19,6 +18,7 @@ use helix_stdx::{
 };
 use helix_vcs::{FileChange, Hunk};
 pub use lsp::*;
+use problems::{next_problem, previous_problem, problems_picker};
 pub use syntax::*;
 use tui::{
     text::{Span, Spans},

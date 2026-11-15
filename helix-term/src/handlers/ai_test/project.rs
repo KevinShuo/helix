@@ -57,7 +57,7 @@ pub(crate) fn confined(root: &Path, path: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn root_for(source: &Path, language: &str) -> PathBuf {
+pub(crate) fn root_for(source: &Path, language: &str) -> PathBuf {
     let parent = source.parent().unwrap();
     let mut cmake_root = None;
     for dir in parent.ancestors() {

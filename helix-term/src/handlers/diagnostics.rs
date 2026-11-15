@@ -293,6 +293,19 @@ fn handle_pull_diagnostics_response(
     uri: Uri,
     document_id: DocumentId,
 ) {
+    let server_id = provider
+        .language_server_id()
+        .expect("pull diagnostics always originate from an LSP");
+    // A completed request may already be queued when its server is restarted
+    // or the document is closed, renamed, or detached from that server.
+    if editor.language_server_by_id(server_id).is_none()
+        || !editor.document(document_id).is_some_and(|doc| {
+            doc.supports_language_server(server_id) && doc.uri().as_ref() == Some(&uri)
+        })
+    {
+        return;
+    }
+
     match result {
         lsp::DocumentDiagnosticReportResult::Report(report) => {
             let result_id = match report {
@@ -312,9 +325,6 @@ fn handle_pull_diagnostics_response(
             };
 
             if let Some(doc) = editor.document_mut(document_id) {
-                let server_id = provider
-                    .language_server_id()
-                    .expect("pull diagnostics always originate from an LSP");
                 match result_id {
                     Some(result_id) => {
                         doc.previous_diagnostic_ids.insert(server_id, result_id);
@@ -327,4 +337,59 @@ fn handle_pull_diagnostics_response(
         }
         lsp::DocumentDiagnosticReportResult::Partial(_) => {}
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn retired_pull_reports_cannot_restore_diagnostics_or_result_ids() {
+        let file = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
+        std::fs::write(file.path(), "namespace ws {};\r\n").unwrap();
+        let mut args = crate::args::Args::default();
+        args.files.insert(
+            file.path().to_owned(),
+            vec![helix_core::Position::default()],
+        );
+        let mut config = crate::config::Config::default();
+        config.editor.lsp.enable = false;
+        let mut app = crate::application::Application::new(
+            args,
+            config,
+            helix_core::syntax::Loader::default(),
+            helix_loader::workspace_trust::WorkspaceTrust::fully_trusted(),
+        )
+        .unwrap();
+        let (_, doc) = helix_view::current_ref!(app.editor);
+        let uri = doc.uri().unwrap();
+        let document_id = doc.id();
+        let provider = DiagnosticProvider::Lsp {
+            server_id: Default::default(),
+            identifier: None,
+        };
+        for report in [
+            serde_json::json!({"kind": "full", "resultId": "retired", "items": [{
+                "range": {"start": {"line": 0, "character": 13}, "end": {"line": 0, "character": 14}},
+                "message": "late error"
+            }]}),
+            serde_json::json!({"kind": "unchanged", "resultId": "retired"}),
+        ] {
+            handle_pull_diagnostics_response(
+                &mut app.editor,
+                serde_json::from_value(report).unwrap(),
+                provider.clone(),
+                uri.clone(),
+                document_id,
+            );
+            assert!(app.editor.diagnostics.get(&uri).is_none_or(Vec::is_empty));
+            assert!(app
+                .editor
+                .document(document_id)
+                .unwrap()
+                .previous_diagnostic_ids
+                .is_empty());
+        }
+        app.close().await;
+    }
 }

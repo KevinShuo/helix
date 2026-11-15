@@ -20,6 +20,16 @@ No file or directory is created until you save. Use `:w` to save, or `:w!` if
 the path requires new parent directories. Escape cancels the prompt. The `:new`
 command continues to create an unnamed scratch buffer.
 
+Use `:delete-file` to permanently delete the current file from disk and close
+its buffer. The confirmation prompt shows the path: type `yes` and press Enter
+to delete, or press Escape to cancel. Any other answer also cancels. Files with
+unsaved changes are protected; use `:delete-file!` to discard those changes,
+still with confirmation. Deletion does not move the file to the recycle bin.
+Scratch buffers, files that do not exist on disk, and merge documents cannot
+be deleted. Other open buffers remain available; deleting the last file opens
+an empty scratch buffer without quitting the editor. Neither command accepts
+a path argument.
+
 Use `:ai-doc` to preview reST documentation for the function at the cursor,
 then Enter to insert or Escape to cancel. `:ai-doc-cancel` cancels a pending
 request. Requires `[editor.ai-doc] enabled = true`; see

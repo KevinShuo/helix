@@ -167,6 +167,8 @@ pub(crate) fn open(cx: &mut crate::commands::Context, action: OpenAction) {
         return;
     }
     cx.callback.push(Box::new(move |compositor, _cx| {
+        compositor.remove(crate::ui::test::ID);
+        _cx.editor.tests.panel_visible = false;
         if let Some(panel) = compositor.find::<GitPanel>() {
             panel.resolve_open(path, action);
         } else {

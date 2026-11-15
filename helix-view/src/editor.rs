@@ -105,6 +105,7 @@ impl Default for GutterConfig {
                 GutterType::LineNumbers,
                 GutterType::Spacer,
                 GutterType::Diff,
+                GutterType::Test,
             ],
             line_numbers: GutterLineNumbersConfig::default(),
             fold: GutterFoldConfig::default(),
@@ -345,6 +346,7 @@ pub struct Config {
     pub ai_completion: crate::ai_completion::AiCompletionConfig,
     pub ai_doc: crate::ai_doc::AiDocConfig,
     pub ai_test: crate::ai_test::AiTestConfig,
+    pub test: crate::test::TestConfig,
     pub ai_commit: crate::ai_commit::AiCommitConfig,
     /// Function reference counts and latest Git authors beside declarations.
     pub function_hints: crate::function_hints::FunctionHintsConfig,
@@ -941,6 +943,8 @@ pub enum GutterType {
     CodeActionHint,
     /// Code folding indicators (click to fold/unfold)
     Fold,
+    /// Run tests and show their most recent outcome.
+    Test,
 }
 
 impl std::str::FromStr for GutterType {
@@ -954,8 +958,9 @@ impl std::str::FromStr for GutterType {
             "diff" => Ok(Self::Diff),
             "code-action-hint" => Ok(Self::CodeActionHint),
             "fold" => Ok(Self::Fold),
+            "test" => Ok(Self::Test),
             _ => anyhow::bail!(
-                "Gutter type can only be `diagnostics`, `spacer`, `line-numbers`, `diff`, `code-action-hint` or `fold`."
+                "Gutter type can only be `diagnostics`, `spacer`, `line-numbers`, `diff`, `code-action-hint`, `fold` or `test`."
             ),
         }
     }
@@ -1228,6 +1233,7 @@ impl Default for Config {
             ai_completion: crate::ai_completion::AiCompletionConfig::default(),
             ai_doc: crate::ai_doc::AiDocConfig::default(),
             ai_test: crate::ai_test::AiTestConfig::default(),
+            test: crate::test::TestConfig::default(),
             ai_commit: crate::ai_commit::AiCommitConfig::default(),
             function_hints: crate::function_hints::FunctionHintsConfig::default(),
             minimap: crate::minimap::MinimapConfig::default(),
@@ -1320,6 +1326,7 @@ pub struct Editor {
     pub ai_doc: Option<crate::ai_doc::Operation>,
     pub ai_doc_serial: u64,
     pub ai_test: Option<crate::ai_test::Operation>,
+    pub tests: crate::test::TestState,
     pub ai_test_serial: u64,
     pub ai_test_controller: helix_event::TaskController,
     pub ai_commit_running: bool,
@@ -1483,6 +1490,7 @@ impl Editor {
             ai_doc: None,
             ai_doc_serial: 0,
             ai_test: None,
+            tests: crate::test::TestState::default(),
             ai_test_serial: 0,
             ai_test_controller: helix_event::TaskController::new(),
             ai_commit_running: false,
@@ -1688,6 +1696,26 @@ impl Editor {
     /// Refreshes the language server for a given document
     pub fn refresh_language_servers(&mut self, doc_id: DocumentId) {
         self.launch_language_servers(doc_id)
+    }
+
+    /// Remove both workspace and visible diagnostics when a server is retired.
+    /// A restart removes the client from the registry before its exit arrives.
+    pub fn clear_language_server_diagnostics(&mut self, server_id: LanguageServerId) {
+        self.diagnostics.retain(|_, diagnostics| {
+            diagnostics.retain(|(_, provider)| provider.language_server_id() != Some(server_id));
+            !diagnostics.is_empty()
+        });
+        let mut changed_documents = Vec::new();
+        for doc in self.documents_mut() {
+            let old_len = doc.diagnostics().len();
+            doc.clear_diagnostics_for_language_server(server_id);
+            if doc.diagnostics().len() != old_len {
+                changed_documents.push(doc.id());
+            }
+        }
+        for doc in changed_documents {
+            helix_event::dispatch(crate::events::DiagnosticsDidChange { editor: self, doc });
+        }
     }
 
     /// moves/renames a path, invoking any event handlers (currently only lsp)
@@ -1929,14 +1957,18 @@ impl Editor {
         let language_id = doc.language_id().map(ToOwned::to_owned).unwrap_or_default();
 
         // only spawn new language servers if the servers aren't the same
-        let doc_language_servers_not_in_registry =
-            doc.language_servers.iter().filter(|(name, doc_ls)| {
+        let retired_servers: Vec<_> = doc
+            .language_servers
+            .iter()
+            .filter(|(name, doc_ls)| {
                 language_servers
                     .get(*name)
                     .is_none_or(|ls| ls.id() != doc_ls.id())
-            });
+            })
+            .map(|(_, server)| server.clone())
+            .collect();
 
-        for (_, language_server) in doc_language_servers_not_in_registry {
+        for language_server in &retired_servers {
             language_server.text_document_did_close(doc.identifier());
         }
 
@@ -1957,6 +1989,12 @@ impl Editor {
         }
 
         doc.language_servers = language_servers;
+        drop(config);
+        for server in retired_servers {
+            if self.language_servers.get_by_id(server.id()).is_none() {
+                self.clear_language_server_diagnostics(server.id());
+            }
+        }
     }
 
     fn _refresh(&mut self) {

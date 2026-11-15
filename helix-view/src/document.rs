@@ -26,7 +26,7 @@ use serde::de::{self, Deserialize, Deserializer};
 use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::future::Future;
 use std::io;
@@ -214,6 +214,7 @@ pub struct Document {
     pub(crate) modified_since_accessed: bool,
 
     pub(crate) diagnostics: Vec<Diagnostic>,
+    pub(crate) diagnostic_versions: BTreeMap<DiagnosticProvider, i32>,
     pub(crate) language_servers: HashMap<LanguageServerName, Arc<Client>>,
 
     diff_handle: Option<DiffHandle>,
@@ -770,6 +771,7 @@ impl Document {
             changes,
             old_state,
             diagnostics: Vec::new(),
+            diagnostic_versions: BTreeMap::new(),
             version: 0,
             history: Cell::new(History::default()),
             savepoints: Vec::new(),
@@ -2411,6 +2413,9 @@ impl Document {
     pub fn clear_diagnostics_for_language_server(&mut self, id: LanguageServerId) {
         self.diagnostics
             .retain(|d| d.provider.language_server_id() != Some(id));
+        self.diagnostic_versions
+            .retain(|provider, _| provider.language_server_id() != Some(id));
+        self.previous_diagnostic_ids.remove(&id);
     }
 
     /// Get the document's auto pairs. If the document has a recognized

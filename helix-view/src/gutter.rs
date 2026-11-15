@@ -34,6 +34,7 @@ impl GutterType {
             GutterType::Diff => diff(editor, doc, view, theme, is_focused),
             GutterType::CodeActionHint => code_action_hint(editor, doc, view, theme, is_focused),
             GutterType::Fold => fold(editor, doc, view, theme, is_focused),
+            GutterType::Test => tests(editor, doc, theme),
         }
     }
 
@@ -45,8 +46,53 @@ impl GutterType {
             GutterType::Diff => 1,
             GutterType::CodeActionHint => 1,
             GutterType::Fold => fold_width(view),
+            GutterType::Test => 1,
         }
     }
+}
+
+fn tests<'doc>(editor: &'doc Editor, doc: &'doc Document, theme: &Theme) -> GutterFn<'doc> {
+    let mut rows = Vec::new();
+    if let Some(cache) = doc
+        .path()
+        .and_then(|path| editor.tests.declarations.get(path))
+    {
+        for d in &cache.declarations {
+            let matching = editor.tests.cases.iter().filter(|case| {
+                Some(case.path.as_path()) == doc.path()
+                    && if doc.language_name() == Some("python") {
+                        d.matches_python(&case.id)
+                    } else {
+                        d.matches_gtest(case.selector.as_deref().unwrap_or(&case.id))
+                    }
+            });
+            rows.push((d.line, crate::test::TestState::aggregate(matching)));
+        }
+    }
+    let stale = editor.tests.stale;
+    let pending = theme.get("ui.text.inactive");
+    let pass = theme.get("diff.plus");
+    let fail = theme.get("error");
+    Box::new(move |line, _, first, out| {
+        if !first {
+            return None;
+        }
+        let (_, outcome) = rows.iter().find(|(row, _)| *row == line)?;
+        out.push_str(if stale && *outcome != crate::test::Outcome::Queued {
+            "?"
+        } else {
+            outcome.symbol()
+        });
+        Some(if stale {
+            pending
+        } else if outcome.failed() {
+            fail
+        } else if *outcome == crate::test::Outcome::Passed {
+            pass
+        } else {
+            pending
+        })
+    })
 }
 
 pub fn diagnostic<'doc>(
@@ -434,7 +480,7 @@ mod tests {
             Arc::new(ArcSwap::from_pointee(syntax::Loader::default())),
         );
 
-        assert_eq!(view.gutters.layout.len(), 5);
+        assert_eq!(view.gutters.layout.len(), 6);
         assert_eq!(view.gutters.layout[0].width(&view, &doc), 1);
         assert_eq!(view.gutters.layout[1].width(&view, &doc), 1);
         assert_eq!(view.gutters.layout[2].width(&view, &doc), 3);

@@ -281,6 +281,7 @@ impl Application {
     async fn render(&mut self) {
         handlers::ai_doc::refresh(&mut self.editor, &mut self.compositor);
         handlers::ai_test::refresh(&mut self.editor, &mut self.compositor);
+        handlers::test::refresh(&mut self.editor, &mut self.compositor);
         if self.compositor.full_redraw {
             self.terminal.clear().expect("Cannot clear the terminal");
             self.compositor.full_redraw = false;
@@ -986,25 +987,13 @@ impl Application {
                         // do nothing
                     }
                     Notification::Exit => {
-                        let status =
-                            format!("Language server exited: {}", language_server!().name());
-                        self.editor.set_status(status);
-
-                        // LSPs may produce diagnostics for files that haven't been opened in helix,
-                        // we need to clear those and remove the entries from the list if this leads to
-                        // an empty diagnostic list for said files
-                        for diags in self.editor.diagnostics.values_mut() {
-                            diags.retain(|(_, provider)| {
-                                provider.language_server_id() != Some(server_id)
-                            });
+                        if let Some(language_server) = self.editor.language_server_by_id(server_id)
+                        {
+                            let status =
+                                format!("Language server exited: {}", language_server.name());
+                            self.editor.set_status(status);
                         }
-
-                        self.editor.diagnostics.retain(|_, diags| !diags.is_empty());
-
-                        // Clear any diagnostics for documents with this server open.
-                        for doc in self.editor.documents_mut() {
-                            doc.clear_diagnostics_for_language_server(server_id);
-                        }
+                        self.editor.clear_language_server_diagnostics(server_id);
 
                         helix_event::dispatch(helix_view::events::LanguageServerExited {
                             editor: &mut self.editor,

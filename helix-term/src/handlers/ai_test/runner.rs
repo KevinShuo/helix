@@ -35,7 +35,7 @@ impl Drop for ProcessTree {
     }
 }
 
-async fn read_log(mut reader: impl AsyncRead + Unpin) -> std::io::Result<Vec<u8>> {
+async fn read_log(mut reader: impl AsyncRead + Unpin, limit: usize) -> std::io::Result<Vec<u8>> {
     let mut result = Vec::new();
     let mut buf = [0; 4096];
     loop {
@@ -44,8 +44,8 @@ async fn read_log(mut reader: impl AsyncRead + Unpin) -> std::io::Result<Vec<u8>
             break;
         }
         result.extend_from_slice(&buf[..n]);
-        if result.len() > LOG_LIMIT {
-            result.drain(..result.len() - LOG_LIMIT);
+        if result.len() > limit {
+            result.drain(..result.len() - limit);
         }
     }
     Ok(result)
@@ -58,6 +58,17 @@ pub(crate) async fn command(
     stage: RunStage,
     timeout_ms: u64,
 ) -> RunReport {
+    capture(program, args, root, stage, timeout_ms).await.0
+}
+
+/// Structured stdout is returned separately from diagnostics (CTest JSON).
+pub(crate) async fn capture(
+    program: &Path,
+    args: &[String],
+    root: &Path,
+    stage: RunStage,
+    timeout_ms: u64,
+) -> (RunReport, String) {
     let mut cmd = Command::new(program);
     cmd.args(args)
         .current_dir(root)
@@ -77,12 +88,15 @@ pub(crate) async fn command(
     let mut child = match cmd.spawn() {
         Ok(child) => child,
         Err(e) => {
-            return RunReport {
-                stage: RunStage::Environment,
-                success: false,
-                repairable: false,
-                log: format!("无法启动 {}：{e}", program.display()),
-            }
+            return (
+                RunReport {
+                    stage: RunStage::Environment,
+                    success: false,
+                    repairable: false,
+                    log: format!("无法启动 {}：{e}", program.display()),
+                },
+                String::new(),
+            )
         }
     };
     let mut tree = ProcessTree(child.id());
@@ -90,42 +104,64 @@ pub(crate) async fn command(
     let stderr = child.stderr.take().unwrap();
     let result = tokio::time::timeout(
         Duration::from_millis(timeout_ms.clamp(100, 600_000)),
-        async { tokio::try_join!(child.wait(), read_log(stdout), read_log(stderr)) },
+        async {
+            tokio::try_join!(
+                child.wait(),
+                read_log(stdout, 4_194_304),
+                read_log(stderr, LOG_LIMIT)
+            )
+        },
     )
     .await;
     match result {
         Ok(Ok((status, out, err))) => {
             tree.0 = None;
+            let raw = String::from_utf8_lossy(&out).into_owned();
             let log = format!(
                 "{} {:?}\n{}\n{}",
                 program.display(),
                 args,
-                String::from_utf8_lossy(&out),
+                raw.chars()
+                    .rev()
+                    .take(LOG_LIMIT / 2)
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect::<String>(),
                 String::from_utf8_lossy(&err)
             );
+            (
+                RunReport {
+                    stage,
+                    success: status.success(),
+                    repairable: stage == RunStage::Build && !status.success(),
+                    log,
+                },
+                raw,
+            )
+        }
+        Ok(Err(e)) => (
             RunReport {
                 stage,
-                success: status.success(),
-                repairable: stage == RunStage::Build && !status.success(),
-                log,
-            }
-        }
-        Ok(Err(e)) => RunReport {
-            stage,
-            success: false,
-            repairable: false,
-            log: format!("执行失败：{e}"),
-        },
-        Err(_) => RunReport {
-            stage,
-            success: false,
-            repairable: false,
-            log: format!(
-                "{} 执行超时（{}ms），已停止进程树",
-                program.display(),
-                timeout_ms
-            ),
-        },
+                success: false,
+                repairable: false,
+                log: format!("执行失败：{e}"),
+            },
+            String::new(),
+        ),
+        Err(_) => (
+            RunReport {
+                stage,
+                success: false,
+                repairable: false,
+                log: format!(
+                    "{} 执行超时（{}ms），已停止进程树",
+                    program.display(),
+                    timeout_ms
+                ),
+            },
+            String::new(),
+        ),
     }
 }
 
@@ -160,7 +196,7 @@ pub(crate) fn python(root: &Path, config: &AiTestConfig) -> PathBuf {
     PathBuf::from("python")
 }
 
-fn preset_binary(root: &Path, name: &str) -> Result<PathBuf> {
+pub(crate) fn preset_binary(root: &Path, name: &str) -> Result<PathBuf> {
     let mut presets = Vec::new();
     for file in ["CMakePresets.json", "CMakeUserPresets.json"] {
         if let Ok(text) = std::fs::read_to_string(root.join(file)) {
@@ -411,7 +447,10 @@ mod tests {
     #[tokio::test]
     async fn bounded_logs_keep_the_diagnostic_tail() {
         let data = vec![b'x'; LOG_LIMIT + 100];
-        assert_eq!(read_log(&data[..]).await.unwrap().len(), LOG_LIMIT);
+        assert_eq!(
+            read_log(&data[..], LOG_LIMIT).await.unwrap().len(),
+            LOG_LIMIT
+        );
     }
 
     #[test]

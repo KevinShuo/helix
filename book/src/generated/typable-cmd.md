@@ -1,5 +1,25 @@
 | Name | Description |
 | --- | --- |
+| `:test` | Run the test or test class at the cursor |
+| `:test-file` | Run tests in the current file |
+| `:test-project` | Build and run tests in the current language project |
+| `:test-show` | Open or focus the test results panel |
+| `:test-rerun` | Repeat the last test run and its original environment |
+| `:test-rerun-failed` | Rerun only failed or errored cases from the last run |
+| `:test-stop` | Stop the active test run and its owned process tree |
+| `:compile` | Run a build shell command asynchronously in the current working directory |
+| `:recompile` | Repeat the previous build command and working directory |
+| `:compile-cancel` | Cancel the active build and its process tree, retaining received output |
+| `:compile-log` | Show the current build log in a read-only split |
+| `:next-problem` | Go to next problem, optionally setting source, minimum severity and scope filters |
+| `:previous-problem` | Go to previous problem, optionally setting source, minimum severity and scope filters |
+| `:problems` | Show filtered live diagnostics and compiler problems |
+| `:ai-test` | Generate pytest or GoogleTest tests and preview CMake integration for the current function |
+| `:ai-test-run` | Run saved generated tests; preview at most one compile/import repair |
+| `:ai-test-show` | Show the latest generated test changes or execution report |
+| `:ai-test-cancel` | Cancel AI test generation or execution, preserving accepted changes |
+| `:ai-commit` | Recommend files, stage and commit with Chinese or English Conventional Commits |
+| `:ai-commit-cancel` | Cancel AI commit analysis while preserving staged files and message |
 | `:ai-doc` | Generate a reST doc comment for the function at the cursor |
 | `:ai-doc-cancel` | Cancel AI function documentation |
 | `:exit`, `:x`, `:xit` | Write changes to disk if the buffer is modified and then quit. Accepts an optional path (:exit some/path.txt). |
@@ -21,6 +41,8 @@
 | `:write-buffer-close!`, `:wbc!` | Force write changes to disk creating necessary subdirectories and closes the buffer. Accepts an optional path (:write-buffer-close! some/path.txt) |
 | `:new`, `:n` | Create a new scratch buffer. |
 | `:new-file` | Open a new named buffer in the current file's directory (working directory for scratch buffers). The file is created on save. Existing paths and buffers are rejected. |
+| `:delete-file` | Permanently delete the current file and close its buffer after typing yes to confirm. Refuses unsaved changes. |
+| `:delete-file!` | Permanently delete the current file and close its buffer, discarding unsaved changes, after typing yes to confirm. |
 | `:format`, `:fmt` | Format the file using an external formatter or language server. |
 | `:indent-style` | Set the indentation style for editing. ('t' for tabs or 1-16 for number of spaces.) |
 | `:line-ending` | Set the document's default line ending. Options: crlf, lf. |

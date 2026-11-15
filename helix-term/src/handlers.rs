@@ -22,8 +22,8 @@ pub(crate) mod ai_doc;
 pub(crate) mod ai_test;
 mod auto_save;
 mod code_action_hint;
-pub mod completion;
 pub(crate) mod compilation;
+pub mod completion;
 pub mod diagnostics;
 mod document_colors;
 mod document_highlight;
@@ -34,6 +34,7 @@ pub(crate) mod minimap;
 mod prompt;
 mod signature_help;
 mod snippet;
+pub(crate) mod test;
 mod workspace_trust;
 
 pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {

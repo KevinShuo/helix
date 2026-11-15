@@ -147,6 +147,24 @@ async fn enter(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn delete_file_commands_reject_merge_documents() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let source = repo.path().join("file.txt");
+    let original = fs::read(&source)?;
+    let mut app = AppBuilder::new().with_file(&source, None).build()?;
+    let session = enter(&mut app, repo.path()).await?;
+    let id = current_ref!(app.editor).1.id();
+    for command in [":delete-file<ret>", ":delete-file!<ret>"] {
+        keys(&mut app, command).await?;
+        assert!(app.editor.is_err());
+        assert_eq!(app.editor.active_merge(), Some(session));
+        assert_eq!(current_ref!(app.editor).1.id(), id);
+        assert_eq!(fs::read(&source)?, original);
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn git_conflicts_native_draft_restores_views_and_resumes_edits() -> anyhow::Result<()> {
     let repo = repository(true);
     let folded_path = repo.path().join("fold.cpp");

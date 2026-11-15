@@ -46,7 +46,7 @@
 | `cursorline` | Highlight all lines with a cursor | `false` |
 | `cursorcolumn` | Highlight all columns with a cursor | `false` |
 | `continue-comments` | if helix should automatically add a line comment token if you create a new line inside a comment. | `true` |
-| `gutters` | Gutters to display: Available are `diagnostics`, `diff`, `line-numbers`, `spacer`, `code-action-hint` and `fold`. `diagnostics` also includes other features like breakpoints. A 1-width padding will be inserted if gutters is non-empty. | `["diagnostics", "spacer", "line-numbers", "spacer", "diff"]` |
+| `gutters` | Gutters to display: Available are `diagnostics`, `diff`, `line-numbers`, `spacer`, `code-action-hint`, `fold` and `test`. `diagnostics` also includes other features like breakpoints. A 1-width padding will be inserted if gutters is non-empty. | `["diagnostics", "fold", "line-numbers", "spacer", "diff", "test"]` |
 | `auto-completion` | Enable automatic pop up of auto-completion | `true` |
 | `path-completion` | Enable filepath completion. Show files and directories if an existing path at the cursor was recognized, either absolute or relative to the current opened document or current working directory (if the buffer is not yet saved). Defaults to true. | `true` |
 | `auto-format` | Enable automatic formatting on save[^3] | `true` |
@@ -579,7 +579,7 @@ specific gutter components as subsections.
 
 | Key      | Description                    | Default                                                       |
 | ---      | ---                            | ---                                                           |
-| `layout` | A vector of gutters to display | `["diagnostics", "spacer", "line-numbers", "spacer", "diff"]` |
+| `layout` | A vector of gutters to display | `["diagnostics", "fold", "line-numbers", "spacer", "diff", "test"]` |
 
 Example:
 
@@ -1148,6 +1148,73 @@ request is skipped. Initial limitations include declarations without bodies,
 macro-generated functions, anonymous lambdas, unnamed C/C++ parameters, single-line
 Python bodies, and functions sharing a line with other code. Multi-cursor,
 active snippets and macro recording/replay are unsupported.
+
+### `[editor.test]` Section
+
+Run existing or AI-generated tests without a model. Python uses pytest (including
+`unittest.TestCase`); C/C++ uses a CMake project with tests registered in CTest.
+Save project buffers before running. Opening a file only identifies declarations;
+it never imports Python modules or builds a CMake project.
+
+The default gutter includes `test`. If you configured your own gutter list, add
+it explicitly, keeping folding and diagnostics independent:
+
+```toml
+[editor]
+gutters = ["diagnostics", "spacer", "line-numbers", "test", "fold", "spacer", "diff"]
+
+[editor.test]
+# python = ".venv/Scripts/python.exe" # Unix: .venv/bin/python
+# build-directory = "build"
+# cmake-preset = "windows-debug"
+# build-configuration = "Debug"
+# target = "unit_tests"
+# timeout-ms = 180000
+# cmake-args = ["-DCMAKE_PREFIX_PATH=C:/dependencies"]
+```
+
+Unspecified interpreter, build-directory, preset, build-configuration, timeout and
+CMake arguments inherit `[editor.ai-test]` for compatibility. Ordinary runs do
+not inherit the AI generator's test target. Python selection otherwise checks
+project `.venv`/`venv`, `VIRTUAL_ENV`, then `python` on PATH; pytest must be installed
+in that interpreter. Existing CMake settings are reused, with `VCPKG_ROOT` used for
+new unconfigured builds unless a preset/toolchain overrides it. Ordinary runs do
+not edit `CMakeLists.txt` or add dependency downloads. Dependency actions already
+configured by the project's CMake scripts still apply.
+
+| Command | Action |
+| --- | --- |
+| `:test` | Run the test or class at the cursor |
+| `:test-file` | Run tests in the current file |
+| `:test-project` | Run the current language project's tests |
+| `:test-show` | Open/focus the results panel |
+| `:test-rerun` | Repeat the last run with its original environment |
+| `:test-rerun-failed` | Run only failed/error cases from the previous run |
+| `:test-stop` | Cancel execution and stop its owned process tree |
+
+Click `▶` beside a Python test/class or GoogleTest declaration to run it. A
+parameterized declaration runs its instances; individual instances can be selected
+in the results panel. Status symbols distinguish passed `✓`, failed `✗`, skipped
+`−`, error `!`, running `◷` and cancelled `■`. Source edits mark results stale `?`.
+Collection/build failures and zero matching tests are reported as errors.
+
+The docked panel has expandable file/suite groups, individual durations and output.
+Use `j`/`k` or arrow keys to select, Enter to expand a group or jump to a failure,
+`h`/`l` to collapse/expand, Tab to switch tree/details, `r` to rerun the selection,
+`f` to rerun failures, `R` to repeat the last scope, `s` to stop, Esc to edit while
+keeping results visible, and `q` to close. Mouse toolbar actions are equivalent.
+Closing the panel preserves results and does not stop execution. The Git and test
+docks replace one another. Narrow terminals use Tab to switch between tree/output.
+
+CMake requires CTest JSON discovery and JUnit output support (CMake 3.21+).
+Use `gtest_discover_tests(your_target)` for per-case and per-file actions. CTest
+entries that register an entire executable can be run with `:test-project`; a
+single-case click never silently expands to the whole executable. CTest environment,
+fixtures and working-directory properties remain in effect. When executable targets
+have overlapping test names, give each `gtest_discover_tests` a distinct
+`TEST_PREFIX`; ambiguous CTest names are rejected before execution. Custom test naming
+rules/macros may require file/project commands. V1 retains only the latest run;
+debugging, coverage and automatic reruns are deferred.
 
 ### `[editor.ai-test]` Section
 

@@ -26,6 +26,7 @@ pub mod merge;
 pub mod minimap;
 pub mod problems;
 pub mod register;
+pub mod test;
 pub mod theme;
 pub mod tree;
 pub mod view;
