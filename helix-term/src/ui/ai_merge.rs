@@ -5,6 +5,7 @@ use crate::{
     handlers::ai_merge,
     key,
 };
+use anyhow::{ensure, Result};
 use helix_core::Position;
 use helix_view::{
     ai_merge::{Suggestion, Target},
@@ -42,7 +43,7 @@ fn display(text: &str) -> String {
 }
 
 impl Preview {
-    pub(crate) fn new(id: u64, target: &Target, suggestion: &Suggestion) -> Self {
+    pub(crate) fn new(id: u64, target: &Target, suggestion: &Suggestion) -> Result<Self> {
         let status = if suggestion.code.is_some() {
             "候选待复核"
         } else {
@@ -81,17 +82,24 @@ impl Preview {
                 "接受到 Result 后仍需 Review / Apply。".into(),
             ]);
         }
-        Self {
+        let text = lines.join("\n");
+        // At one display column, the UTF-8 byte count also bounds the wrapped
+        // row count. Reserve headroom below Paragraph's u16 size/scroll limit.
+        ensure!(
+            text.len() <= 60_000,
+            "AI 候选过大，无法完整预览；请缩小冲突块或减少 max-tokens，草稿已保留"
+        );
+        Ok(Self {
             id,
             title: format!(
                 " AI Merge · {} · block {} ",
                 display(&target.path),
                 target.block + 1
             ),
-            text: Text::from(lines.join("\n")),
+            text: Text::from(text),
             can_accept: suggestion.code.is_some(),
             scroll: 0,
-        }
+        })
     }
 }
 
@@ -155,8 +163,24 @@ impl Component for Preview {
     }
 
     fn render(&mut self, area: Rect, surface: &mut Buffer, cx: &mut Context) {
-        let width = area.width.saturating_sub(4).clamp(1, 110).min(area.width);
-        let height = area.height.saturating_sub(4).clamp(1, 32).min(area.height);
+        if area.area() == 0 {
+            return;
+        }
+        let margin = if area.width < 50 || area.height < 12 {
+            0
+        } else {
+            4
+        };
+        let width = area
+            .width
+            .saturating_sub(margin)
+            .clamp(1, 110)
+            .min(area.width);
+        let height = area
+            .height
+            .saturating_sub(margin)
+            .clamp(1, 32)
+            .min(area.height);
         let area = Rect::new(
             area.x + area.width.saturating_sub(width) / 2,
             area.y + area.height.saturating_sub(height) / 2,
@@ -171,23 +195,51 @@ impl Component for Preview {
             .style(style);
         let inner = block.inner(area);
         block.render(area, surface);
-        let body = inner.clip_bottom(inner.height.min(1));
-        let rows = super::text::required_size(&self.text, body.width.max(1)).1 as usize;
-        self.scroll = self.scroll.min(rows.saturating_sub(body.height as usize));
-        Paragraph::new(&self.text)
-            .style(style)
-            .wrap(Wrap { trim: false })
-            .scroll((self.scroll.min(u16::MAX as usize) as u16, 0))
-            .render(body, surface);
-        if inner.height > 0 {
-            let help = if self.can_accept {
+        let help: Vec<&str> = if inner.width >= 46 {
+            vec![if self.can_accept {
                 "Enter 接受 · r 重试 · Esc 取消 · j/k 滚动"
             } else {
                 "需人工处理 · r 重试 · Esc 取消 · j/k 滚动"
-            };
+            }]
+        } else if inner.width >= 30 {
+            vec![if self.can_accept {
+                "Enter 接受  r 重试  Esc 取消"
+            } else {
+                "需人工处理  r 重试  Esc 取消"
+            }]
+        } else if inner.width >= 18 {
+            vec![
+                if self.can_accept {
+                    "Enter 接受  r 重试"
+                } else {
+                    "需人工处理  r 重试"
+                },
+                "Esc 取消  j/k 滚动",
+            ]
+        } else {
+            vec![
+                if self.can_accept {
+                    "Enter:OK"
+                } else {
+                    "Manual"
+                },
+                "Esc:No r:R",
+            ]
+        };
+        let footer_height = inner.height.min(help.len() as u16);
+        let body = inner.clip_bottom(footer_height);
+        let paragraph = Paragraph::new(&self.text)
+            .style(style)
+            .wrap(Wrap { trim: false });
+        let rows = paragraph.required_size(body.width.max(1)).1 as usize;
+        self.scroll = self.scroll.min(rows.saturating_sub(body.height as usize));
+        paragraph
+            .scroll((self.scroll.min(u16::MAX as usize) as u16, 0))
+            .render(body, surface);
+        for (row, help) in help.into_iter().take(footer_height as usize).enumerate() {
             surface.set_stringn(
                 inner.x,
-                inner.bottom() - 1,
+                inner.bottom() - footer_height + row as u16,
                 help,
                 inner.width as usize,
                 style,

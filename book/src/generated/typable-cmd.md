@@ -1,5 +1,7 @@
 | Name | Description |
 | --- | --- |
+| `:ai-merge` | Preview an AI suggestion for the selected merge conflict block |
+| `:ai-merge-cancel` | Cancel AI merge assistance and preserve the result draft |
 | `:ai-doc` | Generate a reST doc comment for the function at the cursor |
 | `:ai-doc-cancel` | Cancel AI function documentation |
 | `:exit`, `:x`, `:xit` | Write changes to disk if the buffer is modified and then quit. Accepts an optional path (:exit some/path.txt). |

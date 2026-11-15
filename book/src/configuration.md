@@ -47,6 +47,10 @@ AI-assisted file selection and Conventional Commits are available with
 [`[editor.ai-commit]`](./editor.md#editorai-commit-section) and `:ai-commit`.
 Chinese is the default; English can be selected in the commit workspace.
 
+AI suggestions for the selected native Merge conflict block can be enabled with
+[`[editor.ai-merge]`](./editor.md#editorai-merge-section) and requested with
+`:ai-merge [optional intent]` or `Space v m i` in the Merge result.
+
 Function reference counts and Git authors can be enabled independently in
 [`[editor.function-hints]`](./editor.md#editorfunction-hints-section).
 

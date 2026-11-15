@@ -41,8 +41,9 @@ fn ai_merge_request_keeps_complete_required_inputs_and_intent() {
     assert_eq!(data["base"], "    base();\n");
     assert_eq!(data["current"], "    current();\n");
     assert_eq!(data["incoming"], "    incoming();\n");
-    assert_eq!(data["result"], "    手动修改();\n");
+    assert_eq!(data["draft"], "    手动修改();\n");
     assert_eq!(data["intent"], "保留双方校验");
+    assert_eq!(data["draft_is_base"], false);
     assert!(data["context"]
         .as_array()
         .unwrap()
@@ -50,6 +51,47 @@ fn ai_merge_request_keeps_complete_required_inputs_and_intent() {
         .any(|s| s.as_str().unwrap().contains("use example::Thing")));
     assert_eq!(body["stream"], false);
     assert_eq!(body["max_tokens"], 1536);
+}
+
+#[test]
+fn ai_merge_identifies_base_seed_as_draft_instead_of_user_selection() {
+    let mut target = target();
+    target.result = target.base.clone();
+    let model = AiCompletionConfig {
+        context_size: 8192,
+        ..Default::default()
+    };
+    let config = AiMergeConfig {
+        enabled: true,
+        ..Default::default()
+    };
+    let body = request(&model, &config, &target).unwrap();
+    let data: Value =
+        serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(data["draft_is_base"], true);
+    assert_eq!(data["current"], "    current();\n");
+    assert_eq!(data["incoming"], "    incoming();\n");
+}
+
+#[test]
+fn ai_merge_whole_block_delete_against_edit_requires_user_intent() {
+    let mut target = target();
+    target.intent.clear();
+    target.base = "legacy();\n".into();
+    target.current.clear();
+    target.incoming = "safe_legacy();\n".into();
+    assert!(requires_manual_choice(&target));
+    target.intent = "保留删除".into();
+    assert!(!requires_manual_choice(&target));
+    target.intent.clear();
+    target.incoming = target.base.clone();
+    assert!(!requires_manual_choice(&target));
+    target.incoming.clear();
+    assert!(!requires_manual_choice(&target));
+    target.current = "safe_legacy();\n".into();
+    assert!(requires_manual_choice(&target));
+    target.base.clear();
+    assert!(!requires_manual_choice(&target));
 }
 
 #[test]
@@ -68,7 +110,7 @@ fn ai_merge_budget_drops_optional_context_but_never_truncates_a_conflict() {
     let data: Value =
         serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
     assert!(data["context"].as_array().unwrap().is_empty());
-    assert_eq!(data["result"], "    手动修改();\n");
+    assert_eq!(data["draft"], "    手动修改();\n");
     target.base = "required".repeat(3000);
     assert!(request(&model, &config, &target).is_err());
     target.base.clear();

@@ -34,6 +34,10 @@ max-input-bytes = 16384
 
 使用非流式 JSON 请求、低温、完整结束检查。模型只返回 `block_id`、`status`（`resolved` / `needs-manual`）、`code`（字符串或 null）、`explanation`（字符串）。响应禁止未知字段、目标 ID 不符、工具调用、截断、过量代码、控制字符和未清除的冲突标记。`resolved` 需要字符串 code，`needs-manual` 必须 code=null。code 的 CRLF 统一为草稿 LF；原文件 BOM/换行仍由现有 Apply 恢复。解释只作为建议，不能代表编译/测试通过。
 
+实测修正：模型输入使用 `draft` 命名当前 Result，并发送事实标记 `draft_is_base`。编辑器的初始 Base 占位不是用户已选定的最终答案；提示词明确三方差异、独立修改的组合及真正互斥的取舍。模型不能把未修改的一侧当作反对另一侧修改的意图。
+
+完整预览（包含差异前缀和解释）限制为 60,000 UTF-8 字节，保证窄列折行后的行数和滚动位置在 TUI 的 u16 范围内；超过上限报错并保留草稿。极小窗口取消外边距并独立保留状态及操作行，12×6 也可识别候选/需人工处理和取消按键。
+
 ## 状态与有效性
 
 Operation 绑定请求序号、文档和视图 ID/版本、MergeSessionId、已加载 Git 冲突快照、块序号及完整目标文本、模型和功能配置。预览和接受都重新检查绑定。切换块/文件/会话、编辑（含 undo/redo）、Refresh、重新构建、关闭/放弃草稿、配置变化会使请求失效；迟到回调不能修改内容或重开预览。实际 Git 快照的最终一致性仍由既有 Apply 在写入前校验。
@@ -41,6 +45,8 @@ Operation 绑定请求序号、文档和视图 ID/版本、MergeSessionId、已�
 仅支持 Blockwise 且可写的 Draft。Staged、NeedsRefresh、Retry、busy 和 WholeFileReview 给出明确原因。必须仍在受信任的工作树中。AI 生成不持有 Git 写锁；HTTP 失败保留草稿。
 
 单次只有一个 AI Merge 请求/候选。显式 AI Merge 与 AI doc / commit 互斥，自动补全在期间暂停；取消或接受后恢复正常调度。不会执行模型给出的命令。
+
+实测边界：一侧整个目标块为空、Base 非空且另一侧同时修改时，无明确要求先显示本地 needs-manual 说明，不调用模型。用户可手动选一侧，或用非空意图再次生成。此保守规则防止已复现的“删除被模型误当作可忽略状态”；不是对所有语义冲突的自动判定，仍须人工 Review。
 
 ## 实现边界
 

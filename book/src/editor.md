@@ -6,6 +6,7 @@
 - [`[editor.lsp]` Section](#editorlsp-section)
 - [`[editor.ai-doc]` Section](#editorai-doc-section)
 - [`[editor.ai-commit]` Section](#editorai-commit-section)
+- [`[editor.ai-merge]` Section](#editorai-merge-section)
 - [`[editor.function-hints]` Section](#editorfunction-hints-section)
 - [`[editor.minimap]` Section](#editorminimap-section)
 - [`[editor.cursor-shape]` Section](#editorcursor-shape-section)
@@ -232,6 +233,59 @@ HEAD/index/file snapshots are rejected before writes. Git hooks and signing are
 respected; errors keep the draft and actual index for inspection. Commits do not
 automatically push. Manual selection, staging, editing and committing remain
 available when AI is disabled or unavailable.
+
+### `[editor.ai-merge]` Section
+
+Generate a suggestion for the selected conflict block in the native Git Merge
+workspace. Enable explicitly; it is disabled by default:
+
+```toml
+[editor.ai-merge]
+enabled = true
+timeout-ms = 60000
+max-tokens = 1536
+max-input-bytes = 16384
+```
+
+The model connection and local server settings come from `[editor.ai-completion]`;
+automatic completion may remain disabled. Output is bounded to 128–4096 tokens,
+and the HTTP timeout to 100–120000 ms; model startup uses its existing separate
+timeout. `max-input-bytes` bounds the system prompt and serialized input, while
+the actual model context is checked independently with space reserved for output.
+
+Open a conflict with `Space v r`, select a block with `Space v m n/p`, then click
+`AI Merge`, press `Space v m i`, or run `:ai-merge [optional intent]`, for example
+`:ai-merge preserve both validation checks`. The configured provider receives
+the complete Base, Current, Incoming and current Result block, the relative file
+path/language and your intent. Nearby code and file-header declarations/imports
+are included only when they fit the budget. Complete required input that does
+not fit is rejected rather than truncated. No other project files are read.
+
+The read-only preview shows the current block, proposed replacement and a Chinese
+explanation. Enter accepts, Escape/Ctrl-c cancels, `r` regenerates, and `j/k`,
+arrows or PageUp/PageDown scroll. A `needs-manual` response displays the reason
+without an accept action. While generating, use `:ai-merge-cancel` to cancel.
+An existing prompt keeps keyboard focus until closed.
+The complete decorated preview is limited to 60,000 UTF-8 bytes so its contents
+remain scrollable even in narrow terminals; oversized candidates are rejected
+without editing the draft. Compact terminals reserve visible status and controls.
+
+Acceptance replaces only the selected Result range and is one undo/redo step.
+The block remains **Needs Review**, even if the suggested text is identical.
+Use the existing Review and Apply actions to write/stage the file, retaining its
+original supported BOM and line endings; Finish Merge remains a separate action.
+Suggestions do not establish that the code compiles or passes tests.
+
+Editing, navigating blocks, leaving the Merge session, refreshing/rebuilding or
+changing configuration invalidates a pending request/candidate. Timeout and
+invalid responses leave the draft intact. Staged, stale, applying and whole-file
+review results cannot generate a block suggestion. AI Merge requires a trusted
+workspace and Git-enabled build. Manual AI doc/commit generation is mutually
+exclusive, and automatic completion pauses while a merge suggestion is pending.
+If one complete block side is deleted and the other is modified, an empty intent
+shows a local needs-manual explanation without contacting the model. Choose a
+side manually or rerun `:ai-merge` with the desired outcome. This structural check
+does not establish semantic correctness for other conflicts; Review is required.
 
 ### `[editor.function-hints]` Section
 

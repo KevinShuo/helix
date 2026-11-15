@@ -341,7 +341,8 @@ async fn ai_merge_native_preview_accepts_current_block_and_undoes() -> anyhow::R
     assert_eq!(data["base"], "base\n");
     assert_eq!(data["current"], "current\n");
     assert_eq!(data["incoming"], "incoming\n");
-    assert_eq!(data["result"], "base\n");
+    assert_eq!(data["draft"], "base\n");
+    assert_eq!(data["draft_is_base"], true);
     assert_eq!(data["intent"], "保留校验");
     preview(&mut app).await?;
     assert_eq!(current_ref!(app.editor).1.text().to_string(), original);
@@ -539,7 +540,8 @@ async fn ai_merge_refuses_locked_stale_untrusted_and_whole_file_targets() -> any
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ai_merge_preview_keeps_actions_visible_in_narrow_terminal() -> anyhow::Result<()> {
     let repo = repository(true);
-    let (endpoint, mut requests, task) = server(vec![(0, reply(Some("merged\n")))]).await;
+    let (endpoint, mut requests, task) =
+        server(vec![(0, reply(Some("merged\n"))), (0, reply(None))]).await;
     let mut app = app(repo.path(), endpoint).await?;
     keys(&mut app, ":ai-merge<ret>").await?;
     received(&mut requests).await?;
@@ -552,11 +554,117 @@ async fn ai_merge_preview_keeps_actions_visible_in_narrow_terminal() -> anyhow::
         assert!(screen.contains("Esc"), "{width}: {screen}");
     }
     app.test_resize(12, 6).await?;
+    keys(&mut app, "").await?;
+    assert!(
+        compact_screen(&app).contains("候选待复核"),
+        "{}",
+        screen(&app)
+    );
+    assert!(screen(&app).contains("Esc"), "{}", screen(&app));
     keys(&mut app, "<esc>").await?;
     assert!(app.editor.ai_merge.is_none());
+    app.test_resize(80, 24).await?;
+    keys(&mut app, ":ai-merge<ret>").await?;
+    received(&mut requests).await?;
+    preview(&mut app).await?;
+    app.test_resize(12, 6).await?;
+    keys(&mut app, "").await?;
+    assert!(
+        compact_screen(&app).contains("需人工处理"),
+        "{}",
+        screen(&app)
+    );
+    assert!(screen(&app).contains("Esc"), "{}", screen(&app));
+    assert!(!screen(&app).contains("Enter:OK"));
+    keys(&mut app, "<esc>").await?;
     assert_eq!(
         current_ref!(app.editor).1.text().to_string(),
         "before\nbase\nafter\n"
+    );
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    task.abort();
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_merge_preview_rejects_excessive_display_rows_without_editing() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let many_lines = "\n".repeat(65_536);
+    let long_line = "x".repeat(65_536);
+    let (endpoint, mut requests, task) = server(vec![
+        (0, reply(Some(&many_lines))),
+        (0, reply(Some(&long_line))),
+    ])
+    .await;
+    let mut app = app(repo.path(), endpoint).await?;
+    for _ in 0..2 {
+        keys(&mut app, ":ai-merge<ret>").await?;
+        received(&mut requests).await?;
+        for _ in 0..50 {
+            keys(&mut app, "").await?;
+            if app.editor.ai_merge.is_none() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(app.editor.ai_merge.is_none());
+        assert!(app.editor.is_err());
+        assert_eq!(
+            current_ref!(app.editor).1.text().to_string(),
+            "before\nbase\nafter\n"
+        );
+    }
+    keys(&mut app, ":qa!<ret>").await?;
+    app.close().await;
+    task.abort();
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_merge_empty_side_delete_modify_waits_for_intent_before_model() -> anyhow::Result<()> {
+    let repo = repository_with_texts([
+        "before\nlegacy();\nafter\n",
+        "before\nsafe_legacy();\nafter\n",
+        "before\nafter\n",
+    ]);
+    let (endpoint, mut requests, task) = server(vec![(0, reply(Some("safe_legacy();\n")))]).await;
+    let mut app = app(repo.path(), endpoint).await?;
+    keys(&mut app, ":ai-merge<ret>").await?;
+    for _ in 0..50 {
+        keys(&mut app, "").await?;
+        if app.editor.ai_merge.as_ref().is_some_and(|op| op.preview) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(compact_screen(&app).contains("需人工处理"));
+    assert!(app
+        .editor
+        .ai_merge
+        .as_ref()
+        .unwrap()
+        .suggestion
+        .as_ref()
+        .unwrap()
+        .code
+        .is_none());
+    assert!(
+        tokio::time::timeout(Duration::from_millis(150), requests.recv())
+            .await
+            .is_err()
+    );
+    keys(&mut app, "<esc>:ai-merge 保留修改<ret>").await?;
+    let request = received(&mut requests).await?;
+    let data: Value = serde_json::from_str(request["messages"][1]["content"].as_str().unwrap())?;
+    assert_eq!(data["intent"], "保留修改");
+    assert_eq!(data["current"], "");
+    assert_eq!(data["incoming"], "safe_legacy();\n");
+    preview(&mut app).await?;
+    keys(&mut app, "<ret>").await?;
+    assert_eq!(
+        current_ref!(app.editor).1.text().to_string(),
+        "before\nsafe_legacy();\nafter\n"
     );
     keys(&mut app, ":qa!<ret>").await?;
     app.close().await;

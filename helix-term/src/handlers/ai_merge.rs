@@ -70,7 +70,7 @@ pub(crate) fn start(editor: &mut Editor, block: usize, intent: String) -> Result
     let sources = state.model.sources();
     let mut context = Vec::new();
     for (label, text, range) in [
-        ("Result", doc.text(), &selected.result),
+        ("Draft", doc.text(), &selected.result),
         ("Current", sources.current(), &selected.current),
         ("Incoming", sources.incoming(), &selected.incoming),
         ("Base", sources.base(), &selected.base),
@@ -249,9 +249,16 @@ pub(crate) fn refresh(editor: &mut Editor, compositor: &mut Compositor) {
     };
     if compositor.component_has_focus("git-merge-editor") && !op.preview {
         if let Some(suggestion) = &op.suggestion {
-            let preview = ui::ai_merge::Preview::new(op.id, &op.target, suggestion);
-            editor.ai_merge.as_mut().unwrap().preview = true;
-            compositor.push(Box::new(preview));
+            match ui::ai_merge::Preview::new(op.id, &op.target, suggestion) {
+                Ok(preview) => {
+                    editor.ai_merge.as_mut().unwrap().preview = true;
+                    compositor.push(Box::new(preview));
+                }
+                Err(error) => {
+                    cancel(editor);
+                    editor.set_error(error.to_string());
+                }
+            }
         }
     }
 }
