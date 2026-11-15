@@ -1,0 +1,32 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"#include \\\"subject.hpp\\\"\\n\\n#include <gtest/gtest.h>\\n\\n#include <utility>\\n#include <vector>\\n\\nusing Range = std::pair<int, int>;\\nusing Ranges = std::vector<Range>;\\n\\n// 空输入返回空结果\\nTEST(HelixAi8BA3EAF619E8EE73, EmptyInputReturnsEmpty) {\\n    EXPECT_EQ(merge_ranges(Ranges{}), Ranges{});\\n}\\n\\n// 单个区间原样返回\\nTEST(HelixAi8BA3EAF619E8EE73, SingleRangeUnchanged) {\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 3}}), (Ranges{{1, 3}}));\\n}\\n\\n// 重叠区间合并（经典示例）\\nTEST(HelixAi8BA3EAF619E8EE73, OverlappingRangesMerged) {\\n    const Ranges input{{1, 3}, {2, 6}, {8, 10}, {15, 18}};\\n    EXPECT_EQ(merge_ranges(input), (Ranges{{1, 6}, {8, 10}, {15, 18}}));\\n}\\n\\n// 共享端点视为重叠\\nTEST(HelixAi8BA3EAF619E8EE73, SharedEndpointCountsAsOverlap) {\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 4}, {4, 5}}), (Ranges{{1, 5}}));\\n}\\n\\n// 仅相邻（不共享端点）不合并\\nTEST(HelixAi8BA3EAF619E8EE73, AdjacentButNotOverlappingStaySeparate) {\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 2}, {3, 4}}), (Ranges{{1, 2}, {3, 4}}));\\n}\\n\\n// 无序输入按起点排序输出\\nTEST(HelixAi8BA3EAF619E8EE73, UnsortedInputIsSorted) {\\n    const Ranges input{{8, 10}, {1, 3}, {2, 6}};\\n    EXPECT_EQ(merge_ranges(input), (Ranges{{1, 6}, {8, 10}}));\\n}\\n\\n// 被包含区间并入外层区间\\nTEST(HelixAi8BA3EAF619E8EE73, NestedRangeAbsorbed) {\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 10}, {2, 3}}), (Ranges{{1, 10}}));\\n}\\n\\n// 链式重叠整体合并\\nTEST(HelixAi8BA3EAF619E8EE73, ChainOverlapMergedIntoOne) {\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 2}, {2, 5}, {4, 8}}), (Ranges{{1, 8}}));\\n}\\n\\n// 反向端点被规范化\\nTEST(HelixAi8BA3EAF619E8EE73, ReversedEndpointsNormalized) {\\n    EXPECT_EQ(merge_ranges(Ranges{{5, 3}}), (Ranges{{3, 5}}));\\n}\\n\\n// 反向端点规范化后再参与合并\\nTEST(HelixAi8BA3EAF619E8EE73, ReversedEndpointsThenMerge) {\\n    EXPECT_EQ(merge_ranges(Ranges{{7, 2}, {4, 5}}), (Ranges{{2, 7}}));\\n}\\n\\n// 重复区间只保留一份\\nTEST(HelixAi8BA3EAF619E8EE73, DuplicateRangesCollapsed) {\\n    EXPECT_EQ(merge_ranges(Ranges{{2, 4}, {2, 4}}), (Ranges{{2, 4}}));\\n}\\n\\n// 单点区间：相同点合并，不同点分离\\nTEST(HelixAi8BA3EAF619E8EE73, SinglePointRanges) {\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 1}, {1, 1}}), (Ranges{{1, 1}}));\\n    EXPECT_EQ(merge_ranges(Ranges{{1, 1}, {2, 2}}), (Ranges{{1, 1}, {2, 2}}));\\n}\\n\\n// 负值区间同样遵循合并规则\\nTEST(HelixAi8BA3EAF619E8EE73, NegativeValuesHandled) {\\n    EXPECT_EQ(merge_ranges(Ranges{{-10, -5}, {-6, -1}}), (Ranges{{-10, -1}}));\\n    EXPECT_EQ(merge_ranges(Ranges{{-3, -2}, {-1, 0}}), (Ranges{{-3, -2}, {-1, 0}}));\\n}\\n\\n// 不修改输入\\nTEST(HelixAi8BA3EAF619E8EE73, InputIsNotModified) {\\n    const Ranges input{{9, 3}, {1, 2}, {5, 4}};\\n    const Ranges expected = input;\\n    merge_ranges(input);\\n    EXPECT_EQ(input, expected);\\n}\\n\",\"assumptions\":[\"按头文件契约：输出为升序排列且重叠区间已合并，反向端点先规范化再合并。\",\"“共享端点视为重叠、单纯相邻不视为重叠”按注释理解为：first <= 前一区间 second 时合并（相等合并，差 1 不合并）。\",\"输入区间已按字典序排序后处理，输出顺序与排序后一致；重复区间合并为一份。\",\"契约未明确极值溢出等情形，测试不覆盖此类未定义行为。\"]}",
+        "reasoning_content_chars": 3791,
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794735698,
+  "id": "a110072a-fc81-467c-a561-58ccceeed2f9",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 2382,
+    "completion_tokens_details": {
+      "reasoning_tokens": 1093
+    },
+    "prompt_cache_hit_tokens": 640,
+    "prompt_cache_miss_tokens": 253,
+    "prompt_tokens": 893,
+    "prompt_tokens_details": {
+      "cached_tokens": 640
+    },
+    "total_tokens": 3275
+  }
+}

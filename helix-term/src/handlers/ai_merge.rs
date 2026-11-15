@@ -27,7 +27,9 @@ pub(crate) fn start(editor: &mut Editor, block: usize, intent: String) -> Result
         "请先在 [editor.ai-merge] 中启用 enabled = true"
     );
     ensure!(
-        !editor.ai_commit_running && !editor.ai_doc.as_ref().is_some_and(|op| op.is_valid(editor)),
+        !editor.ai_commit_running
+            && !editor.ai_doc.as_ref().is_some_and(|op| op.is_valid(editor))
+            && !super::ai_test::busy(editor),
         "请先完成或取消其他 AI 生成"
     );
     ensure!(
@@ -119,7 +121,9 @@ fn nearby(label: &str, text: &Rope, range: &Range<usize>) -> String {
 }
 
 fn launch(editor: &mut Editor, target: Target) -> Result<()> {
-    let model = editor.config().ai_model_config();
+    let model = editor
+        .config()
+        .ai_provider(helix_view::ai::AiFeature::Merge)?;
     let config = editor.config().ai_merge.clone();
     client::request(&model, &config, &target)?;
     cancel(editor);

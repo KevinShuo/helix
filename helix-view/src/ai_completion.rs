@@ -25,6 +25,7 @@ pub fn completion_cursor(doc: &Document, view: ViewId) -> Option<usize> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct AiCompletionConfig {
+    pub provider: Option<String>,
     pub enabled: bool,
     pub conservative: bool,
     pub predict_next: bool,
@@ -58,6 +59,7 @@ pub enum AiCompletionPromptMode {
 impl Default for AiCompletionConfig {
     fn default() -> Self {
         Self {
+            provider: None,
             enabled: false,
             conservative: false,
             predict_next: false,

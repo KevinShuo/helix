@@ -126,6 +126,17 @@ impl JumpList {
             .min(self.jumps.len());
     }
 
+    /// Preserve current jump positions before replacing this document's history
+    /// with an empty history (revision zero), as for transient output buffers.
+    pub fn reset_document_history(&mut self, doc: &Document) {
+        for jump in &mut self.jumps {
+            if jump.doc_id == doc.id() {
+                jump.selection = jump.selection(doc);
+                jump.revision = 0;
+            }
+        }
+    }
+
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &Jump> {
         self.jumps.iter()
     }
@@ -839,7 +850,7 @@ mod tests {
     use helix_core::{syntax, Rope, Transaction};
 
     // 1 diagnostic + 1 spacer + 3 linenr (< 1000 lines) + 1 spacer + 1 diff
-    const DEFAULT_GUTTER_OFFSET: u16 = 7;
+    const DEFAULT_GUTTER_OFFSET: u16 = 8;
 
     // 1 diagnostics + 1 spacer + 1 gutter
     const DEFAULT_GUTTER_OFFSET_ONLY_DIAGNOSTICS: u16 = 3;
@@ -1329,5 +1340,36 @@ mod tests {
         doc.append_changes_to_history(&mut view2);
         doc.undo(&mut view2);
         assert_eq!(jump_pos(&view1, &doc), 6);
+    }
+
+    #[test]
+    fn output_history_reset_preserves_jump_positions_across_views() {
+        let config = Arc::new(ArcSwap::new(Arc::new(Config::default())));
+        let loader = Arc::new(ArcSwap::from_pointee(syntax::Loader::default()));
+        let mut doc = Document::from(Rope::from_str("ab"), None, config, loader);
+        let mut view1 = View::new(doc.id(), GutterConfig::default());
+        let mut view2 = View::new(doc.id(), GutterConfig::default());
+        doc.ensure_view_init(view1.id);
+        doc.ensure_view_init(view2.id);
+        view1.push_jump_to(&mut doc, Selection::point(2));
+        let transaction =
+            Transaction::change(doc.text(), std::iter::once((0, 0, Some("XX".into()))));
+        doc.apply(&transaction, view2.id);
+        doc.append_changes_to_history(&mut view2);
+        view2.push_jump_to(&mut doc, Selection::single(1, 2));
+        for view in [&mut view1, &mut view2] {
+            view.jumps.reset_document_history(&doc);
+        }
+        doc.history.set(Default::default());
+        doc.reset_modified();
+        assert_eq!(
+            view1.jumps.iter().next_back().unwrap().selection(&doc),
+            Selection::point(4)
+        );
+        assert_eq!(
+            view2.jumps.iter().next_back().unwrap().selection(&doc),
+            Selection::single(1, 2)
+        );
+        assert!(!doc.is_modified());
     }
 }

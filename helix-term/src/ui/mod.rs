@@ -1,5 +1,6 @@
 pub(crate) mod ai_doc;
 pub(crate) mod ai_merge;
+pub(crate) mod ai_test;
 mod completion;
 mod document;
 pub(crate) mod editor;
@@ -16,6 +17,7 @@ pub mod prompt;
 mod select;
 mod spinner;
 mod statusline;
+pub(crate) mod test;
 mod text;
 mod text_decorations;
 

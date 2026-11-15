@@ -2,6 +2,7 @@ pub(crate) mod dap;
 mod folding;
 mod git;
 pub(crate) mod lsp;
+pub(crate) mod problems;
 pub(crate) mod syntax;
 pub(crate) mod typed;
 
@@ -17,6 +18,7 @@ use helix_stdx::{
 };
 use helix_vcs::{FileChange, Hunk};
 pub use lsp::*;
+use problems::{next_problem, previous_problem, problems_picker};
 pub use syntax::*;
 use tui::{
     text::{Span, Spans},
@@ -462,6 +464,9 @@ impl MappableCommand {
         lsp_or_syntax_workspace_symbol_picker, "Open workspace symbol picker from LSP or syntax information",
         diagnostics_picker, "Open diagnostic picker",
         workspace_diagnostics_picker, "Open workspace diagnostic picker",
+        next_problem, "Go to next problem across files",
+        previous_problem, "Go to previous problem across files",
+        problems_picker, "Open problems picker",
         last_picker, "Open last picker",
         insert_at_line_start, "Insert at start of line",
         insert_at_line_end, "Insert at end of line",

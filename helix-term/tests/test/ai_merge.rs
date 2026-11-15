@@ -302,6 +302,53 @@ async fn app(repo: &Path, endpoint: String) -> anyhow::Result<Application> {
     Ok(app)
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_merge_uses_its_named_provider_and_excludes_ai_test_generation() -> anyhow::Result<()> {
+    let repo = repository(true);
+    let (endpoint, mut requests, task) = server(vec![(500, reply(Some("merged\n")))]).await;
+    let mut config = test_config();
+    config.editor.ai_merge.enabled = true;
+    config.editor.ai_merge.provider = Some("merge".into());
+    config.editor.idle_timeout = Duration::from_millis(30);
+    config.editor.ai_test.enabled = true;
+    config.editor.ai_completion.enabled = false;
+    config.editor.ai_completion.endpoint = "http://127.0.0.1:1/v1/chat/completions".into();
+    config.editor.ai_completion.model = "9B".into();
+    config.editor.ai.providers.insert(
+        "merge".into(),
+        helix_view::ai::AiProviderConfig {
+            model: "27B".into(),
+            endpoint,
+            context_size: 8192,
+            ..Default::default()
+        },
+    );
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(repo.path().join("file.txt"), None)
+        .build()?;
+    app.test_resize(160, 40).await?;
+    open_ui(&mut app).await?;
+    keys(&mut app, ":ai-merge<ret>").await?;
+    let request = received(&mut requests).await?;
+    assert_eq!(request["model"], "27B");
+    for command in [":ai-test<ret>", ":ai-test-run<ret>"] {
+        keys(&mut app, command).await?;
+        assert!(app.editor.ai_test.is_none());
+        assert!(
+            app.editor.get_status().unwrap().0.contains("其他 AI"),
+            "{:?}",
+            app.editor.get_status()
+        );
+        assert!(app.editor.ai_merge.is_some());
+    }
+    preview(&mut app).await?;
+    keys(&mut app, "<esc>:qa!<ret>").await?;
+    app.close().await;
+    task.abort();
+    Ok(())
+}
+
 async fn received(
     requests: &mut tokio::sync::mpsc::UnboundedReceiver<Value>,
 ) -> anyhow::Result<Value> {

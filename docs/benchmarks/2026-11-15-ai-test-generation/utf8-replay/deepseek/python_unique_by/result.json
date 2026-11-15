@@ -1,0 +1,147 @@
+{
+  "arm": "deepseek",
+  "case": "python_unique_by",
+  "language": "python",
+  "primary_generation_ms": 3348,
+  "baseline": {
+    "success": true,
+    "stage": "Test",
+    "steps": [
+      {
+        "argv": [
+          "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "-rA",
+          "--color=no",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_unique_by\\tests\\test_helix_unique_by_600166394838ecb4.py"
+        ],
+        "stage": "Test",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 230,
+        "log": ".........                                                                [100%]\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_保留每个键首次出现的元素并保持顺序\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_空输入返回空列表\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键相同只保留第一个\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键不同全部保留\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_返回类型始终为列表\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_不修改输入序列\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_key对每个元素恰好调用一次\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_key异常向上传播\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_使用元组作为键\r\n9 passed in 0.01s\r\n"
+      }
+    ],
+    "elapsed_ms": 230
+  },
+  "mutants": [
+    {
+      "id": "duplicates",
+      "meaning": "不再去重",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+              "-m",
+              "pytest",
+              "-q",
+              "-rA",
+              "--color=no",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_unique_by\\tests\\test_helix_unique_by_600166394838ecb4.py"
+            ],
+            "stage": "Test",
+            "exit_code": 1,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 281,
+            "log": "F.F.F...F                                                                [100%]\r\n================================== FAILURES ===================================\r\n___________________________ test_保留每个键首次出现的元素并保持顺序 ____________________________\r\n\r\n    def test_保留每个键首次出现的元素并保持顺序():\r\n        \"\"\"正常情况：按 key 去重，保留首次出现顺序\"\"\"\r\n        items = [\"apple\", \"banana\", \"avocado\", \"blueberry\", \"cherry\"]\r\n        result = unique_by(items, key=lambda s: s[0])\r\n>       assert result == [\"apple\", \"banana\", \"cherry\"]\r\nE       AssertionError: assert ['apple', 'ba...ry', 'cherry'] == ['apple', 'banana', 'cherry']\r\nE         \r\nE         At index 2 diff: 'avocado' != 'cherry'\r\nE         Left contains 2 more items, first extra item: 'blueberry'\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:10: AssertionError\r\n______________________________ test_所有键相同只保留第一个 _______________________________\r\n\r\n    def test_所有键相同只保留第一个():\r\n        \"\"\"边界情况：所有元素键相同，只保留第一个\"\"\"\r\n        items = [1, 2, 3, 4]\r\n        result = unique_by(items, key=lambda x: 0)\r\n>       assert result == [1]\r\nE       assert [1, 2, 3, 4] == [1]\r\nE         \r\nE         Left contains 3 more items, first extra item: 2\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:22: AssertionError\r\n_______________________________ test_返回类型始终为列表 ________________________________\r\n\r\n    def test_返回类型始终为列表():\r\n        \"\"\"返回值类型为 list\"\"\"\r\n        result = unique_by((1, 2, 2, 3), key=lambda x: x)\r\n        assert isinstance(result, list)\r\n>       assert result == [1, 2, 3]\r\nE       assert [1, 2, 2, 3] == [1, 2, 3]\r\nE         \r\nE         At index 2 diff: 2 != 3\r\nE         Left contains one more item: 3\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:36: AssertionError\r\n________________________________ test_使用元组作为键 _________________________________\r\n\r\n    def test_使用元组作为键():\r\n        \"\"\"键为元组时正常去重\"\"\"\r\n        items = [(1, \"a\"), (1, \"b\"), (2, \"c\")]\r\n        result = unique_by(items, key=lambda t: t[0])\r\n>       assert result == [(1, \"a\"), (2, \"c\")]\r\nE       AssertionError: assert [(1, 'a'), (1, 'b'), (2, 'c')] == [(1, 'a'), (2, 'c')]\r\nE         \r\nE         At index 1 diff: (1, 'b') != (2, 'c')\r\nE         Left contains one more item: (2, 'c')\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:73: AssertionError\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_空输入返回空列表\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键不同全部保留\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_不修改输入序列\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_key对每个元素恰好调用一次\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_key异常向上传播\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_保留每个键首次出现的元素并保持顺序\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键相同只保留第一个\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_返回类型始终为列表\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_使用元组作为键 - ...\r\n4 failed, 5 passed in 0.06s\r\n"
+          }
+        ],
+        "elapsed_ms": 281
+      }
+    },
+    {
+      "id": "order",
+      "meaning": "逆序返回结果",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+              "-m",
+              "pytest",
+              "-q",
+              "-rA",
+              "--color=no",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_unique_by\\tests\\test_helix_unique_by_600166394838ecb4.py"
+            ],
+            "stage": "Test",
+            "exit_code": 1,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 287,
+            "log": "F..FF...F                                                                [100%]\r\n================================== FAILURES ===================================\r\n___________________________ test_保留每个键首次出现的元素并保持顺序 ____________________________\r\n\r\n    def test_保留每个键首次出现的元素并保持顺序():\r\n        \"\"\"正常情况：按 key 去重，保留首次出现顺序\"\"\"\r\n        items = [\"apple\", \"banana\", \"avocado\", \"blueberry\", \"cherry\"]\r\n        result = unique_by(items, key=lambda s: s[0])\r\n>       assert result == [\"apple\", \"banana\", \"cherry\"]\r\nE       AssertionError: assert ['cherry', 'banana', 'apple'] == ['apple', 'banana', 'cherry']\r\nE         \r\nE         At index 0 diff: 'cherry' != 'apple'\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:10: AssertionError\r\n_______________________________ test_所有键不同全部保留 ________________________________\r\n\r\n    def test_所有键不同全部保留():\r\n        \"\"\"边界情况：所有键不同，全部保留\"\"\"\r\n        items = [1, 2, 3]\r\n        result = unique_by(items, key=lambda x: x)\r\n>       assert result == [1, 2, 3]\r\nE       assert [3, 2, 1] == [1, 2, 3]\r\nE         \r\nE         At index 0 diff: 3 != 1\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:29: AssertionError\r\n_______________________________ test_返回类型始终为列表 ________________________________\r\n\r\n    def test_返回类型始终为列表():\r\n        \"\"\"返回值类型为 list\"\"\"\r\n        result = unique_by((1, 2, 2, 3), key=lambda x: x)\r\n        assert isinstance(result, list)\r\n>       assert result == [1, 2, 3]\r\nE       assert [3, 2, 1] == [1, 2, 3]\r\nE         \r\nE         At index 0 diff: 3 != 1\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:36: AssertionError\r\n________________________________ test_使用元组作为键 _________________________________\r\n\r\n    def test_使用元组作为键():\r\n        \"\"\"键为元组时正常去重\"\"\"\r\n        items = [(1, \"a\"), (1, \"b\"), (2, \"c\")]\r\n        result = unique_by(items, key=lambda t: t[0])\r\n>       assert result == [(1, \"a\"), (2, \"c\")]\r\nE       AssertionError: assert [(2, 'c'), (1, 'a')] == [(1, 'a'), (2, 'c')]\r\nE         \r\nE         At index 0 diff: (2, 'c') != (1, 'a')\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:73: AssertionError\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_空输入返回空列表\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键相同只保留第一个\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_不修改输入序列\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_key对每个元素恰好调用一次\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_key异常向上传播\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_保留每个键首次出现的元素并保持顺序\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键不同全部保留\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_返回类型始终为列表\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_使用元组作为键 - ...\r\n4 failed, 5 passed in 0.07s\r\n"
+          }
+        ],
+        "elapsed_ms": 287
+      }
+    },
+    {
+      "id": "key_calls",
+      "meaning": "对首次出现的元素重复调用key",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+              "-m",
+              "pytest",
+              "-q",
+              "-rA",
+              "--color=no",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_unique_by\\tests\\test_helix_unique_by_600166394838ecb4.py"
+            ],
+            "stage": "Test",
+            "exit_code": 1,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 285,
+            "log": "......F..                                                                [100%]\r\n================================== FAILURES ===================================\r\n_____________________________ test_key对每个元素恰好调用一次 _____________________________\r\n\r\n    def test_key对每个元素恰好调用一次():\r\n        \"\"\"key 对每个元素（含重复）恰好调用一次\"\"\"\r\n        calls = []\r\n    \r\n        def key(x):\r\n            calls.append(x)\r\n            return x\r\n    \r\n        items = [1, 2, 2, 3, 3, 3]\r\n        unique_by(items, key=key)\r\n>       assert calls == items\r\nE       assert [1, 1, 2, 2, 2, 3, ...] == [1, 2, 2, 3, 3, 3]\r\nE         \r\nE         At index 1 diff: 1 != 2\r\nE         Left contains 3 more items, first extra item: 3\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:57: AssertionError\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_保留每个键首次出现的元素并保持顺序\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_空输入返回空列表\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键相同只保留第一个\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键不同全部保留\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_返回类型始终为列表\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_不修改输入序列\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_key异常向上传播\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_使用元组作为键\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_key对每个元素恰好调用一次\r\n1 failed, 8 passed in 0.06s\r\n"
+          }
+        ],
+        "elapsed_ms": 285
+      }
+    }
+  ],
+  "unchanged_test_sha256": "9073ab6d624131eb320de546608f8ba6c7ff9174f2ad248d1e21fd4cb9d8ef1e",
+  "generation_error": "测试响应不符合 JSON 格式: missing field `assumptions` at line 1 column 2142",
+  "primary_accepted": false,
+  "validation_bypassed": true,
+  "restored": {
+    "success": true,
+    "stage": "Test",
+    "steps": [
+      {
+        "argv": [
+          "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "-rA",
+          "--color=no",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_unique_by\\tests\\test_helix_unique_by_600166394838ecb4.py"
+        ],
+        "stage": "Test",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 230,
+        "log": ".........                                                                [100%]\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_保留每个键首次出现的元素并保持顺序\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_空输入返回空列表\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键相同只保留第一个\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_所有键不同全部保留\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_返回类型始终为列表\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_不修改输入序列\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_key对每个元素恰好调用一次\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_key异常向上传播\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_使用元组作为键\r\n9 passed in 0.01s\r\n"
+      }
+    ],
+    "elapsed_ms": 230
+  }
+}

@@ -1,0 +1,260 @@
+{
+  "arm": "27b-thinking",
+  "case": "cpp_merge_ranges",
+  "language": "cpp",
+  "primary_generation_ms": 106541,
+  "baseline": {
+    "success": true,
+    "stage": "Test",
+    "steps": [
+      {
+        "argv": [
+          "cmake",
+          "-S",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges",
+          "-B",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+          "-DBUILD_TESTING=ON",
+          "-DCMAKE_CXX_FLAGS=/utf-8",
+          "-DCMAKE_TOOLCHAIN_FILE=C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\scripts\\buildsystems\\vcpkg.cmake"
+        ],
+        "stage": "Configure",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 3241,
+        "log": "-- Building for: Visual Studio 18 2026\n-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26300.\n-- The C compiler identification is MSVC 19.50.35728.0\n-- The CXX compiler identification is MSVC 19.50.35728.0\n-- Detecting C compiler ABI info\n-- Detecting C compiler ABI info - done\n-- Check for working C compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting C compile features\n-- Detecting C compile features - done\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Configuring done (3.1s)\n-- Generating done (0.1s)\n-- Build files have been written to: I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_merge_ranges/.utf8-build\n"
+      },
+      {
+        "argv": [
+          "cmake",
+          "--build",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+          "--config",
+          "Debug",
+          "--target",
+          "helix_ai_merge_ranges_8ba3eaf619e8ee73"
+        ],
+        "stage": "Build",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 1653,
+        "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  1>Checking Build System\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_merge_ranges/CMakeLists.txt\r\n  subject.cpp\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\Debug\\subject.lib\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_merge_ranges/tests/helix-ai/merge_ranges_8ba3eaf619e8ee73/CMakeLists.txt\r\n  merge_ranges_test.cpp\r\nC:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9): warning C4530: 使用了 C++ 异常处理程序，但未启用展开语义。请指定 /EHsc [I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\helix_ai_merge_ranges_8ba3eaf619e8ee73.vcxproj]\r\n  (编译源文件“../../../../tests/helix-ai/merge_ranges_8ba3eaf619e8ee73/merge_ranges_test.cpp”)\r\n      C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9):\r\n      模板实例化上下文(最早的实例化上下文)为\r\n          C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\include\\gtest\\gtest-message.h(118,10):\r\n          查看对正在编译的函数 模板 实例化“std::basic_ostream<char,std::char_traits<char>> &std::operator <<<std::char_traits<char>>(std::basic_ostream<char,std::char_traits<char>> &,const char *)”的引用\r\n  \r\n  helix_ai_merge_ranges_8ba3eaf619e8ee73.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\Debug\\helix_ai_merge_ranges_8ba3eaf619e8ee73.exe\r\n  C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\debug\\bin\\gtest_main.dll -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\Debug\\gtest_main.dll done\r\n  C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\debug\\bin\\gtest.dll -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\Debug\\gtest.dll done\r\n"
+      },
+      {
+        "argv": [
+          "ctest",
+          "--test-dir",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+          "-C",
+          "Debug",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "HelixAi8BA3EAF619E8EE73"
+        ],
+        "stage": "Test",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 320,
+        "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_merge_ranges/.utf8-build\n      Start  1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty\n 1/14 Test  #1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty ....................   Passed    0.01 sec\n      Start  2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged\n 2/14 Test  #2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged ......................   Passed    0.01 sec\n      Start  3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized\n 3/14 Test  #3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized ...............   Passed    0.01 sec\n      Start  4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged\n 4/14 Test  #4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged ...........   Passed    0.01 sec\n      Start  5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged\n 5/14 Test  #5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged ...................   Passed    0.01 sec\n      Start  6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate\n 6/14 Test  #6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate ..........   Passed    0.01 sec\n      Start  7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged\n 7/14 Test  #7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged .............   Passed    0.01 sec\n      Start  8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged\n 8/14 Test  #8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged ......................   Passed    0.01 sec\n      Start  9: HelixAi8BA3EAF619E8EE73.InputPreserved\n 9/14 Test  #9: HelixAi8BA3EAF619E8EE73.InputPreserved ............................   Passed    0.01 sec\n      Start 10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\n10/14 Test #10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints .................   Passed    0.01 sec\n      Start 11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput\n11/14 Test #11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput ...   Passed    0.01 sec\n      Start 12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged\n12/14 Test #12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged .....................   Passed    0.01 sec\n      Start 13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges\n13/14 Test #13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges .....................   Passed    0.01 sec\n      Start 14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap\n14/14 Test #14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap ...................   Passed    0.01 sec\n\n100% tests passed out of 14\n\nTotal Test time (real) =   0.25 sec\n"
+      }
+    ],
+    "elapsed_ms": 5214
+  },
+  "mutants": [
+    {
+      "id": "shared_endpoint",
+      "meaning": "共享端点不再合并",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "cmake",
+              "--build",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+              "--config",
+              "Debug",
+              "--target",
+              "helix_ai_merge_ranges_8ba3eaf619e8ee73"
+            ],
+            "stage": "Build",
+            "exit_code": 0,
+            "success": true,
+            "timeout": false,
+            "elapsed_ms": 790,
+            "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  subject.cpp\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\Debug\\subject.lib\r\n  helix_ai_merge_ranges_8ba3eaf619e8ee73.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\Debug\\helix_ai_merge_ranges_8ba3eaf619e8ee73.exe\r\n"
+          },
+          {
+            "argv": [
+              "ctest",
+              "--test-dir",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+              "-C",
+              "Debug",
+              "--output-on-failure",
+              "--no-tests=error",
+              "-R",
+              "HelixAi8BA3EAF619E8EE73"
+            ],
+            "stage": "Test",
+            "exit_code": 8,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 728,
+            "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_merge_ranges/.utf8-build\n      Start  1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty\n 1/14 Test  #1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty ....................   Passed    0.01 sec\n      Start  2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged\n 2/14 Test  #2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged ......................   Passed    0.11 sec\n      Start  3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized\n 3/14 Test  #3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized ...............   Passed    0.01 sec\n      Start  4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged\n 4/14 Test  #4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged ...........***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAi8BA3EAF619E8EE73\n[ RUN      ] HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\merge_ranges_test.cpp(33): error: Expected equality of these values:\n  result.size()\n    Which is: 2\n  1u\n    Which is: 1\n\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged (0 ms)\n[----------] 1 test from HelixAi8BA3EAF619E8EE73 (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged\n\n 1 FAILED TEST\n\n      Start  5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged\n 5/14 Test  #5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged ...................   Passed    0.01 sec\n      Start  6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate\n 6/14 Test  #6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate ..........   Passed    0.12 sec\n      Start  7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged\n 7/14 Test  #7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged .............   Passed    0.01 sec\n      Start  8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged\n 8/14 Test  #8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged ......................   Passed    0.01 sec\n      Start  9: HelixAi8BA3EAF619E8EE73.InputPreserved\n 9/14 Test  #9: HelixAi8BA3EAF619E8EE73.InputPreserved ............................   Passed    0.12 sec\n      Start 10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\n10/14 Test #10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints .................   Passed    0.01 sec\n      Start 11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput\n11/14 Test #11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput ...   Passed    0.11 sec\n      Start 12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged\n12/14 Test #12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged .....................   Passed    0.01 sec\n      Start 13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges\n13/14 Test #13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges .....................   Passed    0.01 sec\n      Start 14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap\n14/14 Test #14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap ...................***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAi8BA3EAF619E8EE73\n[ RUN      ] HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\merge_ranges_test.cpp(135): error: Expected equality of these values:\n  result.size()\n    Which is: 2\n  1u\n    Which is: 1\n\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap (0 ms)\n[----------] 1 test from HelixAi8BA3EAF619E8EE73 (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap\n\n 1 FAILED TEST\n\n\n86% tests passed, 2 tests failed out of 14\n\nTotal Test time (real) =   0.66 sec\n\nThe following tests FAILED:\n\t  4 - HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged (Failed)\n\t 14 - HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap (Failed)\nErrors while running CTest\n"
+          }
+        ],
+        "elapsed_ms": 1518
+      }
+    },
+    {
+      "id": "reversed_range",
+      "meaning": "倒序区间错误缩成单点",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "cmake",
+              "--build",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+              "--config",
+              "Debug",
+              "--target",
+              "helix_ai_merge_ranges_8ba3eaf619e8ee73"
+            ],
+            "stage": "Build",
+            "exit_code": 0,
+            "success": true,
+            "timeout": false,
+            "elapsed_ms": 795,
+            "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  subject.cpp\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\Debug\\subject.lib\r\n  helix_ai_merge_ranges_8ba3eaf619e8ee73.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\Debug\\helix_ai_merge_ranges_8ba3eaf619e8ee73.exe\r\n"
+          },
+          {
+            "argv": [
+              "ctest",
+              "--test-dir",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+              "-C",
+              "Debug",
+              "--output-on-failure",
+              "--no-tests=error",
+              "-R",
+              "HelixAi8BA3EAF619E8EE73"
+            ],
+            "stage": "Test",
+            "exit_code": 8,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 728,
+            "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_merge_ranges/.utf8-build\n      Start  1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty\n 1/14 Test  #1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty ....................   Passed    0.01 sec\n      Start  2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged\n 2/14 Test  #2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged ......................   Passed    0.12 sec\n      Start  3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized\n 3/14 Test  #3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized ...............***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAi8BA3EAF619E8EE73\n[ RUN      ] HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\merge_ranges_test.cpp(26): error: Expected equality of these values:\n  result[0].second\n    Which is: 1\n  5\n\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized (0 ms)\n[----------] 1 test from HelixAi8BA3EAF619E8EE73 (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized\n\n 1 FAILED TEST\n\n      Start  4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged\n 4/14 Test  #4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged ...........   Passed    0.11 sec\n      Start  5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged\n 5/14 Test  #5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged ...................   Passed    0.01 sec\n      Start  6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate\n 6/14 Test  #6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate ..........   Passed    0.01 sec\n      Start  7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged\n 7/14 Test  #7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged .............   Passed    0.01 sec\n      Start  8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged\n 8/14 Test  #8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged ......................   Passed    0.12 sec\n      Start  9: HelixAi8BA3EAF619E8EE73.InputPreserved\n 9/14 Test  #9: HelixAi8BA3EAF619E8EE73.InputPreserved ............................***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAi8BA3EAF619E8EE73.InputPreserved\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAi8BA3EAF619E8EE73\n[ RUN      ] HelixAi8BA3EAF619E8EE73.InputPreserved\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\merge_ranges_test.cpp(87): error: Expected equality of these values:\n  result.size()\n    Which is: 2\n  1u\n    Which is: 1\n\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.InputPreserved (0 ms)\n[----------] 1 test from HelixAi8BA3EAF619E8EE73 (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.InputPreserved\n\n 1 FAILED TEST\n\n      Start 10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\n10/14 Test #10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints .................***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAi8BA3EAF619E8EE73\n[ RUN      ] HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\merge_ranges_test.cpp(96): error: Expected equality of these values:\n  result.size()\n    Which is: 2\n  1u\n    Which is: 1\n\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints (0 ms)\n[----------] 1 test from HelixAi8BA3EAF619E8EE73 (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\n\n 1 FAILED TEST\n\n      Start 11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput\n11/14 Test #11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput ...   Passed    0.01 sec\n      Start 12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged\n12/14 Test #12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged .....................   Passed    0.01 sec\n      Start 13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges\n13/14 Test #13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges .....................   Passed    0.01 sec\n      Start 14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap\n14/14 Test #14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap ...................   Passed    0.12 sec\n\n79% tests passed, 3 tests failed out of 14\n\nTotal Test time (real) =   0.65 sec\n\nThe following tests FAILED:\n\t  3 - HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized (Failed)\n\t  9 - HelixAi8BA3EAF619E8EE73.InputPreserved (Failed)\n\t 10 - HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints (Failed)\nErrors while running CTest\n"
+          }
+        ],
+        "elapsed_ms": 1523
+      }
+    },
+    {
+      "id": "nested_range",
+      "meaning": "嵌套区间错误缩小外部区间",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "cmake",
+              "--build",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+              "--config",
+              "Debug",
+              "--target",
+              "helix_ai_merge_ranges_8ba3eaf619e8ee73"
+            ],
+            "stage": "Build",
+            "exit_code": 0,
+            "success": true,
+            "timeout": false,
+            "elapsed_ms": 809,
+            "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  subject.cpp\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\Debug\\subject.lib\r\n  helix_ai_merge_ranges_8ba3eaf619e8ee73.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\Debug\\helix_ai_merge_ranges_8ba3eaf619e8ee73.exe\r\n"
+          },
+          {
+            "argv": [
+              "ctest",
+              "--test-dir",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+              "-C",
+              "Debug",
+              "--output-on-failure",
+              "--no-tests=error",
+              "-R",
+              "HelixAi8BA3EAF619E8EE73"
+            ],
+            "stage": "Test",
+            "exit_code": 8,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 617,
+            "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_merge_ranges/.utf8-build\n      Start  1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty\n 1/14 Test  #1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty ....................   Passed    0.01 sec\n      Start  2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged\n 2/14 Test  #2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged ......................   Passed    0.01 sec\n      Start  3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized\n 3/14 Test  #3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized ...............   Passed    0.11 sec\n      Start  4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged\n 4/14 Test  #4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged ...........   Passed    0.01 sec\n      Start  5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged\n 5/14 Test  #5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged ...................   Passed    0.01 sec\n      Start  6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate\n 6/14 Test  #6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate ..........   Passed    0.01 sec\n      Start  7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged\n 7/14 Test  #7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged .............   Passed    0.12 sec\n      Start  8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged\n 8/14 Test  #8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged ......................***Failed    0.01 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAi8BA3EAF619E8EE73.ContainedRangeMerged\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAi8BA3EAF619E8EE73\n[ RUN      ] HelixAi8BA3EAF619E8EE73.ContainedRangeMerged\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\merge_ranges_test.cpp(74): error: Expected equality of these values:\n  result[0].second\n    Which is: 5\n  10\n\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.ContainedRangeMerged (0 ms)\n[----------] 1 test from HelixAi8BA3EAF619E8EE73 (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.ContainedRangeMerged\n\n 1 FAILED TEST\n\n      Start  9: HelixAi8BA3EAF619E8EE73.InputPreserved\n 9/14 Test  #9: HelixAi8BA3EAF619E8EE73.InputPreserved ............................   Passed    0.01 sec\n      Start 10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\n10/14 Test #10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints .................***Failed    0.12 sec\nRunning main() from C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\buildtrees\\gtest\\src\\v1.17.0-e243b8ee0f.clean\\googletest\\src\\gtest_main.cc\nNote: Google Test filter = HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\n[==========] Running 1 test from 1 test suite.\n[----------] Global test environment set-up.\n[----------] 1 test from HelixAi8BA3EAF619E8EE73\n[ RUN      ] HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\merge_ranges_test.cpp(98): error: Expected equality of these values:\n  result[0].second\n    Which is: 5\n  9\n\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints (0 ms)\n[----------] 1 test from HelixAi8BA3EAF619E8EE73 (0 ms total)\n\n[----------] Global test environment tear-down\n[==========] 1 test from 1 test suite ran. (0 ms total)\n[  PASSED  ] 0 tests.\n[  FAILED  ] 1 test, listed below:\n[  FAILED  ] HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\n\n 1 FAILED TEST\n\n      Start 11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput\n11/14 Test #11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput ...   Passed    0.01 sec\n      Start 12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged\n12/14 Test #12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged .....................   Passed    0.01 sec\n      Start 13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges\n13/14 Test #13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges .....................   Passed    0.01 sec\n      Start 14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap\n14/14 Test #14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap ...................   Passed    0.01 sec\n\n86% tests passed, 2 tests failed out of 14\n\nTotal Test time (real) =   0.54 sec\n\nThe following tests FAILED:\n\t  8 - HelixAi8BA3EAF619E8EE73.ContainedRangeMerged (Failed)\n\t 10 - HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints (Failed)\nErrors while running CTest\n"
+          }
+        ],
+        "elapsed_ms": 1426
+      }
+    }
+  ],
+  "unchanged_test_sha256": "dd02eb1c8c5b296d5edabe3a1c83d9cfe5972199dc40a0096f0530db79dbc9cb",
+  "generation_error": null,
+  "primary_accepted": true,
+  "validation_bypassed": false,
+  "restored": {
+    "success": true,
+    "stage": "Test",
+    "steps": [
+      {
+        "argv": [
+          "cmake",
+          "--build",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+          "--config",
+          "Debug",
+          "--target",
+          "helix_ai_merge_ranges_8ba3eaf619e8ee73"
+        ],
+        "stage": "Build",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 794,
+        "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  subject.cpp\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\Debug\\subject.lib\r\n  helix_ai_merge_ranges_8ba3eaf619e8ee73.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build\\tests\\helix-ai\\merge_ranges_8ba3eaf619e8ee73\\Debug\\helix_ai_merge_ranges_8ba3eaf619e8ee73.exe\r\n"
+      },
+      {
+        "argv": [
+          "ctest",
+          "--test-dir",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\27b-thinking\\cpp_merge_ranges\\.utf8-build",
+          "-C",
+          "Debug",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "HelixAi8BA3EAF619E8EE73"
+        ],
+        "stage": "Test",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 608,
+        "log": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/27b-thinking/cpp_merge_ranges/.utf8-build\n      Start  1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty\n 1/14 Test  #1: HelixAi8BA3EAF619E8EE73.EmptyInputReturnsEmpty ....................   Passed    0.12 sec\n      Start  2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged\n 2/14 Test  #2: HelixAi8BA3EAF619E8EE73.SingleRangeUnchanged ......................   Passed    0.11 sec\n      Start  3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized\n 3/14 Test  #3: HelixAi8BA3EAF619E8EE73.ReversedEndpointsNormalized ...............   Passed    0.01 sec\n      Start  4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged\n 4/14 Test  #4: HelixAi8BA3EAF619E8EE73.OverlappingSharedEndpointMerged ...........   Passed    0.01 sec\n      Start  5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged\n 5/14 Test  #5: HelixAi8BA3EAF619E8EE73.AdjacentRangesNotMerged ...................   Passed    0.01 sec\n      Start  6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate\n 6/14 Test  #6: HelixAi8BA3EAF619E8EE73.NonOverlappingRangesStaySeparate ..........   Passed    0.01 sec\n      Start  7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged\n 7/14 Test  #7: HelixAi8BA3EAF619E8EE73.MultipleChainedOverlapsMerged .............   Passed    0.01 sec\n      Start  8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged\n 8/14 Test  #8: HelixAi8BA3EAF619E8EE73.ContainedRangeMerged ......................   Passed    0.01 sec\n      Start  9: HelixAi8BA3EAF619E8EE73.InputPreserved\n 9/14 Test  #9: HelixAi8BA3EAF619E8EE73.InputPreserved ............................   Passed    0.01 sec\n      Start 10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints\n10/14 Test #10: HelixAi8BA3EAF619E8EE73.MultipleReversedEndpoints .................   Passed    0.01 sec\n      Start 11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput\n11/14 Test #11: HelixAi8BA3EAF619E8EE73.UnsortedInputProducesSortedMergedOutput ...   Passed    0.01 sec\n      Start 12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged\n12/14 Test #12: HelixAi8BA3EAF619E8EE73.IdenticalRangesMerged .....................   Passed    0.01 sec\n      Start 13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges\n13/14 Test #13: HelixAi8BA3EAF619E8EE73.NegativeAndZeroRanges .....................   Passed    0.01 sec\n      Start 14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap\n14/14 Test #14: HelixAi8BA3EAF619E8EE73.SinglePointRangeOverlap ...................   Passed    0.12 sec\n\n100% tests passed out of 14\n\nTotal Test time (real) =   0.54 sec\n"
+      }
+    ],
+    "elapsed_ms": 1402
+  }
+}

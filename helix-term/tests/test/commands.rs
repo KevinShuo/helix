@@ -2,6 +2,7 @@ use helix_term::application::Application;
 
 use super::*;
 
+mod delete_file;
 mod insert;
 mod movement;
 mod new_file;

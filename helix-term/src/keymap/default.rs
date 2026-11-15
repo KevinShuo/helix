@@ -110,6 +110,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         },
         "[" => { "Left bracket"
             "d" => goto_prev_diag,
+            "q" => previous_problem,
             "D" => goto_first_diag,
             "g" => goto_prev_change,
             "G" => goto_first_change,
@@ -125,6 +126,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         },
         "]" => { "Right bracket"
             "d" => goto_next_diag,
+            "q" => next_problem,
             "D" => goto_last_diag,
             "g" => goto_next_change,
             "G" => goto_last_change,
@@ -234,6 +236,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "S" => lsp_or_syntax_workspace_symbol_picker,
             "d" => diagnostics_picker,
             "D" => workspace_diagnostics_picker,
+            "E" => problems_picker,
             "g" => changed_file_picker,
             "v" => { "Git"
                 "g" => git_log,

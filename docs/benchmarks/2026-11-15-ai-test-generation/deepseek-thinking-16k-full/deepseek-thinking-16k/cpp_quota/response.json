@@ -1,0 +1,32 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"#include <gtest/gtest.h>\\n\\n#include \\\"subject.hpp\\\"\\n\\n// 正数上限：初始未使用额度与剩余额度一致。\\nTEST(HelixAi79DA9FB5102F83D4, InitialStateReflectsPositiveLimit) {\\n    Quota quota(5);\\n    EXPECT_EQ(quota.used(), 0);\\n    EXPECT_EQ(quota.remaining(), 5);\\n}\\n\\n// 额度内的正数消费成功并更新已用/剩余额度。\\nTEST(HelixAi79DA9FB5102F83D4, ConsumePositiveWithinQuotaSucceeds) {\\n    Quota quota(10);\\n    EXPECT_TRUE(quota.consume(3));\\n    EXPECT_EQ(quota.used(), 3);\\n    EXPECT_EQ(quota.remaining(), 7);\\n}\\n\\n// 恰好消费完剩余额度应成功。\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeExactRemainingSucceeds) {\\n    Quota quota(5);\\n    EXPECT_TRUE(quota.consume(5));\\n    EXPECT_EQ(quota.used(), 5);\\n    EXPECT_EQ(quota.remaining(), 0);\\n}\\n\\n// 消费 0 应成功且不改变状态。\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeZeroSucceedsWithoutChangingState) {\\n    Quota quota(4);\\n    EXPECT_TRUE(quota.consume(0));\\n    EXPECT_EQ(quota.used(), 0);\\n    EXPECT_EQ(quota.remaining(), 4);\\n    EXPECT_TRUE(quota.consume(0));\\n    EXPECT_EQ(quota.used(), 0);\\n    EXPECT_EQ(quota.remaining(), 4);\\n}\\n\\n// 负数消费应被拒绝且状态不变。\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeNegativeIsRejectedWithoutStateChange) {\\n    Quota quota(5);\\n    EXPECT_TRUE(quota.consume(2));\\n    EXPECT_FALSE(quota.consume(-1));\\n    EXPECT_EQ(quota.used(), 2);\\n    EXPECT_EQ(quota.remaining(), 3);\\n    EXPECT_FALSE(quota.consume(-100));\\n    EXPECT_EQ(quota.used(), 2);\\n    EXPECT_EQ(quota.remaining(), 3);\\n}\\n\\n// 超过剩余额度的消费应被拒绝且状态不变。\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeMoreThanRemainingIsRejectedWithoutStateChange) {\\n    Quota quota(5);\\n    EXPECT_TRUE(quota.consume(2));\\n    EXPECT_FALSE(quota.consume(4));\\n    EXPECT_EQ(quota.used(), 2);\\n    EXPECT_EQ(quota.remaining(), 3);\\n}\\n\\n// 部分消费后再恰好消费剩余额度应成功。\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeExactRemainingAfterPartialUseSucceeds) {\\n    Quota quota(7);\\n    EXPECT_TRUE(quota.consume(2));\\n    EXPECT_TRUE(quota.consume(5));\\n    EXPECT_EQ(quota.used(), 7);\\n    EXPECT_EQ(quota.remaining(), 0);\\n}\\n\\n// 额度耗尽后仅 0 仍可消费，正数消费被拒绝。\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeWhenExhaustedAcceptsOnlyZero) {\\n    Quota quota(5);\\n    EXPECT_TRUE(quota.consume(5));\\n    EXPECT_TRUE(quota.consume(0));\\n    EXPECT_EQ(quota.used(), 5);\\n    EXPECT_EQ(quota.remaining(), 0);\\n    EXPECT_FALSE(quota.consume(1));\\n    EXPECT_EQ(quota.used(), 5);\\n    EXPECT_EQ(quota.remaining(), 0);\\n}\\n\\n// 0 额度等价于空额度：0 可消费，正数不可消费。\\nTEST(HelixAi79DA9FB5102F83D4, ZeroLimitBehavesAsEmptyQuota) {\\n    Quota quota(0);\\n    EXPECT_EQ(quota.used(), 0);\\n    EXPECT_EQ(quota.remaining(), 0);\\n    EXPECT_TRUE(quota.consume(0));\\n    EXPECT_EQ(quota.used(), 0);\\n    EXPECT_EQ(quota.remaining(), 0);\\n    EXPECT_FALSE(quota.consume(1));\\n    EXPECT_EQ(quota.used(), 0);\\n    EXPECT_EQ(quota.remaining(), 0);\\n}\\n\\n// 负上限构造时按契约钳制为 0。\\nTEST(HelixAi79DA9FB5102F83D4, NegativeLimitIsClampedToZero) {\\n    Quota quota(-3);\\n    EXPECT_EQ(quota.used(), 0);\\n    EXPECT_EQ(quota.remaining(), 0);\\n    EXPECT_TRUE(quota.consume(0));\\n    EXPECT_EQ(quota.used(), 0);\\n    EXPECT_EQ(quota.remaining(), 0);\\n    EXPECT_FALSE(quota.consume(1));\\n    EXPECT_EQ(quota.used(), 0);\\n    EXPECT_EQ(quota.remaining(), 0);\\n}\\n\\n// 多次成功消费应连续累加已用额度。\\nTEST(HelixAi79DA9FB5102F83D4, RepeatedSuccessfulConsumptionUpdatesState) {\\n    Quota quota(10);\\n    EXPECT_TRUE(quota.consume(3));\\n    EXPECT_EQ(quota.used(), 3);\\n    EXPECT_EQ(quota.remaining(), 7);\\n    EXPECT_TRUE(quota.consume(4));\\n    EXPECT_EQ(quota.used(), 7);\\n    EXPECT_EQ(quota.remaining(), 3);\\n    EXPECT_TRUE(quota.consume(3));\\n    EXPECT_EQ(quota.used(), 10);\\n    EXPECT_EQ(quota.remaining(), 0);\\n}\\n\",\"assumptions\":[\"依据 subject.hpp 注释，amount 为 0 时总是可接受且不改变 used/remaining，即使剩余额度为 0。\",\"构造函数将负 limit 钳制为 0，因此负上限实例的初始 used/remaining 均为 0。\",\"未提供现有测试文件，期望值来自公开注释契约；测试仅使用公开构造函数、consume、used、remaining。\",\"假设测试构建环境已配置 GoogleTest 并能从包含路径解析 subject.hpp。\"]}",
+        "reasoning_content_chars": 13020,
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794735722,
+  "id": "f3fb9692-1034-4255-9558-c330ba8a0d77",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 5072,
+    "completion_tokens_details": {
+      "reasoning_tokens": 3463
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 700,
+    "prompt_tokens": 700,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 5772
+  }
+}

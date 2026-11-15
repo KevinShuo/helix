@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"#include <gtest/gtest.h>\\n#include \\\"subject.hpp\\\"\\n\\n// 正常消费：额度充足时成功并累加已用额度\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeWithinLimitSucceeds) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(3));\\n    EXPECT_EQ(q.used(), 3);\\n    EXPECT_EQ(q.remaining(), 7);\\n}\\n\\n// 多次消费累加\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeAccumulates) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(4));\\n    EXPECT_TRUE(q.consume(5));\\n    EXPECT_EQ(q.used(), 9);\\n    EXPECT_EQ(q.remaining(), 1);\\n}\\n\\n// 恰好用尽剩余额度应成功\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeExactRemainingSucceeds) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(10));\\n    EXPECT_EQ(q.used(), 10);\\n    EXPECT_EQ(q.remaining(), 0);\\n}\\n\\n// 消费 0 应成功且不改变状态\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeZeroSucceeds) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(0));\\n    EXPECT_EQ(q.used(), 0);\\n    EXPECT_EQ(q.remaining(), 10);\\n}\\n\\n// 超出剩余额度应失败且状态不变\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeExceedingRemainingFails) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(7));\\n    EXPECT_FALSE(q.consume(4));\\n    EXPECT_EQ(q.used(), 7);\\n    EXPECT_EQ(q.remaining(), 3);\\n}\\n\\n// 负数金额应失败且状态不变\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeNegativeFails) {\\n    Quota q(10);\\n    EXPECT_FALSE(q.consume(-1));\\n    EXPECT_EQ(q.used(), 0);\\n    EXPECT_EQ(q.remaining(), 10);\\n}\\n\\n// 额度为 0 时消费 0 成功，消费正数失败\\nTEST(HelixAi79DA9FB5102F83D4, ZeroLimitBehavior) {\\n    Quota q(0);\\n    EXPECT_TRUE(q.consume(0));\\n    EXPECT_FALSE(q.consume(1));\\n    EXPECT_EQ(q.used(), 0);\\n    EXPECT_EQ(q.remaining(), 0);\\n}\\n\\n// 负额度被构造为 0，任何正数消费失败\\nTEST(HelixAi79DA9FB5102F83D4, NegativeLimitClampedToZero) {\\n    Quota q(-5);\\n    EXPECT_EQ(q.remaining(), 0);\\n    EXPECT_FALSE(q.consume(1));\\n    EXPECT_EQ(q.used(), 0);\\n}\\n\",\"assumptions\":[\"Quota 构造函数将负 limit 归一化为 0（依据头文件实现）\",\"consume 拒绝时 used_ 与 remaining 保持不变（依据头文件注释）\",\"恰好等于剩余额度视为成功（依据头文件注释）\"]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794706643,
+  "id": "c6083d4f-54af-491d-a95a-973ed8309bad",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 804,
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 675,
+    "prompt_tokens": 675,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1479
+  }
+}

@@ -106,6 +106,7 @@ impl Default for GutterConfig {
                 GutterType::LineNumbers,
                 GutterType::Spacer,
                 GutterType::Diff,
+                GutterType::Test,
             ],
             line_numbers: GutterLineNumbersConfig::default(),
             fold: GutterFoldConfig::default(),
@@ -341,9 +342,12 @@ pub struct Config {
     pub auto_pairs: AutoPairConfig,
     /// Automatic auto-completion, automatically pop up without user trigger. Defaults to true.
     pub auto_completion: bool,
+    pub ai: crate::ai::AiConfig,
     /// Independent inline suggestions from an OpenAI-compatible model.
     pub ai_completion: crate::ai_completion::AiCompletionConfig,
     pub ai_doc: crate::ai_doc::AiDocConfig,
+    pub ai_test: crate::ai_test::AiTestConfig,
+    pub test: crate::test::TestConfig,
     pub ai_commit: crate::ai_commit::AiCommitConfig,
     pub ai_merge: crate::ai_merge::AiMergeConfig,
     /// Function reference counts and latest Git authors beside declarations.
@@ -916,6 +920,8 @@ pub enum GutterType {
     CodeActionHint,
     /// Code folding indicators (click to fold/unfold)
     Fold,
+    /// Run tests and show their most recent outcome.
+    Test,
 }
 
 impl std::str::FromStr for GutterType {
@@ -929,8 +935,9 @@ impl std::str::FromStr for GutterType {
             "diff" => Ok(Self::Diff),
             "code-action-hint" => Ok(Self::CodeActionHint),
             "fold" => Ok(Self::Fold),
+            "test" => Ok(Self::Test),
             _ => anyhow::bail!(
-                "Gutter type can only be `diagnostics`, `spacer`, `line-numbers`, `diff`, `code-action-hint` or `fold`."
+                "Gutter type can only be `diagnostics`, `spacer`, `line-numbers`, `diff`, `code-action-hint`, `fold` or `test`."
             ),
         }
     }
@@ -1199,8 +1206,11 @@ impl Default for Config {
             middle_click_paste: true,
             auto_pairs: AutoPairConfig::default(),
             auto_completion: true,
+            ai: crate::ai::AiConfig::default(),
             ai_completion: crate::ai_completion::AiCompletionConfig::default(),
             ai_doc: crate::ai_doc::AiDocConfig::default(),
+            ai_test: crate::ai_test::AiTestConfig::default(),
+            test: crate::test::TestConfig::default(),
             ai_commit: crate::ai_commit::AiCommitConfig::default(),
             ai_merge: crate::ai_merge::AiMergeConfig::default(),
             function_hints: crate::function_hints::FunctionHintsConfig::default(),
@@ -1295,6 +1305,10 @@ pub struct Editor {
     pub ai_doc_serial: u64,
     pub ai_merge: Option<crate::ai_merge::Operation>,
     pub ai_merge_serial: u64,
+    pub ai_test: Option<crate::ai_test::Operation>,
+    pub tests: crate::test::TestState,
+    pub ai_test_serial: u64,
+    pub ai_test_controller: helix_event::TaskController,
     pub ai_commit_running: bool,
     pub documents: BTreeMap<DocumentId, Document>,
 
@@ -1311,6 +1325,7 @@ pub struct Editor {
     pub macro_replaying: Vec<char>,
     pub language_servers: helix_lsp::Registry,
     pub diagnostics: Diagnostics,
+    pub problems: crate::problems::ProblemState,
     pub diff_providers: DiffProviderRegistry,
 
     pub debug_adapters: dap::registry::Registry,
@@ -1456,6 +1471,10 @@ impl Editor {
             ai_doc_serial: 0,
             ai_merge: None,
             ai_merge_serial: 0,
+            ai_test: None,
+            tests: crate::test::TestState::default(),
+            ai_test_serial: 0,
+            ai_test_controller: helix_event::TaskController::new(),
             ai_commit_running: false,
             documents: BTreeMap::new(),
             saves: HashMap::new(),
@@ -1468,6 +1487,7 @@ impl Editor {
             theme: theme_loader.default(),
             language_servers,
             diagnostics: Diagnostics::new(),
+            problems: crate::problems::ProblemState::default(),
             diff_providers: DiffProviderRegistry::default(),
             debug_adapters: dap::registry::Registry::new(),
             breakpoints: HashMap::new(),
@@ -1658,6 +1678,26 @@ impl Editor {
     /// Refreshes the language server for a given document
     pub fn refresh_language_servers(&mut self, doc_id: DocumentId) {
         self.launch_language_servers(doc_id)
+    }
+
+    /// Remove both workspace and visible diagnostics when a server is retired.
+    /// A restart removes the client from the registry before its exit arrives.
+    pub fn clear_language_server_diagnostics(&mut self, server_id: LanguageServerId) {
+        self.diagnostics.retain(|_, diagnostics| {
+            diagnostics.retain(|(_, provider)| provider.language_server_id() != Some(server_id));
+            !diagnostics.is_empty()
+        });
+        let mut changed_documents = Vec::new();
+        for doc in self.documents_mut() {
+            let old_len = doc.diagnostics().len();
+            doc.clear_diagnostics_for_language_server(server_id);
+            if doc.diagnostics().len() != old_len {
+                changed_documents.push(doc.id());
+            }
+        }
+        for doc in changed_documents {
+            helix_event::dispatch(crate::events::DiagnosticsDidChange { editor: self, doc });
+        }
     }
 
     /// moves/renames a path, invoking any event handlers (currently only lsp)
@@ -1899,14 +1939,18 @@ impl Editor {
         let language_id = doc.language_id().map(ToOwned::to_owned).unwrap_or_default();
 
         // only spawn new language servers if the servers aren't the same
-        let doc_language_servers_not_in_registry =
-            doc.language_servers.iter().filter(|(name, doc_ls)| {
+        let retired_servers: Vec<_> = doc
+            .language_servers
+            .iter()
+            .filter(|(name, doc_ls)| {
                 language_servers
                     .get(*name)
                     .is_none_or(|ls| ls.id() != doc_ls.id())
-            });
+            })
+            .map(|(_, server)| server.clone())
+            .collect();
 
-        for (_, language_server) in doc_language_servers_not_in_registry {
+        for language_server in &retired_servers {
             language_server.text_document_did_close(doc.identifier());
         }
 
@@ -1927,6 +1971,12 @@ impl Editor {
         }
 
         doc.language_servers = language_servers;
+        drop(config);
+        for server in retired_servers {
+            if self.language_servers.get_by_id(server.id()).is_none() {
+                self.clear_language_server_diagnostics(server.id());
+            }
+        }
     }
 
     fn _refresh(&mut self) {
@@ -2003,6 +2053,7 @@ impl Editor {
                 let remove_empty_scratch = !doc.is_modified()
                     // If the buffer has no path and is not modified, it is an empty scratch buffer.
                     && doc.path().is_none()
+                    && !doc.is_readonly_output()
                     // If the buffer we are changing to is not this buffer
                     && id != doc.id
                     // Ensure the buffer is not displayed in any other splits.
@@ -2754,10 +2805,13 @@ impl CursorCache {
 }
 
 impl Config {
-    /// Provider settings shared by explicit generation and automatic completion.
+    /// Legacy provider settings. New callers should resolve `ai_provider` per feature.
     pub fn ai_model_config(&self) -> crate::ai_completion::AiCompletionConfig {
         let mut model = self.ai_completion.clone();
-        model.enabled |= self.ai_doc.enabled || self.ai_commit.enabled || self.ai_merge.enabled;
+        model.enabled |= self.ai_doc.enabled
+            || self.ai_commit.enabled
+            || self.ai_merge.enabled
+            || self.ai_test.enabled;
         model
     }
 }

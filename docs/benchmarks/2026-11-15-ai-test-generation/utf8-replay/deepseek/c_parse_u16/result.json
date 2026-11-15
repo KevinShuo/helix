@@ -1,0 +1,53 @@
+{
+  "arm": "deepseek",
+  "case": "c_parse_u16",
+  "language": "c",
+  "primary_generation_ms": 7435,
+  "baseline": {
+    "success": false,
+    "stage": "Build",
+    "steps": [
+      {
+        "argv": [
+          "cmake",
+          "-S",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_parse_u16",
+          "-B",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_parse_u16\\.utf8-build",
+          "-DBUILD_TESTING=ON",
+          "-DCMAKE_CXX_FLAGS=/utf-8",
+          "-DCMAKE_TOOLCHAIN_FILE=C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\scripts\\buildsystems\\vcpkg.cmake"
+        ],
+        "stage": "Configure",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 3275,
+        "log": "-- Building for: Visual Studio 18 2026\n-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26300.\n-- The C compiler identification is MSVC 19.50.35728.0\n-- The CXX compiler identification is MSVC 19.50.35728.0\n-- Detecting C compiler ABI info\n-- Detecting C compiler ABI info - done\n-- Check for working C compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting C compile features\n-- Detecting C compile features - done\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Configuring done (3.1s)\n-- Generating done (0.1s)\n-- Build files have been written to: I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_parse_u16/.utf8-build\n"
+      },
+      {
+        "argv": [
+          "cmake",
+          "--build",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_parse_u16\\.utf8-build",
+          "--config",
+          "Debug",
+          "--target",
+          "helix_ai_parse_u16_0bdff2059b49c097"
+        ],
+        "stage": "Build",
+        "exit_code": 1,
+        "success": false,
+        "timeout": false,
+        "elapsed_ms": 1447,
+        "log": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\r\n\r\n  1>Checking Build System\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_parse_u16/CMakeLists.txt\r\n  subject.c\r\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_parse_u16\\.utf8-build\\Debug\\subject.lib\r\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/utf8-replay/deepseek/c_parse_u16/tests/helix-ai/parse_u16_0bdff2059b49c097/CMakeLists.txt\r\n  parse_u16_test.cpp\r\nC:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9): warning C4530: 使用了 C++ 异常处理程序，但未启用展开语义。请指定 /EHsc [I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_parse_u16\\.utf8-build\\tests\\helix-ai\\parse_u16_0bdff2059b49c097\\helix_ai_parse_u16_0bdff2059b49c097.vcxproj]\r\n  (编译源文件“../../../../tests/helix-ai/parse_u16_0bdff2059b49c097/parse_u16_test.cpp”)\r\n      C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9):\r\n      模板实例化上下文(最早的实例化上下文)为\r\n          C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\include\\gtest\\gtest-message.h(118,10):\r\n          查看对正在编译的函数 模板 实例化“std::basic_ostream<char,std::char_traits<char>> &std::operator <<<std::char_traits<char>>(std::basic_ostream<char,std::char_traits<char>> &,const char *)”的引用\r\n  \r\nparse_u16_test.obj : error LNK2019: 无法解析的外部符号 \"int __cdecl parse_u16(char const *,unsigned short *)\" (?parse_u16@@YAHPEBDPEAG@Z)，函数 \"private: virtual void __cdecl HelixAi0BDFF2059B49C097_ParsesSimpleValue_Test::TestBody(void)\" (?TestBody@HelixAi0BDFF2059B49C097_ParsesSimpleValue_Test@@EEAAXXZ) 中引用了该符号 [I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_parse_u16\\.utf8-build\\tests\\helix-ai\\parse_u16_0bdff2059b49c097\\helix_ai_parse_u16_0bdff2059b49c097.vcxproj]\r\nI:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_parse_u16\\.utf8-build\\tests\\helix-ai\\parse_u16_0bdff2059b49c097\\Debug\\helix_ai_parse_u16_0bdff2059b49c097.exe : fatal error LNK1120: 1 个无法解析的外部命令 [I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\c_parse_u16\\.utf8-build\\tests\\helix-ai\\parse_u16_0bdff2059b49c097\\helix_ai_parse_u16_0bdff2059b49c097.vcxproj]\r\n"
+      }
+    ],
+    "elapsed_ms": 4722
+  },
+  "mutants": [],
+  "unchanged_test_sha256": "87aec430b340edca31c0b768225e9d364f9e1fb71507b92904c2cbb7cb5950b9",
+  "generation_error": null,
+  "primary_accepted": true,
+  "validation_bypassed": false
+}

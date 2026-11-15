@@ -20,8 +20,10 @@ pub(crate) mod ai_commit;
 pub mod ai_completion;
 pub(crate) mod ai_doc;
 pub(crate) mod ai_merge;
+pub(crate) mod ai_test;
 mod auto_save;
 mod code_action_hint;
+pub(crate) mod compilation;
 pub mod completion;
 pub mod diagnostics;
 mod document_colors;
@@ -33,6 +35,7 @@ pub(crate) mod minimap;
 mod prompt;
 mod signature_help;
 mod snippet;
+pub(crate) mod test;
 mod workspace_trust;
 
 pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
@@ -65,6 +68,7 @@ pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
     ai_completion::register_hooks();
     ai_doc::register_hooks();
     ai_merge::register_hooks();
+    ai_test::register_hooks();
     function_hints::register_hooks();
     git_conflicts::register_hooks();
     minimap::register_hooks();

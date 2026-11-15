@@ -33,6 +33,7 @@ pub fn trigger(editor: &mut Editor) {
     let config = editor.config().ai_completion.clone();
     if editor.ai_commit_running
         || editor.ai_merge.is_some()
+        || super::ai_test::busy(editor)
         || editor.ai_doc.as_ref().is_some_and(|op| op.is_valid(editor))
         || !config.enabled
         || editor.mode() != Mode::Insert
@@ -44,6 +45,16 @@ pub fn trigger(editor: &mut Editor) {
     {
         return;
     }
+    let model = match editor
+        .config()
+        .ai_provider(helix_view::ai::AiFeature::Completion)
+    {
+        Ok(model) => model,
+        Err(error) => {
+            log::debug!("AI completion: {error}");
+            return;
+        }
+    };
     let (view, doc) = current!(editor);
     if doc.readonly || doc.active_snippet.is_some() {
         return;
@@ -154,10 +165,8 @@ pub fn trigger(editor: &mut Editor) {
                     context.members = members.names;
                 }
             }
-            let mut model = config.clone();
-            model.enabled = true;
             server::wait_ready(&model).await?;
-            let Some(text) = client::complete(&config, &context).await? else {
+            let Some(text) = client::complete(&config, &model, &context).await? else {
                 return Ok(None);
             };
             if let Some((source, language)) = syntax_snapshot {
@@ -196,6 +205,12 @@ pub fn trigger(editor: &mut Editor) {
             if handle.is_canceled()
                 || editor.mode() != Mode::Insert
                 || !editor.config().ai_completion.enabled
+                || editor
+                    .config()
+                    .ai_provider(helix_view::ai::AiFeature::Completion)
+                    .ok()
+                    .as_ref()
+                    != Some(&model)
                 || matches!(
                     editor.last_completion,
                     Some(CompleteAction::Selected { .. })

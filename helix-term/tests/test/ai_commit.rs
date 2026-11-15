@@ -131,6 +131,13 @@ async fn open(root: &Path, endpoint: Option<String>) -> anyhow::Result<Applicati
     if let Some(endpoint) = endpoint {
         config.editor.ai_completion.endpoint = endpoint;
     }
+    open_config(root, config).await
+}
+
+async fn open_config(
+    root: &Path,
+    config: helix_term::config::Config,
+) -> anyhow::Result<Application> {
     let mut app = AppBuilder::new()
         .with_config(config)
         .with_file(root.join("b-partial.txt"), None)
@@ -444,12 +451,71 @@ async fn server(
     (endpoint, rx, task)
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_commit_config_change_cancels_old_analysis_immediately() -> anyhow::Result<()> {
+    let repo = repository();
+    fs::write(repo.path().join("a-choice.txt"), "pending change\n")?;
+    let (endpoint, mut requests, task) = server(vec![Reply::Summary, Reply::Recommend], 1000).await;
+    let mut app = open(repo.path(), Some(endpoint)).await?;
+    request(&mut requests).await?;
+    assert!(app.editor.ai_commit_running);
+    let mut changed = (*app.editor.config()).clone();
+    changed.ai_completion.model = "different-provider-model".into();
+    app.handle_config_events(helix_view::editor::ConfigEvent::Update(Box::new(changed)));
+    assert!(
+        !app.editor.ai_commit_running,
+        "config changes must cancel an old multi-call analysis immediately"
+    );
+    let next = tokio::time::timeout(Duration::from_millis(1300), requests.recv()).await;
+    assert!(
+        !matches!(next, Ok(Some(_))),
+        "canceled analysis must not send another batch to the old provider"
+    );
+    close(app).await?;
+    task.abort();
+    Ok(())
+}
+
 async fn request(
     requests: &mut tokio::sync::mpsc::UnboundedReceiver<Value>,
 ) -> anyhow::Result<Value> {
     tokio::time::timeout(Duration::from_secs(3), requests.recv())
         .await?
         .ok_or_else(|| anyhow::anyhow!("model server closed before request"))
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_commit_named_provider_ignores_legacy_local_model() -> anyhow::Result<()> {
+    use helix_view::ai::{AiProviderConfig, AiProviderType, AiProxy};
+    let repo = repository();
+    fs::write(repo.path().join("a-choice.txt"), "online change\n")?;
+    let (endpoint, mut requests, task) = server(vec![Reply::Summary, Reply::Recommend], 0).await;
+    let mut config = test_config();
+    config.editor.ai_commit.enabled = true;
+    config.editor.ai_commit.provider = Some("commit-cloud".into());
+    config.editor.ai_completion.model_path = Some("missing-unused-legacy.gguf".into());
+    config.editor.ai.providers.insert(
+        "commit-cloud".into(),
+        AiProviderConfig {
+            kind: AiProviderType::Deepseek,
+            endpoint,
+            model: "commit-model".into(),
+            context_size: 8192,
+            proxy: AiProxy::None,
+            ..Default::default()
+        },
+    );
+    let mut app = open_config(repo.path(), config).await?;
+    wait_for(&mut app, "推荐完成").await?;
+    for _ in 0..2 {
+        let body = request(&mut requests).await?;
+        assert_eq!(body["model"], "commit-model");
+        assert_eq!(body["thinking"]["type"], "disabled");
+        assert_eq!(body["response_format"]["type"], "json_object");
+    }
+    close(app).await?;
+    task.await?;
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

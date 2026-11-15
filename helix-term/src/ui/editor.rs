@@ -1442,6 +1442,26 @@ impl EditorView {
                         start += width;
                         hit
                     });
+                    if gutter == Some(helix_view::editor::GutterType::Test) {
+                        let scope = view.gutter_line_at_visual_row(doc, coords.row).and_then(
+                            |(line, first)| {
+                                if !first {
+                                    return None;
+                                }
+                                let path = doc.path()?.to_owned();
+                                let declaration = helix_view::test::discover(doc)
+                                    .into_iter()
+                                    .find(|d| d.line == line)?;
+                                Some(helix_view::test::Scope::Declaration { path, declaration })
+                            },
+                        );
+                        if let Some(scope) = scope {
+                            if let Err(error) = crate::handlers::test::start(cxt.editor, scope) {
+                                cxt.editor.set_error(error.to_string());
+                            }
+                        }
+                        return EventResult::Consumed(None);
+                    }
                     if gutter == Some(helix_view::editor::GutterType::Fold) {
                         if let Some((line, true)) = view.gutter_line_at_visual_row(doc, coords.row)
                         {

@@ -288,16 +288,32 @@ impl Editor {
         version: Option<i32>,
         mut diagnostics: Vec<lsp::Diagnostic>,
     ) {
-        let doc = self
+        let mut doc = self
             .documents
             .values_mut()
             .find(|doc| doc.uri().is_some_and(|u| u == uri));
 
-        if let Some((version, doc)) = version.zip(doc.as_ref()) {
-            if version != doc.version() {
-                log::info!("Version ({version}) is out of date for {uri:?} (expected ({})), dropping PublishDiagnostic notification", doc.version());
+        if let Some((version, doc)) = version.zip(doc.as_mut()) {
+            // A clear has no positions to become stale. Accept it after further
+            // typing (or a temporary completion preview), provided it cannot
+            // erase a newer diagnostic report from the same provider.
+            let older_than_report = doc
+                .diagnostic_versions
+                .get(provider)
+                .is_some_and(|&last_version| version < last_version);
+            if version > doc.version()
+                || older_than_report
+                || (version < doc.version() && !diagnostics.is_empty())
+            {
+                log::debug!("Dropping diagnostics for {uri:?}: version {version}, document version {}, older than accepted report: {older_than_report}", doc.version());
                 return;
             }
+            doc.diagnostic_versions.insert(provider.clone(), version);
+        } else if let Some(doc) = doc.as_mut() {
+            // Without a version, conservatively associate the report with the
+            // current document so an older versioned clear cannot erase it.
+            let version = doc.version();
+            doc.diagnostic_versions.insert(provider.clone(), version);
         }
 
         let mut unchanged_diag_sources = Vec::new();

@@ -20,7 +20,7 @@
 
 ## 上下文与协议
 
-复用 `[editor.ai-completion]` 的 endpoint/model/API-key 环境变量及本地服务生命周期，使用现有有界 HTTP transport，不新增依赖。独立配置：
+复用统一 `[editor.ai]` provider、本地服务生命周期和有界 HTTP transport，不新增依赖；旧版 `[editor.ai-completion]` 连接仍可作为回退。根据用户后续选择，Merge 使用 27B，补全使用 9B，通过 `local-provider` 接入现有按需模型租约：生成前卸载 9B，结束或取消后恢复 9B。命名 provider 的设置与其他 AI 功能保持一致，可用 `provider` 显式覆盖。独立配置：
 
 ```toml
 [editor.ai-merge]

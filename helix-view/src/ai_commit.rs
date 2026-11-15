@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct AiCommitConfig {
+    pub provider: Option<String>,
+    pub local_provider: Option<String>,
     pub enabled: bool,
     pub language: CommitLanguage,
     pub timeout_ms: u64,
@@ -24,6 +26,8 @@ pub enum CommitLanguage {
 impl Default for AiCommitConfig {
     fn default() -> Self {
         Self {
+            provider: None,
+            local_provider: None,
             enabled: false,
             language: CommitLanguage::Chinese,
             timeout_ms: 30_000,

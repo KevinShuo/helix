@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"code\":\"#include \\\"subject.hpp\\\"\\n#include <gtest/gtest.h>\\n\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeZeroOnFreshQuota) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(0));\\n    EXPECT_EQ(q.used(), 0);\\n    EXPECT_EQ(q.remaining(), 10);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeValidAmountWithinQuota) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(3));\\n    EXPECT_EQ(q.used(), 3);\\n    EXPECT_EQ(q.remaining(), 7);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeExactFit) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(10));\\n    EXPECT_EQ(q.used(), 10);\\n    EXPECT_EQ(q.remaining(), 0);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeExactFitOnRemaining) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(4));\\n    EXPECT_TRUE(q.consume(6));\\n    EXPECT_EQ(q.used(), 10);\\n    EXPECT_EQ(q.remaining(), 0);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeExceedsRemainingRejected) {\\n    Quota q(10);\\n    EXPECT_TRUE(q.consume(5));\\n    EXPECT_FALSE(q.consume(6));\\n    EXPECT_EQ(q.used(), 5);\\n    EXPECT_EQ(q.remaining(), 5);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeNegativeRejected) {\\n    Quota q(10);\\n    EXPECT_FALSE(q.consume(-1));\\n    EXPECT_EQ(q.used(), 0);\\n    EXPECT_EQ(q.remaining(), 10);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeExceedsFullQuotaRejected) {\\n    Quota q(10);\\n    EXPECT_FALSE(q.consume(11));\\n    EXPECT_EQ(q.used(), 0);\\n    EXPECT_EQ(q.remaining(), 10);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeOnZeroLimit) {\\n    Quota q(0);\\n    EXPECT_TRUE(q.consume(0));\\n    EXPECT_EQ(q.used(), 0);\\n    EXPECT_FALSE(q.consume(1));\\n    EXPECT_EQ(q.used(), 0);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, ConsumeAfterFullQuotaExhausted) {\\n    Quota q(5);\\n    EXPECT_TRUE(q.consume(5));\\n    EXPECT_FALSE(q.consume(1));\\n    EXPECT_EQ(q.used(), 5);\\n    EXPECT_FALSE(q.consume(0));\\n    EXPECT_EQ(q.used(), 5);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, NegativeLimitClampedToZero) {\\n    Quota q(-7);\\n    EXPECT_EQ(q.remaining(), 0);\\n    EXPECT_TRUE(q.consume(0));\\n    EXPECT_FALSE(q.consume(1));\\n    EXPECT_EQ(q.used(), 0);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, MultipleSequentialConsumesAccumulate) {\\n    Quota q(20);\\n    EXPECT_TRUE(q.consume(2));\\n    EXPECT_TRUE(q.consume(3));\\n    EXPECT_TRUE(q.consume(5));\\n    EXPECT_EQ(q.used(), 10);\\n    EXPECT_EQ(q.remaining(), 10);\\n}\\n\\nTEST(HelixAi79DA9FB5102F83D4, RejectionLeavesStateUnchanged) {\\n    Quota q(8);\\n    EXPECT_TRUE(q.consume(3));\\n    EXPECT_FALSE(q.consume(6));\\n    EXPECT_EQ(q.used(), 3);\\n    EXPECT_EQ(q.remaining(), 5);\\n    EXPECT_TRUE(q.consume(5));\\n    EXPECT_EQ(q.used(), 8);\\n}\\n\",\"assumptions\":[\"构造函数将负数 limit 钳位为 0，这是从 subject.hpp 初始化列表推断的实现细节，非文档契约\",\"consume(0) 在配额耗尽后仍返回 true（因为 0 <= 0 满足条件），依据实现逻辑 amount > limit_ - used_ 为 0 > 0 即 false，故通过\"]}",
+        "reasoning_content_chars": 1764,
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794706490,
+  "id": "chatcmpl-Z4bQSevtUnqpq9jS9iRqQNO1A22rVpl0",
+  "model": "Qwen3.8-27B-UD-Q5_K_M",
+  "object": "chat.completion",
+  "system_fingerprint": "b11081-161755f29",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 40987.273,
+    "predicted_n": 1572,
+    "predicted_per_second": 38.32897104425562,
+    "predicted_per_token_ms": 26.089925525143222,
+    "prompt_ms": 401.039,
+    "prompt_n": 692,
+    "prompt_per_second": 1725.5179670805082,
+    "prompt_per_token_ms": 0.57953612716763
+  },
+  "usage": {
+    "completion_tokens": 1572,
+    "prompt_tokens": 692,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 2264
+  }
+}

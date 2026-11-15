@@ -1,0 +1,21 @@
+{
+  "arm": "deepseek-thinking-16k",
+  "observations": 6,
+  "http_responses": 6,
+  "accepted": 6,
+  "baseline_pass": 6,
+  "mutants_killed": 18,
+  "mutants_exercised": 18,
+  "mutants_available": 18,
+  "response_median_ms": 23185.5,
+  "response_total_ms": 130438,
+  "prompt_hashes": {
+    "c_parse_u16": "b26362212e10a9524ee9379a5a5650ecfb6e1c55197d1af86e3af3521c57dabe",
+    "c_copy_prefix": "5d251666edcfb33078fa36ec8c66aab127e24bff5a6e6374b99eb5a6b1200a50",
+    "cpp_merge_ranges": "36d74d1b7deb4f012f786a856b212568eb9543d204743ee04823fb93f0c28ffa",
+    "cpp_quota": "2d76942daadc94b2b29741a8a05c3716df0a4dc360b91ae7c42bf30c203ecbe9",
+    "python_parse_port": "fc0fd510f53a0449917ec8e86244835e378953723054d00430f72d95be159652",
+    "python_unique_by": "53fcc496eb36032adc1d3dfd455c5ad2192621ea6fe7617f3f909a62a27b06e0"
+  },
+  "daily_config_unchanged": true
+}

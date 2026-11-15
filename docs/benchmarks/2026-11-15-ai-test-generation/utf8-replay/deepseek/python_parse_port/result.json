@@ -1,0 +1,147 @@
+{
+  "arm": "deepseek",
+  "case": "python_parse_port",
+  "language": "python",
+  "primary_generation_ms": 4026,
+  "baseline": {
+    "success": true,
+    "stage": "Test",
+    "steps": [
+      {
+        "argv": [
+          "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "-rA",
+          "--color=no",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_parse_port\\tests\\test_helix_parse_port_10f1c7eb1beab6f1.py"
+        ],
+        "stage": "Test",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 248,
+        "log": "..........                                                               [100%]\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_普通十进制端口\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_去除首尾空白\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_接受前导零\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_边界值\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_超出范围\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_空字符串\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_仅空白\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_带符号\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非十进制字符\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非ASCII数字\r\n10 passed in 0.01s\r\n"
+      }
+    ],
+    "elapsed_ms": 248
+  },
+  "mutants": [
+    {
+      "id": "upper_endpoint",
+      "meaning": "错误拒绝65535",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+              "-m",
+              "pytest",
+              "-q",
+              "-rA",
+              "--color=no",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_parse_port\\tests\\test_helix_parse_port_10f1c7eb1beab6f1.py"
+            ],
+            "stage": "Test",
+            "exit_code": 1,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 288,
+            "log": "..FF......                                                               [100%]\r\n================================== FAILURES ===================================\r\n____________________________ test_parse_port_接受前导零 ____________________________\r\n\r\n    def test_parse_port_接受前导零():\r\n        \"\"\"前导零应被接受\"\"\"\r\n        assert parse_port(\"0080\") == 80\r\n        assert parse_port(\"00000001\") == 1\r\n>       assert parse_port(\"065535\") == 65535\r\n               ^^^^^^^^^^^^^^^^^^^^\r\n\r\ntests\\test_helix_parse_port_10f1c7eb1beab6f1.py:25: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\ntext = '065535'\r\n\r\n    def parse_port(text: str) -> int:\r\n        \"\"\"Strip whitespace, then parse ASCII decimal digits in range 1..65535.\r\n    \r\n        Leading zeros are accepted. Empty, signed, non-ASCII/nondecimal and\r\n        out-of-range values raise ValueError. No network operation is performed.\r\n        \"\"\"\r\n        value = text.strip()\r\n        if not value or not value.isascii() or not value.isdecimal():\r\n            raise ValueError('expected ASCII digits')\r\n        port = int(value)\r\n        if not 1 <= port < 65535:\r\n>           raise ValueError('port out of range')\r\nE           ValueError: port out of range\r\n\r\nsubject.py:12: ValueError\r\n_____________________________ test_parse_port_边界值 _____________________________\r\n\r\n    def test_parse_port_边界值():\r\n        \"\"\"1 与 65535 为合法边界\"\"\"\r\n        assert parse_port(\"1\") == 1\r\n>       assert parse_port(\"65535\") == 65535\r\n               ^^^^^^^^^^^^^^^^^^^\r\n\r\ntests\\test_helix_parse_port_10f1c7eb1beab6f1.py:31: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\ntext = '65535'\r\n\r\n    def parse_port(text: str) -> int:\r\n        \"\"\"Strip whitespace, then parse ASCII decimal digits in range 1..65535.\r\n    \r\n        Leading zeros are accepted. Empty, signed, non-ASCII/nondecimal and\r\n        out-of-range values raise ValueError. No network operation is performed.\r\n        \"\"\"\r\n        value = text.strip()\r\n        if not value or not value.isascii() or not value.isdecimal():\r\n            raise ValueError('expected ASCII digits')\r\n        port = int(value)\r\n        if not 1 <= port < 65535:\r\n>           raise ValueError('port out of range')\r\nE           ValueError: port out of range\r\n\r\nsubject.py:12: ValueError\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_普通十进制端口\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_去除首尾空白\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_超出范围\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_空字符串\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_仅空白\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_带符号\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非十进制字符\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非ASCII数字\r\nFAILED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_接受前导零\r\nFAILED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_边界值\r\n2 failed, 8 passed in 0.06s\r\n"
+          }
+        ],
+        "elapsed_ms": 288
+      }
+    },
+    {
+      "id": "ascii_only",
+      "meaning": "错误接受全角等Unicode数字",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+              "-m",
+              "pytest",
+              "-q",
+              "-rA",
+              "--color=no",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_parse_port\\tests\\test_helix_parse_port_10f1c7eb1beab6f1.py"
+            ],
+            "stage": "Test",
+            "exit_code": 1,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 275,
+            "log": ".........F                                                               [100%]\r\n================================== FAILURES ===================================\r\n__________________________ test_parse_port_非ASCII数字 ___________________________\r\n\r\n    def test_parse_port_非ASCII数字():\r\n        \"\"\"非 ASCII 数字字符应抛 ValueError\"\"\"\r\n>       with pytest.raises(ValueError):\r\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\r\nE       Failed: DID NOT RAISE ValueError\r\n\r\ntests\\test_helix_parse_port_10f1c7eb1beab6f1.py:78: Failed\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_普通十进制端口\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_去除首尾空白\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_接受前导零\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_边界值\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_超出范围\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_空字符串\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_仅空白\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_带符号\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非十进制字符\r\nFAILED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非ASCII数字\r\n1 failed, 9 passed in 0.06s\r\n"
+          }
+        ],
+        "elapsed_ms": 275
+      }
+    },
+    {
+      "id": "whitespace",
+      "meaning": "不再接受首尾空白",
+      "killed": true,
+      "run": {
+        "success": false,
+        "stage": "Test",
+        "steps": [
+          {
+            "argv": [
+              "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+              "-m",
+              "pytest",
+              "-q",
+              "-rA",
+              "--color=no",
+              "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_parse_port\\tests\\test_helix_parse_port_10f1c7eb1beab6f1.py"
+            ],
+            "stage": "Test",
+            "exit_code": 1,
+            "success": false,
+            "timeout": false,
+            "elapsed_ms": 283,
+            "log": ".F........                                                               [100%]\r\n================================== FAILURES ===================================\r\n___________________________ test_parse_port_去除首尾空白 ____________________________\r\n\r\n    def test_parse_port_去除首尾空白():\r\n        \"\"\"首尾空白应被去除后解析\"\"\"\r\n>       assert parse_port(\"  80  \") == 80\r\n               ^^^^^^^^^^^^^^^^^^^^\r\n\r\ntests\\test_helix_parse_port_10f1c7eb1beab6f1.py:16: \r\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\r\n\r\ntext = '  80  '\r\n\r\n    def parse_port(text: str) -> int:\r\n        \"\"\"Strip whitespace, then parse ASCII decimal digits in range 1..65535.\r\n    \r\n        Leading zeros are accepted. Empty, signed, non-ASCII/nondecimal and\r\n        out-of-range values raise ValueError. No network operation is performed.\r\n        \"\"\"\r\n        value = text\r\n        if not value or not value.isascii() or not value.isdecimal():\r\n>           raise ValueError('expected ASCII digits')\r\nE           ValueError: expected ASCII digits\r\n\r\nsubject.py:9: ValueError\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_普通十进制端口\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_接受前导零\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_边界值\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_超出范围\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_空字符串\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_仅空白\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_带符号\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非十进制字符\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非ASCII数字\r\nFAILED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_去除首尾空白\r\n1 failed, 9 passed in 0.06s\r\n"
+          }
+        ],
+        "elapsed_ms": 283
+      }
+    }
+  ],
+  "unchanged_test_sha256": "82942d19cceacdb036c1114d5b4e190a4a9cdf6c56d02abb43077d12d37dda86",
+  "generation_error": null,
+  "primary_accepted": true,
+  "validation_bypassed": false,
+  "restored": {
+    "success": true,
+    "stage": "Test",
+    "steps": [
+      {
+        "argv": [
+          "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "-rA",
+          "--color=no",
+          "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-replay\\deepseek\\python_parse_port\\tests\\test_helix_parse_port_10f1c7eb1beab6f1.py"
+        ],
+        "stage": "Test",
+        "exit_code": 0,
+        "success": true,
+        "timeout": false,
+        "elapsed_ms": 233,
+        "log": "..........                                                               [100%]\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_普通十进制端口\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_去除首尾空白\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_接受前导零\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_边界值\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_超出范围\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_空字符串\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_仅空白\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_带符号\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非十进制字符\r\nPASSED tests/test_helix_parse_port_10f1c7eb1beab6f1.py::test_parse_port_非ASCII数字\r\n10 passed in 0.01s\r\n"
+      }
+    ],
+    "elapsed_ms": 233
+  }
+}

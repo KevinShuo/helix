@@ -26,7 +26,7 @@ fn response(status: &str, code: Value) -> Value {
 #[test]
 fn ai_merge_request_keeps_complete_required_inputs_and_intent() {
     let target = target();
-    let model = AiCompletionConfig {
+    let model = AiProviderConfig {
         context_size: 32768,
         ..Default::default()
     };
@@ -57,7 +57,7 @@ fn ai_merge_request_keeps_complete_required_inputs_and_intent() {
 fn ai_merge_identifies_base_seed_as_draft_instead_of_user_selection() {
     let mut target = target();
     target.result = target.base.clone();
-    let model = AiCompletionConfig {
+    let model = AiProviderConfig {
         context_size: 8192,
         ..Default::default()
     };
@@ -98,7 +98,7 @@ fn ai_merge_whole_block_delete_against_edit_requires_user_intent() {
 fn ai_merge_budget_drops_optional_context_but_never_truncates_a_conflict() {
     let mut target = target();
     target.context = vec!["optional".repeat(5000)];
-    let model = AiCompletionConfig {
+    let model = AiProviderConfig {
         context_size: 8192,
         ..Default::default()
     };
@@ -188,4 +188,161 @@ fn ai_merge_response_rejects_markers_controls_and_excessive_code() {
         );
     }
     assert!(parse(&response("resolved", json!("x".repeat(65537))), 2).is_err());
+}
+
+#[test]
+fn ai_merge_thinking_reserves_reasoning_and_final_json_in_the_context() {
+    let mut model = AiProviderConfig {
+        kind: helix_view::ai::AiProviderType::LlamaCpp,
+        context_size: 8192,
+        thinking: true,
+        thinking_budget: Some(2048),
+        ..Default::default()
+    };
+    let config = AiMergeConfig {
+        enabled: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        request(&model, &config, &target()).unwrap()["max_tokens"],
+        3584
+    );
+    model.context_size = 4096;
+    assert!(request(&model, &config, &target()).is_err());
+}
+
+#[tokio::test]
+async fn ai_merge_managed_27b_restores_completion_9b_after_success_and_invalid_response() {
+    use crate::handlers::ai_completion::server::{
+        lease_tests::{models, reachable, ready},
+        LocalServers,
+    };
+    let _messages = helix_event::status::setup();
+    let dir = tempfile::tempdir().unwrap();
+    let (baseline, temporary) = models(dir.path(), 0);
+    let mut pool = LocalServers::new(&[baseline.clone(), temporary.clone()]);
+    ready(&baseline).await;
+    let config = AiMergeConfig {
+        enabled: true,
+        max_tokens: 128,
+        ..Default::default()
+    };
+    let model_path = temporary.model_path.as_ref().unwrap();
+    for valid in [true, false] {
+        let reply = if valid {
+            response("resolved", json!("merged();\n"))
+        } else {
+            json!({})
+        };
+        std::fs::write(
+            model_path.with_extension("response.json"),
+            reply.to_string(),
+        )
+        .unwrap();
+        let result = generate(&temporary, &config, &target()).await;
+        if valid {
+            assert_eq!(result.unwrap().code.as_deref(), Some("merged();\n"));
+        } else {
+            assert!(result.is_err());
+        }
+        assert!(
+            model_path.with_extension("requested").exists(),
+            "Merge must use the managed 27B server"
+        );
+        assert!(!reachable(&temporary), "27B must unload after the request");
+        ready(&baseline).await;
+    }
+    let starts = std::fs::read_to_string(
+        baseline
+            .model_path
+            .as_ref()
+            .unwrap()
+            .with_extension("started"),
+    )
+    .unwrap();
+    assert_eq!(
+        starts.lines().count(),
+        3,
+        "9B must restart after each Merge request"
+    );
+    pool.stop().await;
+}
+
+#[tokio::test]
+async fn ai_merge_cancelled_27b_inference_restores_completion_9b() {
+    use crate::handlers::ai_completion::server::{
+        lease_tests::{models, reachable, ready},
+        LocalServers,
+    };
+    let _messages = helix_event::status::setup();
+    let dir = tempfile::tempdir().unwrap();
+    let (baseline, temporary) = models(dir.path(), 0);
+    let model_path = temporary.model_path.as_ref().unwrap();
+    use std::io::Write;
+    writeln!(
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(model_path)
+            .unwrap(),
+        "response-delay=3000"
+    )
+    .unwrap();
+    std::fs::write(
+        model_path.with_extension("response.json"),
+        response("resolved", json!("late();\n")).to_string(),
+    )
+    .unwrap();
+    let mut pool = LocalServers::new(&[baseline.clone(), temporary.clone()]);
+    ready(&baseline).await;
+    let model = temporary.clone();
+    let task = tokio::spawn(async move {
+        generate(
+            &model,
+            &AiMergeConfig {
+                enabled: true,
+                max_tokens: 128,
+                ..Default::default()
+            },
+            &target(),
+        )
+        .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while !model_path.with_extension("requested").exists() {
+            assert!(
+                !task.is_finished(),
+                "Merge must start the managed 27B request"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(!reachable(&baseline), "9B must unload while Merge uses 27B");
+    task.abort();
+    let _ = task.await;
+    ready(&baseline).await;
+    assert!(!reachable(&temporary));
+    pool.stop().await;
+}
+
+#[tokio::test]
+async fn ai_merge_local_delete_modify_refusal_does_not_acquire_a_model_lease() {
+    let model = AiProviderConfig {
+        on_demand: true,
+        context_size: 8192,
+        ..Default::default()
+    };
+    let config = AiMergeConfig {
+        enabled: true,
+        ..Default::default()
+    };
+    let mut target = target();
+    target.current.clear();
+    target.intent.clear();
+    assert!(generate(&model, &config, &target)
+        .await
+        .unwrap()
+        .code
+        .is_none());
 }

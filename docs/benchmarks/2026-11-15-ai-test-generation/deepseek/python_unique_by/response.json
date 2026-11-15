@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"import pytest\\n\\nfrom subject import unique_by\\n\\n\\ndef test_保留每个键首次出现的元素并保持顺序():\\n    \\\"\\\"\\\"正常情况：按 key 去重，保留首次出现顺序\\\"\\\"\\\"\\n    items = [\\\"apple\\\", \\\"banana\\\", \\\"avocado\\\", \\\"blueberry\\\", \\\"cherry\\\"]\\n    result = unique_by(items, key=lambda s: s[0])\\n    assert result == [\\\"apple\\\", \\\"banana\\\", \\\"cherry\\\"]\\n\\n\\ndef test_空输入返回空列表():\\n    \\\"\\\"\\\"边界情况：空序列返回空列表\\\"\\\"\\\"\\n    assert unique_by([], key=lambda x: x) == []\\n\\n\\ndef test_所有键相同只保留第一个():\\n    \\\"\\\"\\\"边界情况：所有元素键相同，只保留第一个\\\"\\\"\\\"\\n    items = [1, 2, 3, 4]\\n    result = unique_by(items, key=lambda x: 0)\\n    assert result == [1]\\n\\n\\ndef test_所有键不同全部保留():\\n    \\\"\\\"\\\"边界情况：所有键不同，全部保留\\\"\\\"\\\"\\n    items = [1, 2, 3]\\n    result = unique_by(items, key=lambda x: x)\\n    assert result == [1, 2, 3]\\n\\n\\ndef test_返回类型始终为列表():\\n    \\\"\\\"\\\"返回值类型为 list\\\"\\\"\\\"\\n    result = unique_by((1, 2, 2, 3), key=lambda x: x)\\n    assert isinstance(result, list)\\n    assert result == [1, 2, 3]\\n\\n\\ndef test_不修改输入序列():\\n    \\\"\\\"\\\"不修改输入序列\\\"\\\"\\\"\\n    items = [1, 2, 2, 3]\\n    original = list(items)\\n    unique_by(items, key=lambda x: x)\\n    assert items == original\\n\\n\\ndef test_key对每个元素恰好调用一次():\\n    \\\"\\\"\\\"key 对每个元素（含重复）恰好调用一次\\\"\\\"\\\"\\n    calls = []\\n\\n    def key(x):\\n        calls.append(x)\\n        return x\\n\\n    items = [1, 2, 2, 3, 3, 3]\\n    unique_by(items, key=key)\\n    assert calls == items\\n\\n\\ndef test_key异常向上传播():\\n    \\\"\\\"\\\"key 抛出的异常向上传播\\\"\\\"\\\"\\n    def key(x):\\n        raise ValueError(\\\"boom\\\")\\n\\n    with pytest.raises(ValueError, match=\\\"boom\\\"):\\n        unique_by([1, 2], key=key)\\n\\n\\ndef test_使用元组作为键():\\n    \\\"\\\"\\\"键为元组时正常去重\\\"\\\"\\\"\\n    items = [(1, \\\"a\\\"), (1, \\\"b\\\"), (2, \\\"c\\\")]\\n    result = unique_by(items, key=lambda t: t[0])\\n    assert result == [(1, \\\"a\\\"), (2, \\\"c\\\")]\\n\"}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794706657,
+  "id": "c1435059-241c-49aa-a125-10003832c2ac",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 710,
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 624,
+    "prompt_tokens": 624,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1334
+  }
+}

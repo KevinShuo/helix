@@ -26,7 +26,7 @@ use serde::de::{self, Deserialize, Deserializer};
 use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::future::Future;
 use std::io;
@@ -168,6 +168,8 @@ pub struct Document {
     pub inlay_hints_oudated: bool,
 
     path: Option<PathBuf>,
+    /// Internally generated output, protected from user text transactions.
+    readonly_output: Option<&'static str>,
     relative_path: OnceLock<Option<PathBuf>>,
     /// Lazily-computed workspace root for this document (the ancestor that contains a `.git` /
     /// `.svn` / `.jj` / `.helix`). Avoids per-call `find_workspace_in` ancestor walks for hot
@@ -212,6 +214,7 @@ pub struct Document {
     pub(crate) modified_since_accessed: bool,
 
     pub(crate) diagnostics: Vec<Diagnostic>,
+    pub(crate) diagnostic_versions: BTreeMap<DiagnosticProvider, i32>,
     pub(crate) language_servers: HashMap<LanguageServerName, Arc<Client>>,
 
     diff_handle: Option<DiffHandle>,
@@ -747,6 +750,7 @@ impl Document {
             merge: None,
             active_snippet: None,
             path: None,
+            readonly_output: None,
             relative_path: OnceLock::new(),
             workspace_root: OnceLock::new(),
             encoding,
@@ -768,6 +772,7 @@ impl Document {
             changes,
             old_state,
             diagnostics: Vec::new(),
+            diagnostic_versions: BTreeMap::new(),
             version: 0,
             history: Cell::new(History::default()),
             savepoints: Vec::new(),
@@ -1537,7 +1542,8 @@ impl Document {
     ) -> bool {
         use helix_core::Assoc;
 
-        if self.merge.as_ref().is_some_and(|m| m.text_is_locked())
+        if (self.readonly_output.is_some()
+            || self.merge.as_ref().is_some_and(|m| m.text_is_locked()))
             && !transaction.changes().is_empty()
         {
             return false;
@@ -1745,7 +1751,8 @@ impl Document {
         view_id: ViewId,
         emit_lsp_notification: bool,
     ) -> bool {
-        if self.merge.as_ref().is_some_and(|m| m.text_is_locked())
+        if (self.readonly_output.is_some()
+            || self.merge.as_ref().is_some_and(|m| m.text_is_locked()))
             && !transaction.changes().is_empty()
         {
             return false;
@@ -1772,6 +1779,27 @@ impl Document {
     /// Apply a [`Transaction`] to the [`Document`] to change its text.
     pub fn apply(&mut self, transaction: &Transaction, view_id: ViewId) -> bool {
         self.apply_inner(transaction, view_id, true)
+    }
+
+    /// Mark a scratch document as persistent, named, read-only tool output.
+    pub fn set_readonly_output(&mut self, name: &'static str) {
+        self.readonly_output = Some(name);
+        self.readonly = true;
+    }
+
+    pub fn is_readonly_output(&self) -> bool {
+        self.readonly_output.is_some()
+    }
+
+    /// Internal output updates bypass the user transaction lock, but otherwise
+    /// follow the same position mapping and change notification path.
+    pub fn update_readonly_output(&mut self, transaction: &Transaction, view_id: ViewId) -> bool {
+        let Some(name) = self.readonly_output.take() else {
+            return false;
+        };
+        let applied = self.apply_inner(transaction, view_id, false);
+        self.readonly_output = Some(name);
+        applied
     }
 
     /// Apply a [`Transaction`] to the [`Document`] to change its text
@@ -2256,6 +2284,9 @@ impl Document {
     }
 
     pub fn display_name(&self) -> Cow<'_, str> {
+        if let Some(name) = self.readonly_output {
+            return name.into();
+        }
         if let Some(merge) = &self.merge {
             return format!("[merge result] {}", merge.data.file.path.display()).into();
         }
@@ -2430,6 +2461,9 @@ impl Document {
     pub fn clear_diagnostics_for_language_server(&mut self, id: LanguageServerId) {
         self.diagnostics
             .retain(|d| d.provider.language_server_id() != Some(id));
+        self.diagnostic_versions
+            .retain(|provider, _| provider.language_server_id() != Some(id));
+        self.previous_diagnostic_ids.remove(&id);
     }
 
     /// Get the document's auto pairs. If the document has a recognized

@@ -87,6 +87,7 @@ pub(super) fn should_request(config: &AiCompletionConfig, context: &CompletionCo
 
 pub(super) async fn complete(
     config: &AiCompletionConfig,
+    model: &helix_view::ai::AiProviderConfig,
     context: &CompletionContext,
 ) -> anyhow::Result<Option<String>> {
     let predicting = config.predict_next && super::prediction::eligible(context);
@@ -160,15 +161,13 @@ pub(super) async fn complete(
     }
     messages.push(json!({"role":"user","content":prompt}));
     let body = json!({
-        "model": config.model,
+        "model": model.model,
         "messages": messages,
         "temperature": if config.conservative || predicting { 0.0 } else { 0.1 },
         "max_tokens": if predicting { config.prediction_tokens.clamp(1, 256) } else { config.max_tokens.clamp(1, if config.conservative { 64 } else { 512 }) },
-        "stream": false,
-        "enable_thinking": false,
-        "chat_template_kwargs": {"enable_thinking": false}
+        "stream": false
     });
-    let response = crate::handlers::ai::post(config, &body, config.timeout_ms).await?;
+    let response = crate::handlers::ai::post(model, &body, config.timeout_ms).await?;
     let choice = &response["choices"][0];
     if (predicting && choice["finish_reason"].as_str() != Some("stop"))
         || (config.conservative
@@ -490,6 +489,17 @@ fn clean_completion(content: &str, suffix: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    async fn complete(
+        config: &AiCompletionConfig,
+        context: &CompletionContext,
+    ) -> anyhow::Result<Option<String>> {
+        super::complete(
+            config,
+            &helix_view::ai::AiProviderConfig::from_legacy(config),
+            context,
+        )
+        .await
+    }
     use serde_json::json;
     use serde_json::Value;
     use tokio::{

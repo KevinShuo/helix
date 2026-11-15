@@ -1,13 +1,13 @@
 use super::target::Target;
 use anyhow::{ensure, Context, Result};
 use helix_view::{
-    ai_completion::AiCompletionConfig,
+    ai::AiProviderConfig,
     ai_doc::{AiDocConfig, DocLanguage},
 };
 use serde_json::{json, Value};
 
 pub(crate) fn request(
-    model: &AiCompletionConfig,
+    model: &AiProviderConfig,
     config: &AiDocConfig,
     target: &Target,
 ) -> Result<Value> {
@@ -23,7 +23,7 @@ pub(crate) fn request(
         "Target metadata: {metadata}\n<TARGET>\n{}\n</TARGET>",
         target.source
     );
-    let max_tokens = config.max_tokens.clamp(128, 4096);
+    let max_tokens = config.max_tokens.clamp(128, 4096) + model.reasoning_tokens();
     // A byte upper bound is deliberately conservative for byte-fallback model
     // vocabularies; reserve extra space for chat template/control tokens.
     let used = system.len() + prompt.len() + max_tokens as usize + 256;
@@ -43,31 +43,34 @@ pub(crate) fn request(
     Ok(
         json!({"model":model.model,"messages":[{"role":"system","content":system},{"role":"user","content":prompt}],
         "max_tokens":max_tokens,"temperature":0.0,"stream":false,"response_format":{"type":"json_object"},
-        "enable_thinking":false,"chat_template_kwargs":{"enable_thinking":false}}),
+        }),
     )
 }
 
 pub(crate) async fn generate(
-    model: &AiCompletionConfig,
+    model: &AiProviderConfig,
     config: &AiDocConfig,
     target: &Target,
 ) -> Result<String> {
     let body = request(model, config, target)?;
-    crate::handlers::ai_completion::server::wait_ready(model).await?;
-    let response = crate::handlers::ai::post(model, &body, config.timeout_ms).await?;
-    let choice = &response["choices"][0];
-    ensure!(
-        choice["finish_reason"].as_str() == Some("stop"),
-        "模型输出未完整结束，请重新生成或增加 max-tokens"
-    );
-    let message = &choice["message"];
-    ensure!(
-        message["tool_calls"].as_array().is_none_or(Vec::is_empty)
-            && message["function_call"].is_null(),
-        "模型返回了不支持的工具调用"
-    );
-    let content = message["content"].as_str().context("模型未返回文档内容")?;
-    super::format::render(target, content)
+    crate::handlers::ai_completion::server::with_model(model, async {
+        crate::handlers::ai_completion::server::wait_ready(model).await?;
+        let response = crate::handlers::ai::post(model, &body, config.timeout_ms).await?;
+        let choice = &response["choices"][0];
+        ensure!(
+            choice["finish_reason"].as_str() == Some("stop"),
+            "模型输出未完整结束，请重新生成或增加 max-tokens"
+        );
+        let message = &choice["message"];
+        ensure!(
+            message["tool_calls"].as_array().is_none_or(Vec::is_empty)
+                && message["function_call"].is_null(),
+            "模型返回了不支持的工具调用"
+        );
+        let content = message["content"].as_str().context("模型未返回文档内容")?;
+        super::format::render(target, content)
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -76,17 +79,38 @@ mod tests {
     use crate::handlers::ai_doc::target::tests::find;
 
     #[test]
+    fn ai_doc_thinking_reserves_final_json_and_checks_combined_context() {
+        let target = find("python", "def f(a):\n    return a\n", "return").unwrap();
+        let mut model = AiProviderConfig::from_legacy(
+            &helix_view::ai_completion::AiCompletionConfig::default(),
+        );
+        model.thinking = true;
+        model.thinking_budget = Some(2048);
+        model.context_size = 16384;
+        let config = AiDocConfig {
+            max_tokens: 1024,
+            ..Default::default()
+        };
+        let body = request(&model, &config, &target).unwrap();
+        assert_eq!(body["max_tokens"], 3072);
+        model.context_size = 4096;
+        assert!(request(&model, &config, &target).is_err());
+    }
+
+    #[test]
     fn ai_doc_request_contains_complete_function_and_independent_limits() {
         let target = find("python", "def f(a):\n    return a + 1\n", "return").unwrap();
         let request = request(
-            &AiCompletionConfig::default(),
+            &AiProviderConfig::from_legacy(
+                &helix_view::ai_completion::AiCompletionConfig::default(),
+            ),
             &AiDocConfig::default(),
             &target,
         )
         .unwrap();
         assert_eq!(request["max_tokens"], 768);
         assert_eq!(request["stream"], false);
-        assert_eq!(request["chat_template_kwargs"]["enable_thinking"], false);
+        assert!(request.get("chat_template_kwargs").is_none());
         assert!(request["messages"][0]["content"]
             .as_str()
             .unwrap()
@@ -102,7 +126,9 @@ mod tests {
         let mut target = find("c", "int f(void) { return 1; }", "return").unwrap();
         target.source = "x".repeat(10000);
         assert!(request(
-            &AiCompletionConfig::default(),
+            &AiProviderConfig::from_legacy(
+                &helix_view::ai_completion::AiCompletionConfig::default()
+            ),
             &AiDocConfig::default(),
             &target
         )
@@ -110,7 +136,9 @@ mod tests {
         target.source = "int f(void) { return 1; }".into();
         target.supporting = "context".repeat(4000);
         let body = request(
-            &AiCompletionConfig::default(),
+            &AiProviderConfig::from_legacy(
+                &helix_view::ai_completion::AiCompletionConfig::default(),
+            ),
             &AiDocConfig::default(),
             &target,
         )
@@ -122,10 +150,9 @@ mod tests {
     #[ignore = "uses an explicitly configured running local model"]
     async fn ai_doc_live_model_six_functions() {
         let endpoint = std::env::var("HELIX_AI_DOC_LIVE_ENDPOINT").expect("set local endpoint");
-        let model = AiCompletionConfig {
+        let model = AiProviderConfig {
             endpoint,
             model: std::env::var("HELIX_AI_DOC_LIVE_MODEL").unwrap(),
-            enabled: true,
             ..Default::default()
         };
         let config = AiDocConfig {
@@ -151,3 +178,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod evaluation;

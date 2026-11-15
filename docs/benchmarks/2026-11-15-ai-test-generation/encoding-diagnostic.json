@@ -1,0 +1,48 @@
+[
+  {
+    "argv": [
+      "cmake",
+      "-S",
+      "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\projects\\27b-thinking\\c_parse_u16",
+      "-B",
+      "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-diagnostic\\c_parse_u16",
+      "-DBUILD_TESTING=ON",
+      "-DCMAKE_CXX_FLAGS=/utf-8",
+      "-DCMAKE_TOOLCHAIN_FILE=C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\scripts\\buildsystems\\vcpkg.cmake"
+    ],
+    "exit_code": 0,
+    "elapsed_ms": 3379,
+    "stdout": "-- Building for: Visual Studio 18 2026\n-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26300.\n-- The C compiler identification is MSVC 19.50.35728.0\n-- The CXX compiler identification is MSVC 19.50.35728.0\n-- Detecting C compiler ABI info\n-- Detecting C compiler ABI info - done\n-- Check for working C compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting C compile features\n-- Detecting C compile features - done\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Configuring done (3.2s)\n-- Generating done (0.1s)\n-- Build files have been written to: I:/DEV/helix/.superpowers/ai-test-eval/utf8-diagnostic/c_parse_u16\n",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "cmake",
+      "--build",
+      "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-diagnostic\\c_parse_u16",
+      "--config",
+      "Debug",
+      "--target",
+      "helix_ai_parse_u16_0bdff2059b49c097"
+    ],
+    "exit_code": 0,
+    "elapsed_ms": 1530,
+    "stdout": "适用于 .NET Framework MSBuild 版本 18.4.0+6e61e96ac\n\n  1>Checking Build System\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/projects/27b-thinking/c_parse_u16/CMakeLists.txt\n  subject.c\n  subject.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-diagnostic\\c_parse_u16\\Debug\\subject.lib\n  Building Custom Rule I:/DEV/helix/.superpowers/ai-test-eval/projects/27b-thinking/c_parse_u16/tests/helix-ai/parse_u16_0bdff2059b49c097/CMakeLists.txt\n  parse_u16_test.cpp\nC:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9): warning C4530: 使用了 C++ 异常处理程序，但未启用展开语义。请指定 /EHsc [I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-diagnostic\\c_parse_u16\\tests\\helix-ai\\parse_u16_0bdff2059b49c097\\helix_ai_parse_u16_0bdff2059b49c097.vcxproj]\n  (编译源文件“../../../../../projects/27b-thinking/c_parse_u16/tests/helix-ai/parse_u16_0bdff2059b49c097/parse_u16_test.cpp”)\n      C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include\\__msvc_ostream.hpp(781,9):\n      模板实例化上下文(最早的实例化上下文)为\n          C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\include\\gtest\\gtest-message.h(118,10):\n          查看对正在编译的函数 模板 实例化“std::basic_ostream<char,std::char_traits<char>> &std::operator <<<std::char_traits<char>>(std::basic_ostream<char,std::char_traits<char>> &,const char *)”的引用\n  \n  helix_ai_parse_u16_0bdff2059b49c097.vcxproj -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-diagnostic\\c_parse_u16\\tests\\helix-ai\\parse_u16_0bdff2059b49c097\\Debug\\helix_ai_parse_u16_0bdff2059b49c097.exe\n  C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\debug\\bin\\gtest_main.dll -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-diagnostic\\c_parse_u16\\tests\\helix-ai\\parse_u16_0bdff2059b49c097\\Debug\\gtest_main.dll done\n  C:\\Users\\wangshuo\\scoop\\apps\\vcpkg\\current\\installed\\x64-windows\\debug\\bin\\gtest.dll -> I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-diagnostic\\c_parse_u16\\tests\\helix-ai\\parse_u16_0bdff2059b49c097\\Debug\\gtest.dll done\n",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "ctest",
+      "--test-dir",
+      "I:\\DEV\\helix\\.superpowers\\ai-test-eval\\utf8-diagnostic\\c_parse_u16",
+      "-C",
+      "Debug",
+      "--output-on-failure",
+      "--no-tests=error"
+    ],
+    "exit_code": 0,
+    "elapsed_ms": 732,
+    "stdout": "Test project I:/DEV/helix/.superpowers/ai-test-eval/utf8-diagnostic/c_parse_u16\n      Start  1: HelixAi0BDFF2059B49C097.ParseZero\n 1/21 Test  #1: HelixAi0BDFF2059B49C097.ParseZero ................   Passed    0.01 sec\n      Start  2: HelixAi0BDFF2059B49C097.ParseMaxValue\n 2/21 Test  #2: HelixAi0BDFF2059B49C097.ParseMaxValue ............   Passed    0.01 sec\n      Start  3: HelixAi0BDFF2059B49C097.ParseMiddleValue\n 3/21 Test  #3: HelixAi0BDFF2059B49C097.ParseMiddleValue .........   Passed    0.01 sec\n      Start  4: HelixAi0BDFF2059B49C097.ParseLeadingZeros\n 4/21 Test  #4: HelixAi0BDFF2059B49C097.ParseLeadingZeros ........   Passed    0.01 sec\n      Start  5: HelixAi0BDFF2059B49C097.ParseAllZeros\n 5/21 Test  #5: HelixAi0BDFF2059B49C097.ParseAllZeros ............   Passed    0.01 sec\n      Start  6: HelixAi0BDFF2059B49C097.ParseSingleDigit\n 6/21 Test  #6: HelixAi0BDFF2059B49C097.ParseSingleDigit .........   Passed    0.01 sec\n      Start  7: HelixAi0BDFF2059B49C097.BoundaryAt65535\n 7/21 Test  #7: HelixAi0BDFF2059B49C097.BoundaryAt65535 ..........   Passed    0.01 sec\n      Start  8: HelixAi0BDFF2059B49C097.Overflow65536\n 8/21 Test  #8: HelixAi0BDFF2059B49C097.Overflow65536 ............   Passed    0.01 sec\n      Start  9: HelixAi0BDFF2059B49C097.Overflow99999\n 9/21 Test  #9: HelixAi0BDFF2059B49C097.Overflow99999 ............   Passed    0.01 sec\n      Start 10: HelixAi0BDFF2059B49C097.NullText\n10/21 Test #10: HelixAi0BDFF2059B49C097.NullText .................   Passed    0.01 sec\n      Start 11: HelixAi0BDFF2059B49C097.NullOut\n11/21 Test #11: HelixAi0BDFF2059B49C097.NullOut ..................   Passed    0.01 sec\n      Start 12: HelixAi0BDFF2059B49C097.EmptyString\n12/21 Test #12: HelixAi0BDFF2059B49C097.EmptyString ..............   Passed    0.11 sec\n      Start 13: HelixAi0BDFF2059B49C097.NegativeSign\n13/21 Test #13: HelixAi0BDFF2059B49C097.NegativeSign .............   Passed    0.11 sec\n      Start 14: HelixAi0BDFF2059B49C097.PositiveSign\n14/21 Test #14: HelixAi0BDFF2059B49C097.PositiveSign .............   Passed    0.01 sec\n      Start 15: HelixAi0BDFF2059B49C097.LeadingSpace\n15/21 Test #15: HelixAi0BDFF2059B49C097.LeadingSpace .............   Passed    0.01 sec\n      Start 16: HelixAi0BDFF2059B49C097.TrailingSpace\n16/21 Test #16: HelixAi0BDFF2059B49C097.TrailingSpace ............   Passed    0.01 sec\n      Start 17: HelixAi0BDFF2059B49C097.ContainsLetter\n17/21 Test #17: HelixAi0BDFF2059B49C097.ContainsLetter ...........   Passed    0.01 sec\n      Start 18: HelixAi0BDFF2059B49C097.StartsWithLetter\n18/21 Test #18: HelixAi0BDFF2059B49C097.StartsWithLetter .........   Passed    0.11 sec\n      Start 19: HelixAi0BDFF2059B49C097.ContainsDot\n19/21 Test #19: HelixAi0BDFF2059B49C097.ContainsDot ..............   Passed    0.01 sec\n      Start 20: HelixAi0BDFF2059B49C097.OutUnchangedOnFailure\n20/21 Test #20: HelixAi0BDFF2059B49C097.OutUnchangedOnFailure ....   Passed    0.01 sec\n      Start 21: HelixAi0BDFF2059B49C097.LeadingZerosMultiDigit\n21/21 Test #21: HelixAi0BDFF2059B49C097.LeadingZerosMultiDigit ...   Passed    0.11 sec\n\n100% tests passed out of 21\n\nTotal Test time (real) =   0.65 sec\n",
+    "stderr": ""
+  }
+]

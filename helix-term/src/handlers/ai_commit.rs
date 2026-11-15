@@ -1,8 +1,8 @@
 //! Bounded, explicit commit assistance using the shared AI transport.
 use anyhow::{ensure, Context, Result};
 use helix_view::{
+    ai::AiProviderConfig,
     ai_commit::{AiCommitConfig, CommitLanguage},
-    ai_completion::AiCompletionConfig,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -37,12 +37,22 @@ const TYPES: &[&str] = &[
 ];
 
 pub(crate) async fn recommend(
-    model: &AiCompletionConfig,
+    model: &AiProviderConfig,
     config: &AiCommitConfig,
     files: &[AiFileInput],
     intent: &str,
 ) -> Result<Recommendation> {
     check_inputs(config, files)?;
+    super::ai_completion::server::with_model(model, recommend_inner(model, config, files, intent))
+        .await
+}
+
+async fn recommend_inner(
+    model: &AiProviderConfig,
+    config: &AiCommitConfig,
+    files: &[AiFileInput],
+    intent: &str,
+) -> Result<Recommendation> {
     let analysis = analyze(model, config, files, intent).await?;
     let system = instructions(config, "Recommend ONE coherent commit group. Already staged files are fixed; never select staged, partial or manual_review files. Return ONLY {\"selected\":[file IDs],\"reasons\":[{\"id\":file ID,\"reason\":brief explanation}]}. Give exactly one reason for every file, including excluded files. Use only supplied IDs, never paths or commands.");
     let body = request(model, config, &system, &analysis.data(files, intent))?;
@@ -97,7 +107,7 @@ pub(crate) async fn recommend(
 }
 
 pub(crate) async fn generate_message(
-    model: &AiCompletionConfig,
+    model: &AiProviderConfig,
     config: &AiCommitConfig,
     files: &[AiFileInput],
     intent: &str,
@@ -107,6 +117,19 @@ pub(crate) async fn generate_message(
         files.iter().all(|file| file.staged),
         "Commit message input must contain only actual staged diffs"
     );
+    super::ai_completion::server::with_model(
+        model,
+        generate_message_inner(model, config, files, intent),
+    )
+    .await
+}
+
+async fn generate_message_inner(
+    model: &AiProviderConfig,
+    config: &AiCommitConfig,
+    files: &[AiFileInput],
+    intent: &str,
+) -> Result<GeneratedMessage> {
     let analysis = analyze(model, config, files, intent).await?;
     let system = instructions(config, "Write a Conventional Commits message from staged summaries only. Return ONLY {\"type\":\"feat|fix|refactor|docs|test|perf|build|ci|chore|style|revert\",\"scope\":optional English identifier or null,\"subject\":single line,\"body\":optional plain text or null}. Use an allowed type, no breaking-change marker. Subject should fit 72 display columns. When manual_review is true coverage is incomplete: do not invent that file's changes. Never claim tests or checks ran/passed: no execution evidence is provided.");
     let body = request(model, config, &system, &analysis.data(files, intent))?;
@@ -267,25 +290,25 @@ fn instructions(config: &AiCommitConfig, task: &str) -> String {
 }
 
 fn request(
-    model: &AiCompletionConfig,
+    model: &AiProviderConfig,
     config: &AiCommitConfig,
     system: &str,
     data: &Value,
 ) -> Result<Value> {
     let prompt = serde_json::to_string(data)?;
     ensure!(prompt.len() <= config.max_input_bytes, "AI data exceeds max-input-bytes; narrow scope or increase the budget (no content was truncated)");
-    let tokens = config.max_tokens.min(4096);
+    let tokens = config.max_tokens.min(4096) + model.reasoning_tokens();
     // Byte-fallback vocabularies can use a token per UTF-8 byte. This is a
     // conservative bound, not an assertion that bytes measure exact tokens.
     let window = model.context_size.min(131_072) as usize;
     ensure!(system.len() + prompt.len() + tokens as usize + 256 <= window, "AI request exceeds model context-size; narrow scope or configure a larger context (no content was truncated)");
     Ok(
-        json!({"model": model.model, "messages":[{"role":"system","content":system},{"role":"user","content":prompt}], "max_tokens":tokens,"temperature":0.0,"stream":false,"response_format":{"type":"json_object"},"enable_thinking":false,"chat_template_kwargs":{"enable_thinking":false}}),
+        json!({"model": model.model, "messages":[{"role":"system","content":system},{"role":"user","content":prompt}], "max_tokens":tokens,"temperature":0.0,"stream":false,"response_format":{"type":"json_object"}}),
     )
 }
 
 async fn complete(
-    model: &AiCompletionConfig,
+    model: &AiProviderConfig,
     config: &AiCommitConfig,
     body: &Value,
 ) -> Result<String> {
@@ -349,7 +372,7 @@ fn content_eligible(file: &AiFileInput) -> bool {
 }
 
 async fn analyze(
-    model: &AiCompletionConfig,
+    model: &AiProviderConfig,
     config: &AiCommitConfig,
     files: &[AiFileInput],
     intent: &str,
@@ -463,3 +486,6 @@ async fn analyze(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod evaluation;

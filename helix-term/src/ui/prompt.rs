@@ -479,10 +479,10 @@ impl Prompt {
         if let Some(doc) = (self.doc_fn)(&self.line) {
             let mut text = ui::Text::new(doc.to_string());
 
-            let max_width = BASE_WIDTH * 3;
+            let max_width = (BASE_WIDTH * 3).min(area.width);
             let horizontal_padding = 2; // border + margin
             let vertical_padding = 1; // border only
-            let text_width = max_width - horizontal_padding * 2;
+            let text_width = max_width.saturating_sub(horizontal_padding * 2);
 
             let viewport = area;
 

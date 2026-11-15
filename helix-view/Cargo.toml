@@ -34,6 +34,7 @@ helix-vcs = { path = "../helix-vcs" }
 bitflags.workspace = true
 foldhash.workspace = true
 anyhow = "1"
+url = "2"
 termina = { workspace = true, optional = true }
 
 tempfile.workspace = true

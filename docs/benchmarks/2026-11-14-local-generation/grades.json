@@ -1,0 +1,402 @@
+{
+  "grader": "Codex assistant rubric review; not an independent human/blind evaluation",
+  "criteria_fixed_before_run": true,
+  "grades": {
+    "27b-direct/commit_select_fix": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "a4fef996ee3be12a4bb2ca0ab8e8c91a5bbe34c3dd73338f0652ede07a033a81"
+    },
+    "27b-direct/commit_select_tests": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "732463d41b051ade13ae875cd273bb8ebb0806a67dad3b16e414639ef11636c9"
+    },
+    "27b-direct/commit_select_partial": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "2de7344e081312bc52f4e305a84250e67b758e7a2c0e3352a9324c8dbbf18b42"
+    },
+    "27b-direct/commit_message_fix": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "c1300e8915bb5938e86cb34596ec98c54bc6e33b2c7bfe656d5df587ddd8cd75"
+    },
+    "27b-direct/commit_message_feat": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "bcb50211948c7cc2d79e140e1899f45e9394094cea80b4a3bd68048a2e14ef79"
+    },
+    "27b-direct/commit_message_refactor": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "f5be446beca35da39c7d6dea607da7de69a68bb9182af959be90e20bc7cc710e"
+    },
+    "27b-direct/doc_mean": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "e5e191606bbcb7e0cd017291295d46bbfd9bbc0e50ca35fa030e57af5f2b5999"
+    },
+    "27b-direct/doc_port": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "90fbc841301f60f06e6bd452fd419832c9ca13b8708e71f85a56ca3577c8b2fc"
+    },
+    "27b-direct/doc_async": {
+      "criteria": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "score": 75,
+      "notes": "正确描述等待后计数，但把可等待对象描述为可调用对象；函数实际直接 await 参数，并未调用它。",
+      "observation_sha256": "9f60e319e43b158d1c0d4782da1c9a2bcabd37ba8ae0c51c14b05fb7fa802139"
+    },
+    "27b-direct/doc_generator": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "897508fea54bc6bc1f1ac876754c729572c7b61494f441384d4186ecbe919bcb"
+    },
+    "27b-direct/doc_pointer": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "c3cfc1ddae95746bf255e5f33bbf33cb11ac1fac3ae4ccc0ded1455dba1ac431"
+    },
+    "27b-direct/doc_template": {
+      "criteria": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "score": 75,
+      "notes": "模板形参描述要求同时支持小于和大于比较，但源码只使用 operator<；增加了不必要的类型约束。",
+      "observation_sha256": "0d7cd5d10a9636b806de33a2b356de2d491eb7c02a4cadc5769f6d2d70bde7ed"
+    },
+    "27b-thinking/commit_select_fix": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "d1873391c55cc118a5836446304a09443807791e1c68cefe2d6d69cd9af5620c"
+    },
+    "27b-thinking/commit_select_tests": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "839e6888de022633c73b96df1bdd9fe7fd4feae31ffc76c6590098cb2976b209"
+    },
+    "27b-thinking/commit_select_partial": {
+      "criteria": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "score": 0,
+      "notes": "现有生产校验拒绝该输出：Invalid AI recommendation JSON",
+      "observation_sha256": "8db423b6c996b3ba5094049cc9a9d77fe4ce8403932521e6e774626bc119ee1c"
+    },
+    "27b-thinking/commit_message_fix": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "0d5cba27c754e8fae36672d024543aea980acd32bb824d327be191eb26eb4aeb"
+    },
+    "27b-thinking/commit_message_feat": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "9186588850f318ef34fb80939722ae32d059ef5c3b1095c28df2dd107406027b"
+    },
+    "27b-thinking/commit_message_refactor": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "382cd137f99ff22ee2b0484f9924f513562cbd45b0218a729feed7219872e283"
+    },
+    "27b-thinking/doc_mean": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "33bb17f7dd0ef409ac673a25028477eca3fcba4903de77ef9120cdadc3a7885d"
+    },
+    "27b-thinking/doc_port": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "d95583dfbf734e2a433a81000a6e1833251d1da703ba9c310e33600e2797cd01"
+    },
+    "27b-thinking/doc_async": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "d2bcdbdd45a5b79f4817997989eb8b2ab20295b915a7756ebc29648891e9b565"
+    },
+    "27b-thinking/doc_generator": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "7de89fb86af42c8afb604aa62cda305bb8479591f8c6dd6f62666689aa292613"
+    },
+    "27b-thinking/doc_pointer": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "cc8cb2095d19799fef3b9c7ea53adaa31ed256a221202f53e49d5334705c4c6d"
+    },
+    "27b-thinking/doc_template": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "0379b987b1d2b01490a13979d742791f61aac3cddea92185ff2ff1bcd6901150"
+    },
+    "9b-direct/commit_select_fix": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "5e60a9bb44726e8a8bb08b71c7a58889025487c6bf4c861b028eae034bdf664a"
+    },
+    "9b-direct/commit_select_tests": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "b6869b4e32f88014cb03e238f27e4d5e16438e2656e8396eabd8919241822656"
+    },
+    "9b-direct/commit_select_partial": {
+      "criteria": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "score": 75,
+      "notes": "选择范围正确，但理由将改动表述为“修复空输入时返回0.0的问题”；实际是新增空输入返回0.0以避免除零，描述方向不准确。",
+      "observation_sha256": "7a3f5e9110c2aaf322dbfe420ff35822e5f420df99c6263c4017a54e2cdbd9c7"
+    },
+    "9b-direct/commit_message_fix": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "ff45337ece450b79fbf0e4fad6020709381ad0b29c4e8b90e030e0dbf8affed9"
+    },
+    "9b-direct/commit_message_feat": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "8c0943e09d33241820830dbff999c0e31d112ffaae7285a6700590f1d65e18c8"
+    },
+    "9b-direct/commit_message_refactor": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "f03ca6c06a8a4912d6102b33d0111095f32728c2ab74420386b02183b9686541"
+    },
+    "9b-direct/doc_mean": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "e8b3552a9d1166be7aed618189b19a3c744d85dae886de58d8b5cbb66a41662a"
+    },
+    "9b-direct/doc_port": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "199b92ed1f8e4be95a458b6c02209b0a14c76b717de1922010f7bec59ec4eafa"
+    },
+    "9b-direct/doc_async": {
+      "criteria": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "score": 75,
+      "notes": "正确描述等待后计数，但把可等待对象描述为可调用对象；函数实际直接 await 参数，并未调用它。",
+      "observation_sha256": "d0d7aa2bad4acbcb4b58f0d6e68c73375db063470e667b0fe34ec91060170c3c"
+    },
+    "9b-direct/doc_generator": {
+      "criteria": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "score": 100,
+      "notes": "按预先固定规则核查，结构、核心行为、边界/范围和事实依据均满足。",
+      "observation_sha256": "ad45108976d61eb946d7f0fb521cdcf13863bc6ad20c0e6f0b8be8fd59f42702"
+    },
+    "9b-direct/doc_pointer": {
+      "criteria": [
+        true,
+        true,
+        false,
+        true
+      ],
+      "score": 75,
+      "notes": "正确描述置零，但遗漏 NULL 指针不执行任何操作的分支。",
+      "observation_sha256": "0b62ebd6bc2ddf804561e1b3384ae37970899ba536fd54760f39094bc175a12e"
+    },
+    "9b-direct/doc_template": {
+      "criteria": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "score": 0,
+      "notes": "现有生产校验拒绝该输出：模型返回的参数数量与签名不符",
+      "observation_sha256": "1f281dec86c1d33577580747bb49b1be14c9b5ad6f50473475b4aa08094579f7"
+    }
+  }
+}

@@ -313,6 +313,7 @@ This layer is a kludge of mappings, mostly pickers.
 | `S`     | Open workspace symbol picker (**LSP** or **TS**)                        | `lsp_or_syntax_workspace_symbol_picker`    |
 | `d`     | Open document diagnostics picker (**LSP**)                              | `diagnostics_picker`                       |
 | `D`     | Open workspace diagnostics picker (**LSP**)                             | `workspace_diagnostics_picker`             |
+| `E`     | Open filtered LSP and build problems picker                            | `problems_picker`                          |
 | `r`     | Rename symbol (**LSP**)                                                 | `rename_symbol`                            |
 | `a`     | Apply code action (**LSP**)                                             | `code_action`                              |
 | `h`     | Select symbol references (**LSP**)                                      | `select_references_to_symbol_under_cursor` |
@@ -493,6 +494,8 @@ These mappings are in the style of [vim-unimpaired](https://github.com/tpope/vim
 | Key      | Description                                  | Command                 |
 | -----    | -----------                                  | -------                 |
 | `]d`     | Go to next diagnostic (**LSP**)              | `goto_next_diag`        |
+| `]q`     | Go to next problem across files             | `next_problem`         |
+| `[q`     | Go to previous problem across files         | `previous_problem`     |
 | `[d`     | Go to previous diagnostic (**LSP**)          | `goto_prev_diag`        |
 | `]D`     | Go to last diagnostic in document (**LSP**)  | `goto_last_diag`        |
 | `[D`     | Go to first diagnostic in document (**LSP**) | `goto_first_diag`       |

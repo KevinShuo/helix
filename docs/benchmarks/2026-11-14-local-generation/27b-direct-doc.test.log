@@ -1,0 +1,12 @@
+
+running 1 test
+test handlers::ai_doc::client::evaluation::ai_doc_quality_evaluation ... EVAL ai-doc/doc_mean: ok (3396 ms)
+EVAL ai-doc/doc_port: ok (4323 ms)
+EVAL ai-doc/doc_async: ok (3547 ms)
+EVAL ai-doc/doc_generator: ok (3447 ms)
+EVAL ai-doc/doc_pointer: ok (2680 ms)
+EVAL ai-doc/doc_template: ok (5578 ms)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 142 filtered out; finished in 22.98s
+

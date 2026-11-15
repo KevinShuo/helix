@@ -111,12 +111,25 @@
 | `syntax_symbol_picker` | Open symbol picker from syntax information |  |
 | `lsp_or_syntax_symbol_picker` | Open symbol picker from LSP or syntax information | normal: `` <space>s ``, select: `` <space>s `` |
 | `changed_file_picker` | Open changed file picker | normal: `` <space>g ``, select: `` <space>g `` |
+| `git_log` | Open Git commit graph and log | normal: `` <space>vg ``, select: `` <space>vg `` |
+| `git_resolve_conflicts` | Open Git conflict files | normal: `` <space>vr ``, select: `` <space>vr `` |
+| `git_merge_menu` | Merge decisions and actions | normal: `` <space>vm ``, select: `` <space>vm `` |
+| `git_branches` | Open Git branches and tags | normal: `` <space>vb ``, select: `` <space>vb `` |
+| `git_status` | Open Git working tree changes | normal: `` <space>vc ``, select: `` <space>vc `` |
+| `git_file_history` | Open current file's Git history | normal: `` <space>vh ``, select: `` <space>vh `` |
+| `git_new_branch` | Create a Git branch | normal: `` <space>vn ``, select: `` <space>vn `` |
+| `git_fetch` | Fetch Git remotes | normal: `` <space>vf ``, select: `` <space>vf `` |
+| `git_pull` | Pull Git changes (fast-forward only) | normal: `` <space>vp ``, select: `` <space>vp `` |
+| `git_push` | Push current Git branch | normal: `` <space>vP ``, select: `` <space>vP `` |
 | `select_references_to_symbol_under_cursor` | Select symbol references | normal: `` <space>h ``, select: `` <space>h `` |
 | `workspace_symbol_picker` | Open workspace symbol picker |  |
 | `syntax_workspace_symbol_picker` | Open workspace symbol picker from syntax information |  |
 | `lsp_or_syntax_workspace_symbol_picker` | Open workspace symbol picker from LSP or syntax information | normal: `` <space>S ``, select: `` <space>S `` |
 | `diagnostics_picker` | Open diagnostic picker | normal: `` <space>d ``, select: `` <space>d `` |
 | `workspace_diagnostics_picker` | Open workspace diagnostic picker | normal: `` <space>D ``, select: `` <space>D `` |
+| `next_problem` | Go to next problem across files | normal: `` ]q ``, select: `` ]q `` |
+| `previous_problem` | Go to previous problem across files | normal: `` [q ``, select: `` [q `` |
+| `problems_picker` | Open problems picker | normal: `` <space>E ``, select: `` <space>E `` |
 | `last_picker` | Open last picker | normal: `` <space>' ``, select: `` <space>' `` |
 | `insert_at_line_start` | Insert at start of line | normal: `` I ``, select: `` I `` |
 | `insert_at_line_end` | Insert at end of line | normal: `` A ``, select: `` A `` |
@@ -214,6 +227,7 @@
 | `keep_primary_selection` | Keep primary selection | normal: `` , ``, select: `` , `` |
 | `remove_primary_selection` | Remove primary selection | normal: `` <A-,> ``, select: `` <A-,> `` |
 | `completion` | Invoke completion popup | insert: `` <C-x> `` |
+| `ai_completion_accept` | Accept the entire AI inline completion | insert: `` <S-right> `` |
 | `hover` | Show docs for item under cursor | normal: `` <space>k ``, select: `` <space>k `` |
 | `toggle_comments` | Comment/uncomment selections | normal: `` <C-c> ``, `` <space>c ``, select: `` <C-c> ``, `` <space>c `` |
 | `toggle_line_comments` | Line comment/uncomment selections | normal: `` <space><A-c> ``, select: `` <space><A-c> `` |
@@ -256,6 +270,11 @@
 | `align_view_top` | Align view top | normal: `` Zt ``, `` zt ``, select: `` Zt ``, `` zt `` |
 | `align_view_center` | Align view center | normal: `` Zc ``, `` Zz ``, `` zc ``, `` zz ``, select: `` Zc ``, `` Zz ``, `` zc ``, `` zz `` |
 | `align_view_bottom` | Align view bottom | normal: `` Zb ``, `` zb ``, select: `` Zb ``, `` zb `` |
+| `toggle_fold` | Toggle function or class fold at cursor | normal: `` Za ``, `` za ``, select: `` Za ``, `` za `` |
+| `fold` | Fold function or class at cursor | normal: `` Zf ``, `` zf ``, select: `` Zf ``, `` zf `` |
+| `unfold` | Unfold function or class at cursor | normal: `` Zo ``, `` zo ``, select: `` Zo ``, `` zo `` |
+| `fold_all` | Fold all functions and classes without hiding cursors | normal: `` ZM ``, `` zM ``, select: `` ZM ``, `` zM `` |
+| `unfold_all` | Unfold all functions and classes in this view | normal: `` ZR ``, `` zR ``, select: `` ZR ``, `` zR `` |
 | `scroll_up` | Scroll view up | normal: `` Zk ``, `` zk ``, `` Z<up> ``, `` z<up> ``, select: `` Zk ``, `` zk ``, `` Z<up> ``, `` z<up> `` |
 | `scroll_down` | Scroll view down | normal: `` Zj ``, `` zj ``, `` Z<down> ``, `` z<down> ``, select: `` Zj ``, `` zj ``, `` Z<down> ``, `` z<down> `` |
 | `match_brackets` | Goto matching bracket | normal: `` mm ``, select: `` mm `` |
@@ -314,8 +333,3 @@
 | `goto_prev_tabstop` | Goto next snippet placeholder |  |
 | `rotate_selections_first` | Make the first selection your primary one |  |
 | `rotate_selections_last` | Make the last selection your primary one |  |
-| `toggle_fold` | Toggle function or class fold at cursor | normal: `` za ``, `` Za ``, select: `` za ``, `` Za `` |
-| `fold` | Fold function or class at cursor | normal: `` zf ``, `` Zf ``, select: `` zf ``, `` Zf `` |
-| `unfold` | Unfold function or class at cursor | normal: `` zo ``, `` Zo ``, select: `` zo ``, `` Zo `` |
-| `fold_all` | Fold all functions and classes without hiding cursors | normal: `` zM ``, `` ZM ``, select: `` zM ``, `` ZM `` |
-| `unfold_all` | Unfold all functions and classes in this view | normal: `` zR ``, `` ZR ``, select: `` zR ``, `` ZR `` |

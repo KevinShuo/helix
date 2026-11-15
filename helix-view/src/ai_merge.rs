@@ -23,6 +23,8 @@ use std::ops::Range;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct AiMergeConfig {
+    pub provider: Option<String>,
+    pub local_provider: Option<String>,
     pub enabled: bool,
     pub timeout_ms: u64,
     pub max_tokens: u32,
@@ -32,6 +34,8 @@ pub struct AiMergeConfig {
 impl Default for AiMergeConfig {
     fn default() -> Self {
         Self {
+            provider: None,
+            local_provider: None,
             enabled: false,
             timeout_ms: 60_000,
             max_tokens: 1536,
@@ -68,7 +72,7 @@ pub struct Operation {
     pub version: i32,
     pub session: crate::merge::MergeSessionId,
     pub source_version: helix_vcs::git_tools::ConflictVersion,
-    pub model: crate::ai_completion::AiCompletionConfig,
+    pub model: crate::ai::AiProviderConfig,
     pub config: AiMergeConfig,
     pub target: Target,
     pub handle: helix_event::TaskHandle,
@@ -85,7 +89,12 @@ impl Operation {
                 .tree
                 .try_get(self.view)
                 .is_none_or(|v| v.doc != self.doc)
-            || editor.config().ai_model_config() != self.model
+            || editor
+                .config()
+                .ai_provider(crate::ai::AiFeature::Merge)
+                .ok()
+                .as_ref()
+                != Some(&self.model)
             || editor.config().ai_merge != self.config
         {
             return false;

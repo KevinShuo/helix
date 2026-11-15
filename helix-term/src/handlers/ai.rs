@@ -1,26 +1,81 @@
 //! Shared bounded OpenAI-compatible HTTP transport.
 use anyhow::{bail, Context as _};
-use helix_view::ai_completion::AiCompletionConfig;
-use serde_json::Value;
-use std::time::Duration;
+use helix_view::ai::{AiProviderConfig, AiProviderType, AiProxy};
+use serde_json::{json, Value};
+use std::{sync::OnceLock, time::Duration};
+
+pub(super) fn client(proxy: AiProxy) -> anyhow::Result<&'static reqwest::Client> {
+    static SYSTEM: OnceLock<Result<reqwest::Client, reqwest::Error>> = OnceLock::new();
+    static DIRECT: OnceLock<Result<reqwest::Client, reqwest::Error>> = OnceLock::new();
+    let cache = match proxy {
+        AiProxy::System => &SYSTEM,
+        AiProxy::None => &DIRECT,
+    };
+    cache
+        .get_or_init(|| {
+            let builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
+            let builder = if proxy == AiProxy::None {
+                builder.no_proxy()
+            } else {
+                builder
+            };
+            builder.build()
+        })
+        .as_ref()
+        .map_err(|_| anyhow::anyhow!("Could not create AI client"))
+}
 
 pub(crate) async fn post(
-    config: &AiCompletionConfig,
+    config: &AiProviderConfig,
     body: &Value,
     timeout_ms: u64,
 ) -> anyhow::Result<Value> {
-    let url = reqwest::Url::parse(&config.endpoint).context("Invalid AI endpoint")?;
+    let url = reqwest::Url::parse(&config.endpoint)
+        .map_err(|_| anyhow::anyhow!("Invalid AI endpoint"))?;
     if !matches!(url.scheme(), "http" | "https")
         || !url.username().is_empty()
         || url.password().is_some()
     {
         bail!("AI endpoint must be an HTTP(S) URL without embedded credentials");
     }
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .context("Could not create AI client")?;
+    let proxy = if config.model_path.is_some() {
+        AiProxy::None
+    } else {
+        config.proxy
+    };
+    let client = client(proxy)?;
+    let mut body = body.clone();
+    let parameters = body
+        .as_object_mut()
+        .context("AI request must be a JSON object")?;
+    parameters.remove("enable_thinking");
+    parameters.remove("chat_template_kwargs");
+    parameters.remove("thinking");
+    match config.kind {
+        AiProviderType::Deepseek => {
+            parameters.insert(
+                "thinking".into(),
+                json!({"type": if config.thinking { "enabled" } else { "disabled" }}),
+            );
+        }
+        AiProviderType::LlamaCpp => {
+            parameters.insert("enable_thinking".into(), json!(config.thinking));
+            parameters.insert(
+                "chat_template_kwargs".into(),
+                json!({"enable_thinking":config.thinking}),
+            );
+            if config.thinking {
+                parameters.insert("reasoning_format".into(), json!("deepseek"));
+                if let Some(effort) = &config.reasoning_effort {
+                    parameters.insert("reasoning_effort".into(), json!(effort));
+                }
+                if let Some(budget) = config.thinking_budget {
+                    parameters.insert("reasoning_budget_tokens".into(), json!(budget.min(8192)));
+                }
+            }
+        }
+        AiProviderType::OpenaiCompatible => {}
+    }
     let mut request = client
         .post(url)
         .json(&body)
@@ -40,7 +95,15 @@ pub(crate) async fn post(
         }
     })?;
     if !response.status().is_success() {
-        bail!("AI endpoint returned HTTP {}", response.status().as_u16());
+        let status = response.status().as_u16();
+        let reason = match status {
+            401 | 403 => "authentication failed; check api-key-env and API permissions",
+            402 => "insufficient balance; check the provider account",
+            429 => "rate limit exceeded; retry later",
+            500..=599 => "service unavailable; retry later",
+            _ => "request rejected; check the provider, model and parameters",
+        };
+        bail!("AI endpoint returned HTTP {status}: {reason}");
     }
     const MAX_RESPONSE: usize = 262_144;
     if response
@@ -60,6 +123,10 @@ pub(crate) async fn post(
         }
         bytes.extend_from_slice(&chunk);
     }
-    let response: Value = serde_json::from_slice(&bytes).context("Invalid AI response JSON")?;
+    let response: Value =
+        serde_json::from_slice(&bytes).map_err(|_| anyhow::anyhow!("Invalid AI response JSON"))?;
     Ok(response)
 }
+
+#[cfg(test)]
+mod tests;

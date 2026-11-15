@@ -1,0 +1,41 @@
+{
+  "arm": "deepseek-thinking-16k",
+  "model": "deepseek-flash",
+  "thinking": true,
+  "reasoning_effort": "API default high; not overridden",
+  "total_output_budget": 16384,
+  "context_size": 32768,
+  "request_timeout_ms": 120000,
+  "repetitions": 1,
+  "automatic_repairs": 0,
+  "cases": 6,
+  "mutants": 18,
+  "daily_config_modified": false,
+  "evaluation_only_override": true,
+  "production_feature_budget": 4096,
+  "production_feature_limit": 8192,
+  "reference": "docs\\benchmarks\\2026-11-15-ai-test-generation",
+  "case_sha256": "18f8060783c010efe82e181ed241f3625a8e01fcc1359960cf6acbecd6517377",
+  "official_parameter_docs": [
+    "https://api-docs.deepseek.com/api/create-chat-completion/",
+    "https://api-docs.deepseek.com/guides/thinking_mode/"
+  ],
+  "sources": {
+    "contrib/ai-test-generation-thinking-eval.py": "3bc974d31f3e000aa7e2aba9114853b5db0cf916956e6cf97673f2130c12029c",
+    "contrib/ai-test-generation-eval.py": "99ed5c27bcb898b9ae3d9a3e362eec0092429ea949647697911ea18c491199e5",
+    "contrib/ai_test_eval_fixtures.py": "c13da3ac9faa8a68fa139fff16640e07dde3bbf408b2398d20b0e4527c221306",
+    "helix-term/src/handlers/ai_test/evaluation.rs": "9a469470f5642668ab57fc082883f036fde2495b3d45ebd75f4ee51074ece27d",
+    "helix-term/src/handlers/ai_test/client.rs": "025de9b41c2d24634db2d44730752793ab214bcb342f74727c213f87b00f982a",
+    "helix-term/src/handlers/ai_test/project.rs": "b7667987d3c5e8502780a52947a6ff993a6a9426edaf9d2c912dfe3c9051da71",
+    "helix-term/src/handlers/ai_test/runner.rs": "61b0cd3c6c7ff2fb012b8cc1454b16b3eb949c0baaf617a9af40a884ae0cca7f",
+    "helix-term/src/handlers/ai.rs": "6ba9861218401b01d44b2e781f2b51165e30c8b85b530d36d47da5f6dfd5bc2d"
+  },
+  "test_binary_sha256": "e8676c0a04b045cd4d9fc3f7d113f5f9d790be2ec9b83782e6416a012a9de019",
+  "post_run_snapshot_additions": [
+    {
+      "path": "helix-term/src/handlers/ai.rs",
+      "source_mtime_precedes_initial_manifest": true,
+      "note": "Transport source was unchanged during this evaluation; request.json is the pre-transport body."
+    }
+  ]
+}

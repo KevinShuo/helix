@@ -1,0 +1,12 @@
+{
+  "accepted": false,
+  "arm": "deepseek-thinking-diagnostic",
+  "assumptions": [],
+  "baseline": null,
+  "case": "python_unique_by",
+  "generation_error": "Model output incomplete: \"length\"",
+  "generation_ms": 23611,
+  "language": "python",
+  "mutants": [],
+  "restored": null
+}

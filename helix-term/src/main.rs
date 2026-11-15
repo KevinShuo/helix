@@ -121,7 +121,7 @@ FLAGS:
             Config::default()
         }
         Err(ConfigLoadError::Error(err)) => return Err(Error::new(err)),
-        Err(ConfigLoadError::BadConfig(err)) => {
+        Err(err @ (ConfigLoadError::BadConfig(_) | ConfigLoadError::InvalidAiConfig(_))) => {
             eprintln!("Bad config: {}", err);
             eprintln!("Press <ENTER> to continue with default config");
             use std::io::Read;

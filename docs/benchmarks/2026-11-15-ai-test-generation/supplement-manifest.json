@@ -1,0 +1,16 @@
+{
+  "excluded_from_primary": true,
+  "local_retry_cases": [
+    "c_copy_prefix"
+  ],
+  "reason": "First local copy request had a transport error; preserve it and test once separately.",
+  "deepseek_thinking_cases": [
+    "c_parse_u16",
+    "cpp_merge_ranges",
+    "python_unique_by"
+  ],
+  "deepseek_reason": "Investigate the three non-thinking schema/link/macro failures; not a full third arm.",
+  "request_timeout_ms": 120000,
+  "output_budget_note": "Same production request builder; local has 4096 final + 2048 reasoning tokens; DeepSeek max_tokens=4096 total.",
+  "local_load_ms": 6479.1309000002
+}

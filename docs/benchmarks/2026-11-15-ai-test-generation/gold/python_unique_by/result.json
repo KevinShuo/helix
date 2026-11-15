@@ -1,0 +1,64 @@
+{
+  "accepted": true,
+  "arm": "gold",
+  "assumptions": [],
+  "baseline": {
+    "elapsed_ms": 235,
+    "log": "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe [\"-m\", \"pytest\", \"-q\", \"-rA\", \"--color=no\", \"I:\\\\DEV\\\\helix\\\\.superpowers\\\\ai-test-eval\\\\projects\\\\gold\\\\python_unique_by\\\\tests\\\\test_helix_unique_by_600166394838ecb4.py\"]\n.                                                                        [100%]\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_contract\r\n1 passed in 0.01s\r\n\n",
+    "repairable": false,
+    "stage": "Test",
+    "success": true
+  },
+  "case": "python_unique_by",
+  "generation_error": null,
+  "generation_ms": 138,
+  "language": "python",
+  "mutants": [
+    {
+      "id": "duplicates",
+      "killed": true,
+      "meaning": "不再去重",
+      "run": {
+        "elapsed_ms": 285,
+        "log": "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe [\"-m\", \"pytest\", \"-q\", \"-rA\", \"--color=no\", \"I:\\\\DEV\\\\helix\\\\.superpowers\\\\ai-test-eval\\\\projects\\\\gold\\\\python_unique_by\\\\tests\\\\test_helix_unique_by_600166394838ecb4.py\"]\nF                                                                        [100%]\r\n================================== FAILURES ===================================\r\n________________________________ test_contract ________________________________\r\n\r\n    def test_contract():\r\n        values = ['a', 'A', 'b', 'B', 'c']\r\n        before = list(values)\r\n        calls = []\r\n        def key(value):\r\n            calls.append(value)\r\n            return value.lower()\r\n>       assert unique_by(values, key) == ['a', 'b', 'c']\r\nE       AssertionError: assert ['a', 'A', 'b', 'B', 'c'] == ['a', 'b', 'c']\r\nE         \r\nE         At index 1 diff: 'A' != 'b'\r\nE         Left contains 2 more items, first extra item: 'B'\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:12: AssertionError\r\n=========================== short test summary info ===========================\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_contract - Assert...\r\n1 failed in 0.06s\r\n\n",
+        "repairable": false,
+        "stage": "Test",
+        "success": false
+      },
+      "viable": true
+    },
+    {
+      "id": "order",
+      "killed": true,
+      "meaning": "逆序返回结果",
+      "run": {
+        "elapsed_ms": 282,
+        "log": "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe [\"-m\", \"pytest\", \"-q\", \"-rA\", \"--color=no\", \"I:\\\\DEV\\\\helix\\\\.superpowers\\\\ai-test-eval\\\\projects\\\\gold\\\\python_unique_by\\\\tests\\\\test_helix_unique_by_600166394838ecb4.py\"]\nF                                                                        [100%]\r\n================================== FAILURES ===================================\r\n________________________________ test_contract ________________________________\r\n\r\n    def test_contract():\r\n        values = ['a', 'A', 'b', 'B', 'c']\r\n        before = list(values)\r\n        calls = []\r\n        def key(value):\r\n            calls.append(value)\r\n            return value.lower()\r\n>       assert unique_by(values, key) == ['a', 'b', 'c']\r\nE       AssertionError: assert ['c', 'b', 'a'] == ['a', 'b', 'c']\r\nE         \r\nE         At index 0 diff: 'c' != 'a'\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:12: AssertionError\r\n=========================== short test summary info ===========================\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_contract - Assert...\r\n1 failed in 0.06s\r\n\n",
+        "repairable": false,
+        "stage": "Test",
+        "success": false
+      },
+      "viable": true
+    },
+    {
+      "id": "key_calls",
+      "killed": true,
+      "meaning": "对首次出现的元素重复调用key",
+      "run": {
+        "elapsed_ms": 282,
+        "log": "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe [\"-m\", \"pytest\", \"-q\", \"-rA\", \"--color=no\", \"I:\\\\DEV\\\\helix\\\\.superpowers\\\\ai-test-eval\\\\projects\\\\gold\\\\python_unique_by\\\\tests\\\\test_helix_unique_by_600166394838ecb4.py\"]\nF                                                                        [100%]\r\n================================== FAILURES ===================================\r\n________________________________ test_contract ________________________________\r\n\r\n    def test_contract():\r\n        values = ['a', 'A', 'b', 'B', 'c']\r\n        before = list(values)\r\n        calls = []\r\n        def key(value):\r\n            calls.append(value)\r\n            return value.lower()\r\n        assert unique_by(values, key) == ['a', 'b', 'c']\r\n        assert values == before\r\n>       assert calls == values\r\nE       AssertionError: assert ['a', 'a', 'A...'b', 'B', ...] == ['a', 'A', 'b', 'B', 'c']\r\nE         \r\nE         At index 1 diff: 'a' != 'A'\r\nE         Left contains 3 more items, first extra item: 'B'\r\nE         Use -v to get more diff\r\n\r\ntests\\test_helix_unique_by_600166394838ecb4.py:14: AssertionError\r\n=========================== short test summary info ===========================\r\nFAILED tests/test_helix_unique_by_600166394838ecb4.py::test_contract - Assert...\r\n1 failed in 0.05s\r\n\n",
+        "repairable": false,
+        "stage": "Test",
+        "success": false
+      },
+      "viable": true
+    }
+  ],
+  "restored": {
+    "elapsed_ms": 227,
+    "log": "I:\\DEV\\helix\\.superpowers\\ai-test\\venv\\Scripts\\python.exe [\"-m\", \"pytest\", \"-q\", \"-rA\", \"--color=no\", \"I:\\\\DEV\\\\helix\\\\.superpowers\\\\ai-test-eval\\\\projects\\\\gold\\\\python_unique_by\\\\tests\\\\test_helix_unique_by_600166394838ecb4.py\"]\n.                                                                        [100%]\r\n=================================== PASSES ====================================\r\n=========================== short test summary info ===========================\r\nPASSED tests/test_helix_unique_by_600166394838ecb4.py::test_contract\r\n1 passed in 0.01s\r\n\n",
+    "repairable": false,
+    "stage": "Test",
+    "success": true
+  }
+}

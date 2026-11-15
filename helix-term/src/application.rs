@@ -79,7 +79,7 @@ pub struct Application {
     lsp_progress: LspProgressMap,
 
     theme_mode: Option<theme::Mode>,
-    ai_completion_server: handlers::ai_completion::server::LocalServer,
+    ai_completion_server: handlers::ai_completion::server::LocalServers,
 }
 
 #[cfg(feature = "integration")]
@@ -260,8 +260,8 @@ impl Application {
         ])
         .context("build signal handler")?;
 
-        let ai_completion_server = handlers::ai_completion::server::LocalServer::new(
-            &config.load().editor.ai_model_config(),
+        let ai_completion_server = handlers::ai_completion::server::LocalServers::new(
+            &config.load().editor.active_ai_providers()?,
         );
         let app = Self {
             compositor,
@@ -281,6 +281,8 @@ impl Application {
     async fn render(&mut self) {
         handlers::ai_doc::refresh(&mut self.editor, &mut self.compositor);
         handlers::ai_merge::refresh(&mut self.editor, &mut self.compositor);
+        handlers::ai_test::refresh(&mut self.editor, &mut self.compositor);
+        handlers::test::refresh(&mut self.editor, &mut self.compositor);
         if self.compositor.full_redraw {
             self.terminal.clear().expect("Cannot clear the terminal");
             self.compositor.full_redraw = false;
@@ -407,6 +409,10 @@ impl Application {
             // the Editor must send up a new copy of a modified config so that
             // the Application can apply it.
             ConfigEvent::Update(editor_config) => {
+                if let Err(error) = editor_config.validate_ai() {
+                    self.editor.set_error(error.to_string());
+                    return;
+                }
                 let mut app_config = (*self.config.load().clone()).clone();
                 app_config.editor = *editor_config;
                 if let Err(err) = self.terminal.reconfigure((&app_config.editor).into()) {
@@ -427,9 +433,13 @@ impl Application {
 
         // Update all the relevant members in the editor after updating
         // the configuration.
+        #[cfg(feature = "git")]
+        crate::ui::git::commit::cancel(&mut self.compositor, &mut self.editor);
         self.editor.refresh_config(&old_editor_config);
-        self.ai_completion_server
-            .configure(&self.editor.config().ai_model_config());
+        match self.editor.config().active_ai_providers() {
+            Ok(providers) => self.ai_completion_server.configure(&providers),
+            Err(error) => self.editor.set_error(error.to_string()),
+        }
 
         // reset view position in case softwrap was enabled/disabled
         let scrolloff = self.editor.config().scrolloff;
@@ -978,25 +988,13 @@ impl Application {
                         // do nothing
                     }
                     Notification::Exit => {
-                        let status =
-                            format!("Language server exited: {}", language_server!().name());
-                        self.editor.set_status(status);
-
-                        // LSPs may produce diagnostics for files that haven't been opened in helix,
-                        // we need to clear those and remove the entries from the list if this leads to
-                        // an empty diagnostic list for said files
-                        for diags in self.editor.diagnostics.values_mut() {
-                            diags.retain(|(_, provider)| {
-                                provider.language_server_id() != Some(server_id)
-                            });
+                        if let Some(language_server) = self.editor.language_server_by_id(server_id)
+                        {
+                            let status =
+                                format!("Language server exited: {}", language_server.name());
+                            self.editor.set_status(status);
                         }
-
-                        self.editor.diagnostics.retain(|_, diags| !diags.is_empty());
-
-                        // Clear any diagnostics for documents with this server open.
-                        for doc in self.editor.documents_mut() {
-                            doc.clear_diagnostics_for_language_server(server_id);
-                        }
+                        self.editor.clear_language_server_diagnostics(server_id);
 
                         helix_event::dispatch(helix_view::events::LanguageServerExited {
                             editor: &mut self.editor,
@@ -1370,6 +1368,7 @@ impl Application {
     }
 
     pub async fn close(&mut self) -> Vec<anyhow::Error> {
+        self.editor.problems.compilation.controller.cancel();
         self.ai_completion_server.stop().await;
         // [NOTE] we intentionally do not return early for errors because we
         //        want to try to run as much cleanup as we can, regardless of

@@ -4,6 +4,7 @@
 - [`[editor.clipboard-provider]` Section](#editorclipboard-provider-section)
 - [`[editor.statusline]` Section](#editorstatusline-section)
 - [`[editor.lsp]` Section](#editorlsp-section)
+- [`[editor.ai]` Section](#editorai-section)
 - [`[editor.ai-doc]` Section](#editorai-doc-section)
 - [`[editor.ai-commit]` Section](#editorai-commit-section)
 - [`[editor.ai-merge]` Section](#editorai-merge-section)
@@ -46,7 +47,7 @@
 | `cursorline` | Highlight all lines with a cursor | `false` |
 | `cursorcolumn` | Highlight all columns with a cursor | `false` |
 | `continue-comments` | if helix should automatically add a line comment token if you create a new line inside a comment. | `true` |
-| `gutters` | Gutters to display: Available are `diagnostics`, `diff`, `line-numbers`, `spacer`, `code-action-hint` and `fold`. `diagnostics` also includes other features like breakpoints. A 1-width padding will be inserted if gutters is non-empty. | `["diagnostics", "spacer", "line-numbers", "spacer", "diff"]` |
+| `gutters` | Gutters to display: Available are `diagnostics`, `diff`, `line-numbers`, `spacer`, `code-action-hint`, `fold` and `test`. `diagnostics` also includes other features like breakpoints. A 1-width padding will be inserted if gutters is non-empty. | `["diagnostics", "fold", "line-numbers", "spacer", "diff", "test"]` |
 | `auto-completion` | Enable automatic pop up of auto-completion | `true` |
 | `path-completion` | Enable filepath completion. Show files and directories if an existing path at the cursor was recognized, either absolute or relative to the current opened document or current working directory (if the buffer is not yet saved). Defaults to true. | `true` |
 | `auto-format` | Enable automatic formatting on save[^3] | `true` |
@@ -189,8 +190,10 @@ The following statusline elements can be configured:
 
 ### `[editor.ai-commit]` Section
 
-Explicit AI-assisted staging and commits share the provider configuration from
-`[editor.ai-completion]`, independently of automatic completion and `ai-doc`.
+Explicit AI-assisted staging and commits select their own `provider` from
+[`[editor.ai]`](#editorai-section), independently of automatic completion and
+`ai-doc`. Without a provider or global default, legacy connection settings in
+`[editor.ai-completion]` continue to apply.
 
 ```toml
 [editor.ai-commit]
@@ -247,11 +250,21 @@ max-tokens = 1536
 max-input-bytes = 16384
 ```
 
-The model connection and local server settings come from `[editor.ai-completion]`;
-automatic completion may remain disabled. Output is bounded to 128–4096 tokens,
+The connection uses `[editor.ai]` and the optional per-feature `provider`; legacy
+`[editor.ai-completion]` connections remain supported. Automatic completion may
+remain disabled. To keep a small completion model resident and load a larger
+managed model only for Merge, set `local-provider = "local-27b-direct"` here and
+define that provider with a distinct endpoint, model path and `thinking = false`.
+See `contrib/config-ai-providers.toml` for a complete example. The resident model
+is unloaded before generation and restored after success, error or cancellation.
+`local-provider` applies when inheriting local mode; an explicit `provider` takes
+precedence, and an inherited online provider follows the global switch.
+
+Output is bounded to 128–4096 final tokens,
 and the HTTP timeout to 100–120000 ms; model startup uses its existing separate
 timeout. `max-input-bytes` bounds the system prompt and serialized input, while
-the actual model context is checked independently with space reserved for output.
+the actual model context is checked independently with space reserved for output
+and any configured reasoning budget.
 
 Open a conflict with `Space v r`, select a block with `Space v m n/p`, then click
 `AI Merge`, press `Space v m i`, or run `:ai-merge [optional intent]`, for example
@@ -630,7 +643,7 @@ specific gutter components as subsections.
 
 | Key      | Description                    | Default                                                       |
 | ---      | ---                            | ---                                                           |
-| `layout` | A vector of gutters to display | `["diagnostics", "spacer", "line-numbers", "spacer", "diff"]` |
+| `layout` | A vector of gutters to display | `["diagnostics", "fold", "line-numbers", "spacer", "diff", "test"]` |
 
 Example:
 
@@ -755,6 +768,158 @@ fn main() {
 }
 ```
 
+### `[editor.ai]` Section
+
+Configure named models once and select them independently for inline completion,
+function documentation and commit assistance. Providers use OpenAI-compatible
+Chat Completions; their `endpoint` is the complete URL, including any API path.
+
+```toml
+[editor.ai]
+default-provider = "deepseek"
+
+[editor.ai.providers.deepseek]
+type = "deepseek"
+endpoint = "https://api.deepseek.com/chat/completions"
+model = "deepseek-flash"
+api-key-env = "DEEPSEEK_API_KEY"
+context-size = 32768
+thinking = false
+proxy = "system"
+
+[editor.ai.providers.local]
+type = "llama-cpp"
+endpoint = "http://127.0.0.1:19239/v1/chat/completions"
+model = "local-coder"
+model-path = 'D:\models\coder.gguf'
+server-path = "llama-server"
+context-size = 8192
+gpu-layers = 99
+
+[editor.ai-completion]
+enabled = true
+provider = "local"
+debounce-ms = 700
+timeout-ms = 10000
+max-tokens = 128
+
+[editor.ai-doc]
+enabled = true
+provider = "deepseek"
+timeout-ms = 60000
+max-tokens = 1024
+
+[editor.ai-commit]
+enabled = true
+provider = "deepseek"
+timeout-ms = 60000
+max-tokens = 1024
+```
+
+Replace the local model path with an installed GGUF. To use online completion
+as well, change its `provider` to `"deepseek"`. A provider entry represents one
+model configuration; add another name to use a different model at the same API.
+No AI feature is enabled merely by defining a provider.
+
+Selection order is the feature's `provider`, then `editor.ai.default-provider`,
+then the legacy connection fields in `[editor.ai-completion]`. Unknown names
+are configuration errors, including references on disabled features. Existing
+configurations need no migration; local startup and API authentication remain
+available through the legacy fields. When a named provider is selected, its
+connection settings are used in full, without inheriting legacy connection fields.
+Feature settings such as prompt mode, debounce, language and token limits remain
+in their respective sections.
+
+| Provider key | Description | Default |
+| --- | --- | --- |
+| `type` | `deepseek`, `llama-cpp`, or `openai-compatible` | `"openai-compatible"` |
+| `endpoint` | Full HTTP(S) chat completions URL, without embedded credentials | required |
+| `model` | Model identifier or local server alias | required |
+| `api-key-env` | Environment variable containing the bearer token | unset |
+| `context-size` | Conservative input/output budget for explicit generation; at least 512, currently capped at 131072 | `4096` |
+| `thinking` | Enable provider-specific thinking for DeepSeek or llama.cpp; generic endpoints receive no thinking extensions | `false` |
+| `thinking-budget` | llama.cpp reasoning token budget, 1–8192; does not enable thinking by itself | unset |
+| `reasoning-effort` | Model-specific reasoning depth: `low`, `medium`, `high`, `xhigh`, or `max`; sent to llama.cpp when thinking is enabled | unset |
+| `proxy` | `system` uses reqwest's proxy discovery; `none` connects directly | `"system"` |
+| `model-path` | GGUF to start and manage; only for `llama-cpp`; omit for an existing server | unset |
+| `server-path` | Executable for a managed local model | `"llama-server"` |
+| `gpu-layers` | Managed local GPU layers, capped at 999; `0` uses CPU | `99` |
+| `startup-timeout-ms` | Managed local loading timeout, clamped to 100–600000 ms | `120000` |
+
+Set the API key in the environment inherited by Helix, then launch Helix from
+that environment. For example, in PowerShell:
+
+```powershell
+$env:DEEPSEEK_API_KEY = "your-api-key"
+hx
+```
+
+Keys are read when sending requests. Raw keys are not accepted in TOML. Legacy
+connections retain their direct-connection behavior. Managed local models always
+connect directly and require `http://127.0.0.1:PORT/v1/chat/completions`.
+Only managed models selected by an enabled feature are started. Features can
+share one local process; distinct active local model configurations must use
+different endpoints. Reloading removes unused processes and invalidates pending
+results. No online request automatically falls back to another provider.
+
+The selected online service receives the feature's existing bounded source or
+diff context. Inline requests are debounced and canceled when editing continues;
+they do not retry automatically. Explicit generation retains preview and result
+validation. Requests are non-streaming. DeepSeek uses its own `thinking` parameter;
+llama.cpp uses its template parameters; generic endpoints receive neither.
+
+To use a larger model only for explicit local generation while preserving the
+single global switch, configure a second managed provider and use `local-provider`:
+
+```toml
+[editor.ai.providers.local-27b]
+type = "llama-cpp"
+endpoint = "http://127.0.0.1:19241/v1/chat/completions"
+model = "Qwen3.8-27B-UD-Q5_K_M"
+model-path = '${USERPROFILE}\.local\share\junie-local\models\Qwen3.8-27B-UD-Q5_K_M.gguf'
+server-path = "llama-server"
+context-size = 16384
+gpu-layers = 99
+startup-timeout-ms = 180000
+thinking = true
+thinking-budget = 2048
+reasoning-effort = "medium"
+
+[editor.ai-doc]
+enabled = true
+local-provider = "local-27b"
+timeout-ms = 120000
+max-tokens = 1024
+
+[editor.ai-commit]
+enabled = true
+local-provider = "local-27b"
+timeout-ms = 120000
+max-tokens = 1024
+```
+
+Merge these keys into existing sections. With `default-provider = "local"`,
+completion uses the ordinary local provider while these explicit tasks acquire
+the larger model temporarily. With `default-provider = "deepseek"`, all three
+features use DeepSeek. An explicit feature `provider` always wins; omit it to
+follow global mode. Conditional providers must be managed `llama-cpp` models with
+a `model-path`. Omitted thinking budgets/efforts on conditional thinking providers
+default to 2048/`medium`.
+
+The larger model is not loaded at startup. Before its first request the editor
+stops its resident managed models and waits for process exit. One lease covers
+the whole documentation request or multi-call commit analysis. On completion,
+failure or cancellation it unloads the temporary model and restores the latest
+configured resident models. Reloading into online mode or shutting down does
+not restart obsolete models. An externally owned resident server cannot be
+unloaded safely, so the task reports an error asking you to close its owner.
+
+For these bounded-thinking requests, `max-tokens` reserves final-output capacity;
+the HTTP generation cap adds `thinking-budget`, and context validation includes
+both. llama.cpp receives `reasoning_budget_tokens` and separates reasoning from
+final content. A truncated final response is rejected. Each HTTP request is
+still capped at 120 seconds; model loading has its own startup timeout.
+
 ### `[editor.ai-completion]` Section
 
 Optional automatic inline completion using an OpenAI-compatible chat completion
@@ -788,6 +953,7 @@ establish type or semantic correctness, and may hide useful incomplete blocks.
 | Key | Description | Default |
 | --- | --- | --- |
 | `enabled` | Enable automatic AI suggestions | `false` |
+| `provider` | Named model from `[editor.ai.providers]`; otherwise use the global default or legacy connection fields | unset |
 | `conservative` | Prefer short current-line suggestions and suppress weak contexts and overlong responses; see below | `false` |
 | `predict-next` | Automatically predict the next line or a short block at a block opener or an indented blank line with usable context | `false` |
 | `prediction-lines` | Maximum lines in one prediction; clamped to 1–12, overlong responses are rejected whole | `6` |
@@ -998,14 +1164,17 @@ timeout-ms = 30000
 max-tokens = 768
 ```
 
-The model connection and local server settings come from `[editor.ai-completion]`.
-Its `enabled` flag controls automatic completion only: `ai-doc` can use the same
-model with automatic completion disabled. Enabling either feature uses the one
-configured local model process. No model is downloaded or changed automatically.
+Select a named model with `provider`, or use the default from `[editor.ai]`.
+Without either setting, model connection and local server settings continue to
+come from `[editor.ai-completion]`. Its `enabled` flag controls automatic
+completion only: documentation works with completion disabled. Features sharing
+a local provider share its process. No model is downloaded automatically.
 
 | Key | Description | Default |
 | --- | --- | --- |
 | `enabled` | Allow explicit documentation requests | `false` |
+| `provider` | Named model from `[editor.ai.providers]`; otherwise use the global default or legacy connection fields | unset |
+| `local-provider` | Managed model to load temporarily when inheriting local mode; ignored online or with an explicit `provider` | unset |
 | `language` | Description language: `zh-CN` or `en` | `"zh-CN"` |
 | `style` | Documentation style; currently only `rest` | `"rest"` |
 | `timeout-ms` | Generation timeout; model startup has its separate existing timeout | `30000` |
@@ -1043,3 +1212,147 @@ request is skipped. Initial limitations include declarations without bodies,
 macro-generated functions, anonymous lambdas, unnamed C/C++ parameters, single-line
 Python bodies, and functions sharing a line with other code. Multi-cursor,
 active snippets and macro recording/replay are unsupported.
+
+### `[editor.test]` Section
+
+Run existing or AI-generated tests without a model. Python uses pytest (including
+`unittest.TestCase`); C/C++ uses a CMake project with tests registered in CTest.
+Save project buffers before running. Opening a file only identifies declarations;
+it never imports Python modules or builds a CMake project.
+
+The default gutter includes `test`. If you configured your own gutter list, add
+it explicitly, keeping folding and diagnostics independent:
+
+```toml
+[editor]
+gutters = ["diagnostics", "spacer", "line-numbers", "test", "fold", "spacer", "diff"]
+
+[editor.test]
+# python = ".venv/Scripts/python.exe" # Unix: .venv/bin/python
+# build-directory = "build"
+# cmake-preset = "windows-debug"
+# build-configuration = "Debug"
+# target = "unit_tests"
+# timeout-ms = 180000
+# cmake-args = ["-DCMAKE_PREFIX_PATH=C:/dependencies"]
+```
+
+Unspecified interpreter, build-directory, preset, build-configuration, timeout and
+CMake arguments inherit `[editor.ai-test]` for compatibility. Ordinary runs do
+not inherit the AI generator's test target. Python selection otherwise checks
+project `.venv`/`venv`, `VIRTUAL_ENV`, then `python` on PATH; pytest must be installed
+in that interpreter. Existing CMake settings are reused, with `VCPKG_ROOT` used for
+new unconfigured builds unless a preset/toolchain overrides it. Ordinary runs do
+not edit `CMakeLists.txt` or add dependency downloads. Dependency actions already
+configured by the project's CMake scripts still apply.
+
+| Command | Action |
+| --- | --- |
+| `:test` | Run the test or class at the cursor |
+| `:test-file` | Run tests in the current file |
+| `:test-project` | Run the current language project's tests |
+| `:test-show` | Open/focus the results panel |
+| `:test-rerun` | Repeat the last run with its original environment |
+| `:test-rerun-failed` | Run only failed/error cases from the previous run |
+| `:test-stop` | Cancel execution and stop its owned process tree |
+
+Click `▶` beside a Python test/class or GoogleTest declaration to run it. A
+parameterized declaration runs its instances; individual instances can be selected
+in the results panel. Status symbols distinguish passed `✓`, failed `✗`, skipped
+`−`, error `!`, running `◷` and cancelled `■`. Source edits mark results stale `?`.
+Collection/build failures and zero matching tests are reported as errors.
+
+The docked panel has expandable file/suite groups, individual durations and output.
+Use `j`/`k` or arrow keys to select, Enter to expand a group or jump to a failure,
+`h`/`l` to collapse/expand, Tab to switch tree/details, `r` to rerun the selection,
+`f` to rerun failures, `R` to repeat the last scope, `s` to stop, Esc to edit while
+keeping results visible, and `q` to close. Mouse toolbar actions are equivalent.
+Closing the panel preserves results and does not stop execution. The Git and test
+docks replace one another. Narrow terminals use Tab to switch between tree/output.
+
+CMake requires CTest JSON discovery and JUnit output support (CMake 3.21+).
+Use `gtest_discover_tests(your_target)` for per-case and per-file actions. CTest
+entries that register an entire executable can be run with `:test-project`; a
+single-case click never silently expands to the whole executable. CTest environment,
+fixtures and working-directory properties remain in effect. When executable targets
+have overlapping test names, give each `gtest_discover_tests` a distinct
+`TEST_PREFIX`; ambiguous CTest names are rejected before execution. Custom test naming
+rules/macros may require file/project commands. V1 retains only the latest run;
+debugging, coverage and automatic reruns are deferred.
+
+### `[editor.ai-test]` Section
+
+Generate unit tests for the function or method at the cursor with `:ai-test`.
+C/C++ uses GoogleTest; Python uses pytest. Existing docstrings/comments and
+single-line function bodies are supported. The source must be saved first.
+
+```toml
+[editor.ai-test]
+enabled = true
+local-provider = "local-27b" # Optional named managed llama.cpp provider.
+max-tokens = 4096
+timeout-ms = 120000
+run-timeout-ms = 180000
+allow-fetch-content = true
+# provider = "deepseek" # Exact override; omit to follow the global AI switch.
+# python = 'D:\project\.venv\Scripts\python.exe'
+# cmake-preset = "windows-debug"
+# build-directory = "out/build/windows-debug"
+# build-configuration = "Debug"
+# library-target = "my_library"
+# test-target = "existing_tests"
+# cmake-args = ["-DVCPKG_TARGET_TRIPLET=x64-windows"]
+```
+
+The feature is disabled by default. It inherits `editor.ai.default-provider`;
+`local-provider` substitutes a managed local model only when the inherited
+provider is llama.cpp. An explicit `provider` wins. Thus completion can remain
+on a small resident model while test generation temporarily uses a 27B model
+with bounded thinking; switching the global provider to DeepSeek also switches
+test generation. A local failure never uploads code to another provider.
+
+Preview shows the exact test and CMake diffs plus inferred behavior assumptions.
+Enter accepts all changes into editable buffers; Esc cancels; `r` regenerates.
+The source remains unchanged. Save with `:wa!` (the bang allows new test
+directories), then use `:ai-test-run`. Each changed file can be undone with `u`
+in its buffer. `:ai-test-show` reopens the latest preview/report;
+`:ai-test-cancel` cancels generation or the running process tree and preserves
+accepted modifications. Changes to source, configuration, supporting files or
+unsaved buffers prevent applying/running stale results.
+
+Generated Python files are named `tests/test_helix_<function>_<identity>.py`;
+the interpreter comes from `python`, the project's `.venv`/`venv`, the active
+virtual environment, or `python` on PATH, in that order. pytest must already be
+installed in that environment. Helix does not install Python packages or alter
+`sys.path`. Existing fixtures and nearby tests are included when context permits.
+
+CMake integration reuses a discovered library and, when unambiguous, an existing
+GoogleTest executable. Set `library-target`/`test-target` for custom macros or
+ambiguous ownership. Otherwise a new test target is created under
+`tests/helix-ai/<identity>/`, with a guarded root `add_subdirectory` and CTest
+enablement. C sources remain compiled as C; the separate test file uses C++17
+and must declare C interfaces with correct linkage. Existing GTest targets and
+installed packages are preferred; a new build automatically uses the toolchain
+under `VCPKG_ROOT` if no preset/toolchain override is supplied. If GTest cannot
+be found, `allow-fetch-content = true` permits downloading GoogleTest v1.17.0
+with a verified SHA256. Set it to false for installed dependencies only.
+
+Builds default to `.helix-ai/build` and `Debug`, with `BUILD_TESTING=ON`.
+Simple inherited configure presets retain their `binaryDir`; presets using
+includes/complex macros need an explicit `build-directory`. Build directories
+must stay within the project. Only the selected target is built and only the
+generated suite is run, including multi-config builds. Missing tools/dependencies,
+CMake configure failures and test failures are reported separately. A successful
+run requires test collection; it does not establish sufficient coverage.
+
+One automatic repair is allowed for test compile/link or pytest collection/import
+errors. It returns to preview, must preserve the original assertions exactly,
+and needs acceptance/save before running again. Failed assertions, timeouts,
+missing tools and existing-project CMake configuration errors are not silently
+rewritten. Repair never modifies business code. Header/linkage setup, public API
+accessibility and behavior assumptions still require review.
+
+Initial limitations: repository-wide generation, inaccessible private/static or
+anonymous-namespace functions, restructuring executable targets into libraries,
+automatic fixture/plugin installation and complex cross-compilation. Non-CMake
+C/C++ projects receive a test draft without automatic build integration.

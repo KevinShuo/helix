@@ -59,3 +59,19 @@ RTX 4090 24GB 上原有 9B 仍驻留；27B 比较服务只将 32 层放入 GPU�
 同一个终端单元测试程序串行执行 **125 passed / 4 ignored**，独立的 ai_doc target 12 项在 4 线程也通过；最终 workspace 串行完整运行通过。**不声称默认并行测试稳定。** 保留诊断日志以便后续定位；此功能没有新增语法树遍历或模型代码执行。
 
 语义正确性仍依赖用户检查，支持边界仍为现有 Merge 的可写、可定位普通文本块；不支持整文件批量、跨文件修改或自动提交。Linux/macOS 尚未独立运行验证。
+
+## 独立模型路由与已安装功能兼容
+
+用户随后指定 Merge 使用 27B、补全使用 9B，并授权合并、推送 master 和更新本地安装。原安装来自 `codex/ai-test-generation` 的 `1c5ac7fbe`，包含统一 provider、按需模型租约及测试工作台；整合该分支以保留这些能力。
+
+Merge 加入 `AiFeature`、命名 provider 解析、配置校验和活动模型注册。`provider` 可显式指定连接，`local-provider` 可在继承本地模式时临时切换托管模型；旧版补全连接仍可回退使用。建议配置为 9B 常驻，Merge 使用 `local-27b-direct`（27B、16384 上下文、关闭 thinking），请求结束或取消后恢复 9B。请求通过既有有界 transport；配置的 reasoning budget 也计入输出和上下文预算。
+
+本地删改冲突拦截发生在模型租约之前。新增真实子进程回归验证 Merge 请求、错误响应及取消后均恢复常驻模型。Merge 与 AI Test、Doc、Commit、Completion 的互斥检查一并整合。编译日志适配上游的新跳转历史接口，清空临时历史前保留各视图跳转位置。
+
+- 工作区完整串行回归：**828 passed、0 failed、20 ignored**。
+- 完整集成回归（2 个测试线程）：**363 passed、0 failed、17 ignored**，其中当前冲突块 AI Merge 的 14 项回归全部通过。
+- `cargo check --profile integration --locked -p helix-term --no-default-features`：通过；保留现有无 Git 构建的未使用变量警告。
+- 模型路由和生命周期的独立复核：无 Critical / Important / Minor 问题。
+- runtime 安装清单：1741 个资源、301 个语法库；通过逐文件 SHA-256 比对准备同步，保留安装中的其他资源。
+
+部署结果记录在安装备份的部署记录中。安装过程在提交并推送后重新构建对应修订，再核对可执行文件、runtime 和本机模型切换。

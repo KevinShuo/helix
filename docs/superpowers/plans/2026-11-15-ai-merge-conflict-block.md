@@ -64,3 +64,19 @@
 - [x] Run formatting, workspace tests, full integration tests, and no-default-features build check; name and investigate any baseline failures separately.
 - [x] Run native terminal smoke using a development binary and isolated fixtures. If an existing local model is available, exercise representative merge scenarios without logging credentials.
 - [x] Request one fresh whole-branch review, address important findings with reproducing tests, write final evidence and commit. Keep feature branch available for user review.
+
+### Task 4: Model routing and requested deployment
+
+**Authorization:** The user selected 27B for Merge and 9B for completion, and requested merging/pushing master and updating the local installation.
+
+**Compatibility:** The installed executable is `1c5ac7fbe` from `codex/ai-test-generation`, which contains the provider registry, on-demand model leases and native test workbench. Integrate that existing branch before deployment so the update retains installed capabilities and accepts the current user configuration.
+
+- [x] Resolve the prerequisite merge while retaining both feature sets.
+- [x] Add Merge to the per-feature provider registry with optional `provider` / `local-provider`, legacy fallback and independent activation. Verify 9B remains resident and 27B is on demand.
+- [x] Route Merge through the existing cancellable lease and shared transport; retain local delete/modify refusal before model loading and account for configured reasoning tokens.
+- [x] Test configuration, target invalidation, generation exclusion and model restoration; run workspace/integration checks and obtain a focused review.
+
+**Authorized release procedure** (results recorded alongside the private installation backup):
+
+- Integrate into latest master, push origin/master, build and install the exact revision with runtime files. Back up the existing executable, runtime and user configuration first.
+- Configure local Merge to `local-27b-direct` and completion to `local`; verify the installed executable and native 27B request, preserving active user processes and unrelated configuration.

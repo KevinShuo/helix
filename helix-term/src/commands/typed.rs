@@ -1,4 +1,5 @@
 use std::fmt::Write;
+mod problem_commands;
 use std::io::BufReader;
 use std::ops::{self, Deref};
 
@@ -225,6 +226,111 @@ fn buffer_close_by_ids_impl(
     }
 
     Ok(())
+}
+
+fn delete_file_target(editor: &Editor, doc_id: DocumentId, force: bool) -> anyhow::Result<PathBuf> {
+    let doc = editor
+        .document(doc_id)
+        .ok_or_else(|| anyhow!("The buffer is no longer open"))?;
+    ensure!(
+        doc.merge().is_none() && editor.active_merge().is_none(),
+        "Cannot delete a file from a merge session"
+    );
+    let path = doc
+        .path()
+        .ok_or_else(|| anyhow!("The current buffer has no file path"))?;
+    ensure!(
+        force || !doc.is_modified(),
+        "The buffer has unsaved changes; use :delete-file! to discard them"
+    );
+    let metadata = std::fs::metadata(path)
+        .map_err(|err| anyhow!("Cannot delete {}: {err}", path.display()))?;
+    ensure!(metadata.is_file(), "Not a regular file: {}", path.display());
+    Ok(path.to_path_buf())
+}
+
+fn delete_file_impl(cx: &mut compositor::Context, force: bool) -> anyhow::Result<()> {
+    cx.block_try_flush_writes()?;
+    let doc_id = doc!(cx.editor).id();
+    let path = delete_file_target(cx.editor, doc_id, force)?;
+    // Command mode pops its own prompt after validation. Create and push the
+    // confirmation on the UI thread from a job callback after that pop.
+    cx.jobs.add(Job::with_callback(async move {
+        Ok(job::Callback::EditorCompositor(Box::new(
+            move |_editor, compositor| {
+                let description = format!(
+                    "Permanently delete:\n{}\n{}",
+                    path.display(),
+                    if force {
+                        "Unsaved changes will be discarded. Type yes to confirm; Escape cancels."
+                    } else {
+                        "Type yes to confirm; Escape cancels."
+                    }
+                );
+                let mut prompt = Prompt::new(
+                    "Delete file? Type yes: ".into(),
+                    None,
+                    completers::none,
+                    move |cx, input, event| {
+                        if event != PromptEvent::Validate || input != "yes" {
+                            return;
+                        }
+                        let result = (|| -> anyhow::Result<()> {
+                            cx.block_try_flush_writes()?;
+                            let current_path = delete_file_target(cx.editor, doc_id, force)?;
+                            ensure!(current_path == path, "The buffer's file path has changed");
+                            cx.editor.delete_path(&path, false).map_err(|err| {
+                                anyhow!("Cannot delete {}: {err}", path.display())
+                            })?;
+                            // Deletion was explicitly confirmed. LSP will-delete edits may
+                            // have changed this buffer; it must not remain open to recreate
+                            // the file on a later save.
+                            match cx.editor.close_document(doc_id, true) {
+                                Ok(()) => (),
+                                Err(CloseError::SaveError(err)) => return Err(err),
+                                Err(CloseError::BufferModified(name)) => {
+                                    bail!("Buffer modified: {name}")
+                                }
+                                Err(CloseError::DoesNotExist) => {
+                                    bail!("The buffer is no longer open")
+                                }
+                            }
+                            cx.editor.set_status(format!("Deleted {}", path.display()));
+                            Ok(())
+                        })();
+                        if let Err(err) = result {
+                            cx.editor.set_error(err.to_string());
+                        }
+                    },
+                );
+                prompt.doc_fn = Box::new(move |_| Some(Cow::Owned(description.clone())));
+                compositor.push(Box::new(prompt));
+            },
+        )))
+    }).wait_before_exiting());
+    Ok(())
+}
+
+fn delete_file(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+    delete_file_impl(cx, false)
+}
+
+fn force_delete_file(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+    delete_file_impl(cx, true)
 }
 
 fn buffer_gather_paths_impl(editor: &mut Editor, args: Args) -> Vec<DocumentId> {
@@ -3066,6 +3172,102 @@ fn ai_merge_cancel(
     Ok(())
 }
 
+fn test_run(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::test::nearest(cx.editor)?;
+    }
+    Ok(())
+}
+fn test_file(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        let path = current_ref!(cx.editor)
+            .1
+            .path()
+            .context("请先保存测试文件")?
+            .to_owned();
+        crate::handlers::test::start(cx.editor, helix_view::test::Scope::File(path))?;
+    }
+    Ok(())
+}
+fn test_project(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::test::start(cx.editor, helix_view::test::Scope::Project)?;
+    }
+    Ok(())
+}
+fn test_show(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        cx.editor.tests.panel_visible = true;
+        cx.editor.tests.focus_requested = true;
+    }
+    Ok(())
+}
+fn test_rerun(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::test::rerun(cx.editor, false, None)?;
+    }
+    Ok(())
+}
+fn test_failed(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::test::rerun(cx.editor, true, None)?;
+    }
+    Ok(())
+}
+fn test_stop(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::test::stop(cx.editor);
+    }
+    Ok(())
+}
+
+fn ai_test(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_test::start(cx.editor)?;
+    }
+    Ok(())
+}
+fn ai_test_run(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_test::run_last(cx.editor)?;
+    }
+    Ok(())
+}
+fn ai_test_show(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_test::show(cx.editor)?;
+    }
+    Ok(())
+}
+fn ai_test_cancel(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_test::cancel(cx.editor);
+        cx.editor
+            .set_status("已取消 AI 测试任务，已接受的文件修改保留");
+    }
+    Ok(())
+}
+
 fn ai_doc(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
     if event == PromptEvent::Validate {
         crate::handlers::ai_doc::start(cx.editor)?;
@@ -3111,6 +3313,24 @@ fn ai_commit_cancel(
 pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
     TypableCommand { name: "ai-merge", aliases: &[], doc: "Preview an AI suggestion for the selected merge conflict block", fun: ai_merge, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-merge-cancel", aliases: &[], doc: "Cancel AI merge assistance and preserve the result draft", fun: ai_merge_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "test", aliases: &[], doc: "Run the test or test class at the cursor", fun: test_run, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "test-file", aliases: &[], doc: "Run tests in the current file", fun: test_file, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "test-project", aliases: &[], doc: "Build and run tests in the current language project", fun: test_project, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "test-show", aliases: &[], doc: "Open or focus the test results panel", fun: test_show, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "test-rerun", aliases: &[], doc: "Repeat the last test run and its original environment", fun: test_rerun, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "test-rerun-failed", aliases: &[], doc: "Rerun only failed or errored cases from the last run", fun: test_failed, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "test-stop", aliases: &[], doc: "Stop the active test run and its owned process tree", fun: test_stop, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "compile", aliases: &[], doc: "Run a build shell command asynchronously in the current working directory", fun: problem_commands::compile, completer: CommandCompleter::none(), signature: Signature { positionals: (1, Some(1)), raw_after: Some(0), ..Signature::DEFAULT } },
+    TypableCommand { name: "recompile", aliases: &[], doc: "Repeat the previous build command and working directory", fun: problem_commands::recompile, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "compile-cancel", aliases: &[], doc: "Cancel the active build and its process tree, retaining received output", fun: problem_commands::cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "compile-log", aliases: &[], doc: "Show the current build log in a read-only split", fun: problem_commands::log, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "next-problem", aliases: &[], doc: "Go to next problem, optionally setting source, minimum severity and scope filters", fun: problem_commands::next, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
+    TypableCommand { name: "previous-problem", aliases: &[], doc: "Go to previous problem, optionally setting source, minimum severity and scope filters", fun: problem_commands::previous, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
+    TypableCommand { name: "problems", aliases: &[], doc: "Show filtered live diagnostics and compiler problems", fun: problem_commands::list, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
+    TypableCommand { name: "ai-test", aliases: &[], doc: "Generate pytest or GoogleTest tests and preview CMake integration for the current function", fun: ai_test, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-test-run", aliases: &[], doc: "Run saved generated tests; preview at most one compile/import repair", fun: ai_test_run, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-test-show", aliases: &[], doc: "Show the latest generated test changes or execution report", fun: ai_test_show, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-test-cancel", aliases: &[], doc: "Cancel AI test generation or execution, preserving accepted changes", fun: ai_test_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-commit", aliases: &[], doc: "Recommend files, stage and commit with Chinese or English Conventional Commits", fun: ai_commit, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-commit-cancel", aliases: &[], doc: "Cancel AI commit analysis while preserving staged files and message", fun: ai_commit_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-doc", aliases: &[], doc: "Generate a reST doc comment for the function at the cursor", fun: ai_doc, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
@@ -3321,6 +3541,28 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
         completer: CommandCompleter::none(),
         signature: Signature {
             positionals: (1, Some(1)),
+            ..Signature::DEFAULT
+        },
+    },
+    TypableCommand {
+        name: "delete-file",
+        aliases: &[],
+        doc: "Permanently delete the current file and close its buffer after typing yes to confirm. Refuses unsaved changes.",
+        fun: delete_file,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, Some(0)),
+            ..Signature::DEFAULT
+        },
+    },
+    TypableCommand {
+        name: "delete-file!",
+        aliases: &[],
+        doc: "Permanently delete the current file and close its buffer, discarding unsaved changes, after typing yes to confirm.",
+        fun: force_delete_file,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, Some(0)),
             ..Signature::DEFAULT
         },
     },

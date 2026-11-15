@@ -1,0 +1,7 @@
+﻿case,language,local_generation_ms,local_generation_error,local_accepted,local_raw_pipeline_pass,local_utf8_strict_pass,local_utf8_code_pass,local_execution_ms,local_validation_bypassed,local_mutants_killed,deepseek_generation_ms,deepseek_generation_error,deepseek_accepted,deepseek_raw_pipeline_pass,deepseek_utf8_strict_pass,deepseek_utf8_code_pass,deepseek_execution_ms,deepseek_validation_bypassed,deepseek_mutants_killed
+c_parse_u16,c,66474,,True,False,True,True,6155,False,3,7435,,True,False,False,False,4722,False,0
+c_copy_prefix,c,0,Could not connect to AI endpoint,False,,False,,,False,0,5538,,True,False,True,True,5204,False,3
+cpp_merge_ranges,cpp,106541,,True,True,True,True,5214,False,3,5862,,True,False,False,False,4789,False,0
+cpp_quota,cpp,42079,,True,False,False,False,5192,False,0,4205,,True,False,True,True,5409,False,3
+python_parse_port,python,62396,,True,True,True,True,237,False,3,4026,,True,True,True,True,248,False,3
+python_unique_by,python,45925,,True,True,True,True,232,False,3,3348,测试响应不符合 JSON 格式: missing field `assumptions` at line 1 column 2142,False,,False,True,230,True,3

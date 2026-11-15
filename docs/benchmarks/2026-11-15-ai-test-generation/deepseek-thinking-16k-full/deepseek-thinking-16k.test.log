@@ -1,0 +1,12 @@
+
+running 1 test
+test handlers::ai_test::client::evaluation::ai_test_quality_evaluation ... EVAL deepseek-thinking-16k/c_parse_u16: accepted=true pass=true generation=24847ms mutants=3/3
+EVAL deepseek-thinking-16k/c_copy_prefix: accepted=true pass=true generation=26994ms mutants=3/3
+EVAL deepseek-thinking-16k/cpp_merge_ranges: accepted=true pass=true generation=11362ms mutants=3/3
+EVAL deepseek-thinking-16k/cpp_quota: accepted=true pass=true generation=21524ms mutants=3/3
+EVAL deepseek-thinking-16k/python_parse_port: accepted=true pass=true generation=17399ms mutants=3/3
+EVAL deepseek-thinking-16k/python_unique_by: accepted=true pass=true generation=28312ms mutants=3/3
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 163 filtered out; finished in 183.65s
+

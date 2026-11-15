@@ -1,0 +1,32 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "content": "{\"code\":\"#include <gtest/gtest.h>\\n#include <cstddef>\\n#include <cstring>\\n\\nextern \\\"C\\\" {\\n#include \\\"subject.h\\\"\\n}\\n\\n// 正常情况：容量足够时复制完整字符串并返回源长度\\nTEST(HelixAiCC55F06B8AD1074F, CopiesWholeStringWhenCapacityIsSufficient) {\\n    char dst[16];\\n    std::memset(dst, 'X', sizeof dst);\\n    size_t required = copy_prefix(dst, sizeof dst, \\\"hello\\\");\\n    EXPECT_EQ(required, size_t{5});\\n    EXPECT_STREQ(dst, \\\"hello\\\");\\n}\\n\\n// 边界：容量恰好为源长度加一（刚好容纳 NUL）\\nTEST(HelixAiCC55F06B8AD1074F, ExactFitCapacityCopiesWholeString) {\\n    char dst[6];\\n    std::memset(dst, 'X', sizeof dst);\\n    size_t required = copy_prefix(dst, sizeof dst, \\\"hello\\\");\\n    EXPECT_EQ(required, size_t{5});\\n    EXPECT_STREQ(dst, \\\"hello\\\");\\n}\\n\\n// 正常截断：容量不足时只复制 capacity-1 字节，返回完整源长度\\nTEST(HelixAiCC55F06B8AD1074F, TruncatesWhenCapacityIsTooSmall) {\\n    char dst[4];\\n    std::memset(dst, 'X', sizeof dst);\\n    size_t required = copy_prefix(dst, sizeof dst, \\\"hello\\\");\\n    EXPECT_EQ(required, size_t{5});\\n    EXPECT_EQ(dst[0], 'h');\\n    EXPECT_EQ(dst[1], 'e');\\n    EXPECT_EQ(dst[2], 'l');\\n    EXPECT_EQ(dst[3], 0);\\n}\\n\\n// 边界：容量为 2 时仅复制一个字符并以 NUL 结尾\\nTEST(HelixAiCC55F06B8AD1074F, CapacityTwoCopiesSingleCharacter) {\\n    char dst[2] = {'X', 'Y'};\\n    size_t required = copy_prefix(dst, 2, \\\"hello\\\");\\n    EXPECT_EQ(required, size_t{5});\\n    EXPECT_EQ(dst[0], 'h');\\n    EXPECT_EQ(dst[1], 0);\\n}\\n\\n// 边界：容量为 1 时只写入 NUL 终止符\\nTEST(HelixAiCC55F06B8AD1074F, CapacityOneWritesOnlyTerminator) {\\n    char dst[1] = {'X'};\\n    size_t required = copy_prefix(dst, 1, \\\"hello\\\");\\n    EXPECT_EQ(required, size_t{5});\\n    EXPECT_EQ(dst[0], 0);\\n}\\n\\n// 边界：容量为 0 时不写入任何内容\\nTEST(HelixAiCC55F06B8AD1074F, CapacityZeroLeavesDestinationUntouched) {\\n    char dst[8];\\n    std::memset(dst, 'Z', sizeof dst);\\n    size_t required = copy_prefix(dst, 0, \\\"hello\\\");\\n    EXPECT_EQ(required, size_t{5});\\n    for (size_t i = 0; i < sizeof dst; ++i) {\\n        EXPECT_EQ(dst[i], 'Z') << \\\"index \\\" << i;\\n    }\\n}\\n\\n// 目标指针为 NULL：不写入，仍返回完整源长度\\nTEST(HelixAiCC55F06B8AD1074F, NullDestinationReturnsRequiredLength) {\\n    size_t required = copy_prefix(nullptr, 8, \\\"hello\\\");\\n    EXPECT_EQ(required, size_t{5});\\n}\\n\\n// 源指针为 NULL：按空字符串处理，写入空字符串并返回 0\\nTEST(HelixAiCC55F06B8AD1074F, NullSourceIsTreatedAsEmptyString) {\\n    char dst[8];\\n    std::memset(dst, 'X', sizeof dst);\\n    size_t required = copy_prefix(dst, sizeof dst, nullptr);\\n    EXPECT_EQ(required, size_t{0});\\n    EXPECT_STREQ(dst, \\\"\\\");\\n}\\n\\n// 源为 NULL 且容量为 1：只写入 NUL 终止符\\nTEST(HelixAiCC55F06B8AD1074F, NullSourceWithCapacityOneWritesTerminator) {\\n    char dst[1] = {'X'};\\n    size_t required = copy_prefix(dst, 1, nullptr);\\n    EXPECT_EQ(required, size_t{0});\\n    EXPECT_EQ(dst[0], 0);\\n}\\n\\n// 源和目标均为 NULL：返回 0 且不崩溃\\nTEST(HelixAiCC55F06B8AD1074F, NullSourceAndNullDestinationReturnsZero) {\\n    size_t required = copy_prefix(nullptr, 5, nullptr);\\n    EXPECT_EQ(required, size_t{0});\\n}\\n\\n// 源为空字符串：写入空字符串并返回 0\\nTEST(HelixAiCC55F06B8AD1074F, EmptySourceWritesEmptyString) {\\n    char dst[4] = {'A', 'B', 'C', 'D'};\\n    size_t required = copy_prefix(dst, sizeof dst, \\\"\\\");\\n    EXPECT_EQ(required, size_t{0});\\n    EXPECT_STREQ(dst, \\\"\\\");\\n}\\n\\n// 边界：源长度恰好比容量少一（刚好放不下完整内容）\\nTEST(HelixAiCC55F06B8AD1074F, CapacityExactlySourceLengthTruncatesLastCharacter) {\\n    char dst[5];\\n    std::memset(dst, 'X', sizeof dst);\\n    size_t required = copy_prefix(dst, sizeof dst, \\\"hello\\\");\\n    EXPECT_EQ(required, size_t{5});\\n    EXPECT_EQ(dst[0], 'h');\\n    EXPECT_EQ(dst[1], 'e');\\n    EXPECT_EQ(dst[2], 'l');\\n    EXPECT_EQ(dst[3], 'l');\\n    EXPECT_EQ(dst[4], 0);\\n}\\n\",\"assumptions\":[\"subject.h 未包含 extern \\\"C\\\" 保护，测试在 extern \\\"C\\\" 块中头文件包含以保持 C 链接。\",\"依据头文件注释：capacity 为 0 或 dst 为 NULL 时不写入任何字节；测试只验证返回值以及不写入目标缓冲区。\",\"src 为 NULL 视为空字符串，返回 0，并在可写目标中写入空字符串。\",\"容量不足时只保证写入 capacity 范围内的字节（前 capacity-1 字节及 NUL 终止符），不假设 capacity 之外字节的行为。\",\"目标缓冲区由测试提供且大小至少为 capacity。\"]}",
+        "reasoning_content_chars": 16124,
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1794735658,
+  "id": "558bbc09-0343-4560-9c66-3146d2e37d7b",
+  "model": "deepseek-flash",
+  "object": "chat.completion",
+  "system_fingerprint": "bc19ba97cbe016479903222bb1578db6",
+  "usage": {
+    "completion_tokens": 6265,
+    "completion_tokens_details": {
+      "reasoning_tokens": 4675
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 807,
+    "prompt_tokens": 807,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 7072
+  }
+}

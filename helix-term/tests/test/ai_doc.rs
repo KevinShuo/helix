@@ -11,7 +11,7 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 
 const DOC: &str = r#"{"summary":"返回输入值。","params":[{"name":"a","description":"输入值。"}],"returns":"输入值。"}"#;
 
-async fn keys(app: &mut Application, input: &str) -> anyhow::Result<()> {
+pub(super) async fn keys(app: &mut Application, input: &str) -> anyhow::Result<()> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     for key in parse_macro(input)? {
         #[cfg(windows)]
@@ -29,14 +29,14 @@ async fn keys(app: &mut Application, input: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn settle(app: &mut Application) {
+pub(super) async fn settle(app: &mut Application) {
     app.editor.reset_idle_timer();
     tokio::time::timeout(Duration::from_secs(5), run_event_loop_until_idle(app))
         .await
         .unwrap();
 }
 
-async fn server(
+pub(super) async fn server(
     delay: u64,
     replies: Vec<Value>,
 ) -> (
@@ -80,9 +80,26 @@ async fn server(
                 }
                 bytes.extend_from_slice(&buf[..n]);
             }
-            tx.send(serde_json::from_slice(&bytes[end..end + length]).unwrap())
+            let request: Value = serde_json::from_slice(&bytes[end..end + length]).unwrap();
+            let mut response = reply.to_string();
+            // Test-generation fixtures can use the suite selected by the real planner.
+            if response.contains("__HELIX_TEST_SUITE__") {
+                let prompt = request["messages"][1]["content"].as_str().unwrap();
+                let metadata: Value = serde_json::from_str(
+                    prompt
+                        .lines()
+                        .next()
+                        .unwrap()
+                        .strip_prefix("Target: ")
+                        .unwrap(),
+                )
                 .unwrap();
-            let response = reply.to_string();
+                response = response.replace(
+                    "__HELIX_TEST_SUITE__",
+                    metadata["test_suite"].as_str().unwrap(),
+                );
+            }
+            tx.send(request).unwrap();
             tokio::time::sleep(Duration::from_millis(delay)).await;
             let _ = socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await;
         }
@@ -116,6 +133,45 @@ fn app(
 
 fn text(app: &Application) -> String {
     current_ref!(app.editor).1.text().to_string()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_doc_named_provider_ignores_legacy_local_model() -> anyhow::Result<()> {
+    use helix_view::ai::{AiProviderConfig, AiProviderType, AiProxy};
+    let (endpoint, mut requests, task) = server(0, vec![reply(DOC)]).await;
+    let mut file = tempfile::Builder::new().suffix(".py").tempfile()?;
+    file.write_all(b"def f(a):\n    return a\n")?;
+    let mut config = test_config();
+    config.editor.ai_doc.enabled = true;
+    config.editor.ai_doc.provider = Some("docs-cloud".into());
+    config.editor.ai_completion.model_path = Some("missing-unused-legacy.gguf".into());
+    config.editor.ai.providers.insert(
+        "docs-cloud".into(),
+        AiProviderConfig {
+            kind: AiProviderType::Deepseek,
+            endpoint,
+            model: "documentation-model".into(),
+            context_size: 8192,
+            proxy: AiProxy::None,
+            ..Default::default()
+        },
+    );
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(file.path(), None)
+        .build()?;
+    keys(&mut app, ":ai-doc<ret>").await?;
+    let body = tokio::time::timeout(Duration::from_secs(3), requests.recv())
+        .await?
+        .unwrap();
+    assert_eq!(body["model"], "documentation-model");
+    assert_eq!(body["thinking"]["type"], "disabled");
+    assert_eq!(body["response_format"]["type"], "json_object");
+    settle(&mut app).await;
+    keys(&mut app, "<esc>").await?;
+    app.close().await;
+    task.await?;
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -1,0 +1,93 @@
+# Merge these sections into your Helix config.toml.
+# Set DEEPSEEK_API_KEY in the environment before launching Helix.
+[editor.ai]
+default-provider = "local" # Change only this to "deepseek" to use online models.
+
+[editor.ai.providers.deepseek]
+type = "deepseek"
+endpoint = "https://api.deepseek.com/chat/completions"
+model = "deepseek-flash"
+api-key-env = "DEEPSEEK_API_KEY"
+context-size = 32768
+thinking = false
+proxy = "system"
+
+[editor.ai.providers.local]
+type = "llama-cpp"
+endpoint = "http://127.0.0.1:19239/v1/chat/completions"
+model = "local-coder"
+# Replace this with your existing GGUF path and server executable.
+model-path = 'D:\models\coder.gguf'
+server-path = "llama-server"
+context-size = 8192
+gpu-layers = 99
+
+# Used only by explicit generation in local mode; never loaded at startup.
+# The resident completion model is unloaded first and restored afterwards.
+[editor.ai.providers.local-27b]
+type = "llama-cpp"
+endpoint = "http://127.0.0.1:19241/v1/chat/completions"
+model = "Qwen3.8-27B-UD-Q5_K_M"
+model-path = '${USERPROFILE}\.local\share\junie-local\models\Qwen3.8-27B-UD-Q5_K_M.gguf'
+server-path = "llama-server"
+context-size = 16384
+gpu-layers = 99
+startup-timeout-ms = 180000
+thinking = true
+thinking-budget = 2048
+reasoning-effort = "medium"
+proxy = "none"
+
+# Direct JSON generation for Merge, sharing the 27B GGUF on a distinct endpoint.
+[editor.ai.providers.local-27b-direct]
+type = "llama-cpp"
+endpoint = "http://127.0.0.1:19242/v1/chat/completions"
+model = "Qwen3.8-27B-UD-Q5_K_M"
+model-path = '${USERPROFILE}\.local\share\junie-local\models\Qwen3.8-27B-UD-Q5_K_M.gguf'
+server-path = "llama-server"
+context-size = 16384
+gpu-layers = 99
+startup-timeout-ms = 180000
+thinking = false
+proxy = "none"
+
+[editor.ai-completion]
+enabled = true
+debounce-ms = 700
+timeout-ms = 10000
+max-tokens = 128
+
+[editor.ai-merge]
+enabled = true
+local-provider = "local-27b-direct"
+timeout-ms = 120000
+max-tokens = 1536
+max-input-bytes = 16384
+
+[editor.ai-doc]
+enabled = true
+local-provider = "local-27b" # Ignored when the inherited provider is online.
+language = "zh-CN"
+timeout-ms = 120000
+max-tokens = 1024
+
+[editor.ai-commit]
+enabled = true
+local-provider = "local-27b"
+language = "zh-CN"
+timeout-ms = 120000
+max-tokens = 1024
+
+[editor.ai-test]
+enabled = true
+local-provider = "local-27b"
+max-tokens = 4096
+timeout-ms = 120000
+run-timeout-ms = 180000
+allow-fetch-content = true # Existing/project/vcpkg GTest first, pinned download last.
+# python = 'D:\project\.venv\Scripts\python.exe'
+# cmake-preset = "windows-debug"
+# build-directory = "out/build/windows-debug"
+# build-configuration = "Debug"
+# library-target = "my_library" # Needed for custom/ambiguous CMake targets.
+# test-target = "existing_tests"
