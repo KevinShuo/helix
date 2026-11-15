@@ -5,6 +5,7 @@ pub mod action;
 pub mod ai_commit;
 pub mod ai_completion;
 pub mod ai_doc;
+pub mod ai_merge;
 pub mod annotations;
 pub mod clipboard;
 pub mod document;

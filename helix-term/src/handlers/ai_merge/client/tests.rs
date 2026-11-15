@@ -1,0 +1,149 @@
+use super::*;
+use helix_view::ai_merge::{AiMergeConfig, Target};
+use serde_json::json;
+
+fn target() -> Target {
+    Target {
+        block: 2,
+        path: "src/计算.rs".into(),
+        language: "rust".into(),
+        base: "    base();\n".into(),
+        current: "    current();\n".into(),
+        incoming: "    incoming();\n".into(),
+        result: "    手动修改();\n".into(),
+        context: vec!["use example::Thing;\nfn merge() {".into()],
+        intent: "保留双方校验".into(),
+        range: 10..22,
+    }
+}
+
+fn response(status: &str, code: Value) -> Value {
+    json!({"choices":[{"finish_reason":"stop","message":{"content":json!({
+        "block_id":2,"status":status,"code":code,"explanation":"保留双方的行为。"
+    }).to_string()}}]})
+}
+
+#[test]
+fn ai_merge_request_keeps_complete_required_inputs_and_intent() {
+    let target = target();
+    let model = AiCompletionConfig {
+        context_size: 32768,
+        ..Default::default()
+    };
+    let config = AiMergeConfig {
+        enabled: true,
+        ..Default::default()
+    };
+    let body = request(&model, &config, &target).unwrap();
+    let data: Value =
+        serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(data["block_id"], 2);
+    assert_eq!(data["base"], "    base();\n");
+    assert_eq!(data["current"], "    current();\n");
+    assert_eq!(data["incoming"], "    incoming();\n");
+    assert_eq!(data["result"], "    手动修改();\n");
+    assert_eq!(data["intent"], "保留双方校验");
+    assert!(data["context"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s.as_str().unwrap().contains("use example::Thing")));
+    assert_eq!(body["stream"], false);
+    assert_eq!(body["max_tokens"], 1536);
+}
+
+#[test]
+fn ai_merge_budget_drops_optional_context_but_never_truncates_a_conflict() {
+    let mut target = target();
+    target.context = vec!["optional".repeat(5000)];
+    let model = AiCompletionConfig {
+        context_size: 8192,
+        ..Default::default()
+    };
+    let config = AiMergeConfig {
+        enabled: true,
+        ..Default::default()
+    };
+    let body = request(&model, &config, &target).unwrap();
+    let data: Value =
+        serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+    assert!(data["context"].as_array().unwrap().is_empty());
+    assert_eq!(data["result"], "    手动修改();\n");
+    target.base = "required".repeat(3000);
+    assert!(request(&model, &config, &target).is_err());
+    target.base.clear();
+    let small = AiMergeConfig {
+        max_input_bytes: 10,
+        ..config.clone()
+    };
+    assert!(request(&model, &small, &target).is_err());
+    let disabled = AiMergeConfig {
+        enabled: false,
+        ..config
+    };
+    assert!(request(&model, &disabled, &target).is_err());
+}
+
+#[test]
+fn ai_merge_response_allows_empty_deletion_and_normalizes_crlf() {
+    assert_eq!(
+        parse(&response("resolved", json!("")), 2)
+            .unwrap()
+            .code
+            .as_deref(),
+        Some("")
+    );
+    assert_eq!(
+        parse(&response("resolved", json!("双方();\r\n")), 2)
+            .unwrap()
+            .code
+            .as_deref(),
+        Some("双方();\n")
+    );
+    let manual = parse(&response("needs-manual", Value::Null), 2).unwrap();
+    assert!(manual.code.is_none());
+    assert!(!manual.explanation.is_empty());
+}
+
+#[test]
+fn ai_merge_response_rejects_wrong_target_incomplete_and_tool_output() {
+    let valid = response("resolved", json!("merged();\n"));
+    assert!(parse(&valid, 1).is_err());
+    let mut truncated = valid.clone();
+    truncated["choices"][0]["finish_reason"] = json!("length");
+    assert!(parse(&truncated, 2).is_err());
+    let mut tools = valid.clone();
+    tools["choices"][0]["message"]["tool_calls"] =
+        json!([{"type":"function","function":{"name":"write_file","arguments":"{}"}}]);
+    assert!(parse(&tools, 2).is_err());
+    let mut unknown = valid;
+    let mut content: Value = serde_json::from_str(
+        unknown["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    content["path"] = json!("other.rs");
+    unknown["choices"][0]["message"]["content"] = json!(content.to_string());
+    assert!(parse(&unknown, 2).is_err());
+    assert!(parse(&response("resolved", Value::Null), 2).is_err());
+    assert!(parse(&response("needs-manual", json!("code")), 2).is_err());
+    assert!(parse(&response("maybe", json!("code")), 2).is_err());
+}
+
+#[test]
+fn ai_merge_response_rejects_markers_controls_and_excessive_code() {
+    for code in [
+        "<<<<<<< current\nx\n=======\ny\n>>>>>>> incoming\n",
+        "x\u{1b}[2J",
+        "x\0",
+        "x\r",
+        "x\u{202e}y",
+    ] {
+        assert!(
+            parse(&response("resolved", json!(code)), 2).is_err(),
+            "{code:?}"
+        );
+    }
+    assert!(parse(&response("resolved", json!("x".repeat(65537))), 2).is_err());
+}

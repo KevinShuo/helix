@@ -345,6 +345,7 @@ pub struct Config {
     pub ai_completion: crate::ai_completion::AiCompletionConfig,
     pub ai_doc: crate::ai_doc::AiDocConfig,
     pub ai_commit: crate::ai_commit::AiCommitConfig,
+    pub ai_merge: crate::ai_merge::AiMergeConfig,
     /// Function reference counts and latest Git authors beside declarations.
     pub function_hints: crate::function_hints::FunctionHintsConfig,
     /// Optional source overview at the right of each editing split.
@@ -1201,6 +1202,7 @@ impl Default for Config {
             ai_completion: crate::ai_completion::AiCompletionConfig::default(),
             ai_doc: crate::ai_doc::AiDocConfig::default(),
             ai_commit: crate::ai_commit::AiCommitConfig::default(),
+            ai_merge: crate::ai_merge::AiMergeConfig::default(),
             function_hints: crate::function_hints::FunctionHintsConfig::default(),
             minimap: crate::minimap::MinimapConfig::default(),
             path_completion: true,
@@ -2751,7 +2753,7 @@ impl Config {
     /// Provider settings shared by explicit generation and automatic completion.
     pub fn ai_model_config(&self) -> crate::ai_completion::AiCompletionConfig {
         let mut model = self.ai_completion.clone();
-        model.enabled |= self.ai_doc.enabled || self.ai_commit.enabled;
+        model.enabled |= self.ai_doc.enabled || self.ai_commit.enabled || self.ai_merge.enabled;
         model
     }
 }

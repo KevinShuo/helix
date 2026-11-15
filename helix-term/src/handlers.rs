@@ -19,6 +19,7 @@ pub(crate) mod ai;
 pub(crate) mod ai_commit;
 pub mod ai_completion;
 pub(crate) mod ai_doc;
+pub(crate) mod ai_merge;
 mod auto_save;
 mod code_action_hint;
 pub mod completion;
