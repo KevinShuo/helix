@@ -223,6 +223,90 @@ async fn gitignore_small_window_keeps_selection_and_allows_cancel() -> anyhow::R
     Ok(())
 }
 
+#[cfg(windows)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn gitignore_reuses_unsaved_windows_case_variants() -> anyhow::Result<()> {
+    let root = tempfile::tempdir()?;
+    fs::write(root.path().join("Cargo.toml"), "")?;
+    let mut app = AppBuilder::new()
+        .with_file(root.path().join("source.txt"), None)
+        .build()?;
+    keys(&mut app, ":new-file .GITIGNORE<ret>original draft<esc>").await?;
+    let id = doc!(app.editor).id();
+    let count = app.editor.documents().count();
+    keys(&mut app, ":gitignore<ret>").await?;
+    assert!(
+        !screen(&app).contains("Gitignore templates"),
+        "case variant must reuse the original buffer"
+    );
+    assert_eq!(doc!(app.editor).id(), id);
+    assert_eq!(app.editor.documents().count(), count);
+    assert_eq!(
+        doc!(app.editor).text().to_string().trim_end(),
+        "original draft"
+    );
+    assert!(!root.path().join(".gitignore").exists());
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn gitignore_file_appearing_inside_document_open_is_loaded_before_save() -> anyhow::Result<()>
+{
+    use helix_view::events::DocumentDidOpen;
+    let root = tempfile::tempdir()?;
+    fs::write(root.path().join("Cargo.toml"), "")?;
+    let target = helix_stdx::path::normalize(root.path().join(".gitignore"));
+    let mut app = AppBuilder::new()
+        .with_file(root.path().join("source.txt"), None)
+        .build()?;
+    let watched = target.clone();
+    helix_event::register_hook!(move |event: &mut DocumentDidOpen<'_>| {
+        if event.editor.document(event.doc).and_then(|doc| doc.path()) == Some(watched.as_path()) {
+            fs::write(&watched, "created-during-open\n")?;
+        }
+        Ok(())
+    });
+    keys(&mut app, ":gitignore<ret>").await?;
+    ready(&mut app).await;
+    keys(&mut app, "<ret>").await?;
+    assert_eq!(doc!(app.editor).text().to_string(), "created-during-open\n");
+    assert!(!doc!(app.editor).is_modified());
+    keys(&mut app, ":w<ret>").await?;
+    assert_eq!(fs::read_to_string(target)?, "created-during-open\n");
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn gitignore_replaces_initial_newline_with_exact_lf_draft() -> anyhow::Result<()> {
+    let root = tempfile::tempdir()?;
+    fs::write(root.path().join("Cargo.toml"), "")?;
+    let mut config = helix_term::config::Config::default();
+    config.editor.default_line_ending = helix_view::editor::LineEndingConfig::Crlf;
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(root.path().join("source.txt"), None)
+        .build()?;
+    keys(&mut app, ":gitignore<ret>").await?;
+    ready(&mut app).await;
+    keys(&mut app, "<ret>").await?;
+    let text = doc!(app.editor).text().to_string();
+    assert!(
+        !text.contains('\r'),
+        "generated document must contain only LF"
+    );
+    assert!(
+        text.ends_with('\n') && !text.ends_with("\n\n"),
+        "must have one final newline"
+    );
+    keys(&mut app, "Go# edit<esc>:w<ret>").await?;
+    let saved = fs::read_to_string(root.path().join(".gitignore"))?;
+    assert!(
+        !saved.contains('\r'),
+        "further edits must use the draft's LF policy"
+    );
+    Ok(())
+}
+
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn gitignore_refuses_symlink_target() -> anyhow::Result<()> {

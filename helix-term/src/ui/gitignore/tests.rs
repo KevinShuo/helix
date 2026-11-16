@@ -27,3 +27,11 @@ fn selection_keeps_hidden_items_and_does_not_reselect_recommendations() {
     selected.filter("os win");
     assert_eq!(selected.current().unwrap().id, "windows");
 }
+
+#[test]
+fn display_text_keeps_names_but_neutralizes_terminal_and_bidi_controls() {
+    assert_eq!(
+        display_text("目录\tfile\n\u{1b}[31m\u{202e}txt"),
+        "目录 file��[31m�txt"
+    );
+}

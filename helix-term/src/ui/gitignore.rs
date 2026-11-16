@@ -10,7 +10,7 @@ use crate::{
     ui::Prompt,
 };
 use anyhow::{Context as _, Result};
-use helix_core::{Position, Selection, Transaction};
+use helix_core::{LineEnding, Position, Selection, Transaction};
 use helix_view::{
     document::Mode,
     editor::Action,
@@ -30,6 +30,22 @@ use tui::{
 
 const ID: &str = "gitignore-generator";
 static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
+
+fn display_text(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c == '\t' {
+                ' '
+            } else if c.is_control()
+                || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+            {
+                '�'
+            } else {
+                c
+            }
+        })
+        .collect()
+}
 
 pub(crate) fn open(cx: &mut crate::commands::Context) {
     let Some(start) = cx.editor.git_context_path() else {
@@ -125,7 +141,23 @@ impl Generator {
 
 /// Reuse the document before inspecting disk; never reload somebody's unsaved edits.
 fn open_existing(editor: &mut Editor, target: &Path) -> Result<bool> {
-    if let Some(id) = editor.document_id_by_path(target) {
+    let normalized = helix_stdx::path::canonicalize(target);
+    let existing = editor
+        .documents()
+        .find(|doc| {
+            doc.path().is_some_and(|path| {
+                #[cfg(windows)]
+                {
+                    helix_stdx::path::eq_ignore_case(path, &normalized)
+                }
+                #[cfg(not(windows))]
+                {
+                    path == normalized
+                }
+            })
+        })
+        .map(|doc| doc.id());
+    if let Some(id) = existing {
         editor.switch(id, Action::Replace);
         editor.set_status("Existing .gitignore buffer; content preserved");
         return Ok(true);
@@ -168,21 +200,45 @@ fn generate_draft(
     let text = gitignore::generate(selected)?;
     let previous = editor.documents().map(|doc| doc.id()).collect::<Vec<_>>();
     let id = editor.open(&project.target, Action::Replace)?;
+    anyhow::ensure!(
+        helix_view::doc!(editor).id() == id,
+        "Could not activate .gitignore buffer"
+    );
     if previous.contains(&id) {
         return Ok(());
     }
     // Editor::open may have read a file created after the first check. Keep it intact.
     match fs::symlink_metadata(&project.target) {
-        Ok(_) => {
-            editor.set_status(".gitignore appeared during generation; no template inserted");
+        Ok(metadata) => {
+            anyhow::ensure!(
+                metadata.is_file(),
+                ".gitignore target must be a regular file: {}",
+                project.target.display()
+            );
+            // This is only our newly opened document, never an existing user draft.
+            // Loading it also establishes the correct save baseline for the external file.
+            let trust_full = editor
+                .workspace_trust
+                .query(
+                    &helix_loader::find_workspace_in(directory).0,
+                    helix_loader::workspace_trust::TrustQuery::Git,
+                )
+                .is_trusted();
+            let (view, doc) = helix_view::current!(editor);
+            doc.reload(view, &editor.diff_providers, trust_full)?;
+            editor.set_status(".gitignore appeared during generation; external content loaded");
             return Ok(());
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => (),
         Err(error) => return Err(error.into()),
     }
     let (view, doc) = helix_view::current!(editor);
-    let transaction = Transaction::insert(doc.text(), &Selection::point(0), text.into())
-        .with_selection(Selection::point(0));
+    let transaction = Transaction::change(
+        doc.text(),
+        [(0, doc.text().len_chars(), Some(text.into()))].into_iter(),
+    )
+    .with_selection(Selection::point(0));
+    doc.line_ending = LineEnding::LF;
     doc.apply(&transaction, view.id);
     doc.append_changes_to_history(view);
     editor.mode = Mode::Normal;
@@ -281,7 +337,7 @@ impl Component for Generator {
             surface.set_stringn(
                 inner.x,
                 inner.y + row,
-                &super::ai_preview_text::display(content),
+                &display_text(content),
                 inner.width as usize,
                 style,
             );
