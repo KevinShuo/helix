@@ -1,0 +1,6 @@
+.env
+.env.*
+# Preserve these conventional examples; add other example names as needed.
+!.env.example
+!.env.sample
+!.env.template

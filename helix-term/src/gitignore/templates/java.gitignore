@@ -1,0 +1,2 @@
+# Keep archives, including Maven and Gradle wrapper JARs.
+*.class

@@ -1,0 +1,6 @@
+/.idea/*
+# Keep commonly shared team configuration.
+!/.idea/codeStyles/
+!/.idea/inspectionProfiles/
+!/.idea/runConfigurations/
+!/.idea/vcs.xml
