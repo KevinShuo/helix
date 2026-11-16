@@ -1232,7 +1232,7 @@ a local provider share its process. No model is downloaded automatically.
 | `local-provider` | Managed model to load temporarily when inheriting local mode; ignored online or with an explicit `provider` | unset |
 | `language` | Description language: `zh-CN` or `en` | `"zh-CN"` |
 | `style` | Documentation style; currently only `rest` | `"rest"` |
-| `timeout-ms` | Generation timeout; model startup has its separate existing timeout | `30000` |
+| `timeout-ms` | Combined generation and repair timeout (100–120000 ms); model startup has its separate existing timeout | `30000` |
 | `max-tokens` | Output budget, bounded to 128–4096 tokens | `768` |
 
 Move into a function and run `:ai-doc`. The preview shows the exact insertion;
@@ -1248,7 +1248,18 @@ D = ":ai-doc"
 ```
 
 The request uses the complete current function, including unsaved changes, and
-bounded declarations from the same buffer. It does not read other project files
+bounded declarations from the same buffer. Relevant constants, types and helper
+definitions are included as complete blocks when they fit the context budget.
+Callable facts distinguish ordinary, async and generator behavior. Each generated
+description must quote supporting source; quotations are checked against the
+source actually sent and are omitted from the final comment. This establishes
+source traceability, not proof that a natural-language claim is correct.
+
+Successful generation uses one model request. A complete response that fails
+validation can be repaired once using the diagnostic and the same source, within
+the combined timeout. Transport failures, tool calls and truncated completions
+are not retried automatically. The operation holds one model lease across both
+requests. It does not read other project files
 or execute model output. A function exceeding the model context budget is
 rejected rather than silently truncated. Generated descriptions still need review.
 Moving the cursor while generating preserves the original target; editing the

@@ -3,6 +3,9 @@ use helix_core::{syntax::Syntax, tree_sitter::Node, RopeSlice};
 
 pub(crate) use helix_view::ai_doc::{Parameter, Target};
 
+#[path = "source_context.rs"]
+mod context;
+
 fn named(node: Node<'_>) -> Vec<Node<'_>> {
     node.children().filter(|n| n.is_named()).collect()
 }
@@ -43,6 +46,17 @@ fn walk_body<'a>(node: Node<'a>, visit: &mut impl FnMut(Node<'a>)) {
             walk_body(child, visit);
         }
     }
+}
+
+fn is_none(node: Node<'_>, text: RopeSlice) -> bool {
+    if node.kind() == "parenthesized_expression" {
+        let children = named(node)
+            .into_iter()
+            .filter(|n| n.kind() != "comment")
+            .collect::<Vec<_>>();
+        return children.len() == 1 && is_none(children[0].clone(), text);
+    }
+    source(text, node) == "None"
 }
 
 fn is_docstring(node: Node<'_>, text: RopeSlice) -> bool {
@@ -169,6 +183,8 @@ fn locate_mode(
         name: String::new(),
         source: source(text, wrapper.clone()),
         supporting: String::new(),
+        related: Vec::new(),
+        facts: Default::default(),
         range: start..end,
         insert: 0,
         indent: String::new(),
@@ -180,6 +196,8 @@ fn locate_mode(
         exceptions: Vec::new(),
         line: text.byte_to_line(wrapper.start_byte() as usize) + 1,
     };
+    target.facts.asynchronous =
+        language == "python" && function.children().any(|n| n.kind() == "async");
     if language == "python" {
         target.name = source(
             text,
@@ -279,14 +297,14 @@ fn locate_mode(
                 .join(" ")
         });
         walk_body(body, &mut |n| {
-            if (n.kind() == "return_statement"
+            if n.kind() == "return_statement"
                 && named(n.clone())
                     .first()
-                    .is_some_and(|value| source(text, value.clone()) != "None"))
-                || n.kind() == "yield"
+                    .is_some_and(|value| !is_none(value.clone(), text))
             {
-                target.returns = true;
+                target.facts.value_return = true;
             }
+            target.facts.generator |= n.kind() == "yield";
             if n.kind() == "raise_statement" {
                 if let Some(value) = named(n.clone()).first().cloned() {
                     let exception = value.child_by_field_name("function").unwrap_or(value);
@@ -296,9 +314,8 @@ fn locate_mode(
                 }
             }
         });
-        if target.return_type.as_deref() == Some("None") {
-            target.returns = false;
-        }
+        // Runtime behavior takes precedence over a contradictory annotation.
+        target.returns = target.facts.value_return || target.facts.generator;
     } else {
         let line_start = text.line_to_char(text.char_to_line(start));
         target.indent = text.slice(line_start..start).to_string();
@@ -426,6 +443,8 @@ fn locate_mode(
         }
         target.templates = template_groups.into_iter().rev().flatten().collect();
         walk_body(body, &mut |n| {
+            target.facts.value_return |=
+                n.kind() == "return_statement" && !named(n.clone()).is_empty();
             if n.kind() == "throw_statement" {
                 if let Some(value) = named(n.clone()).first().cloned() {
                     let ty = value
@@ -437,6 +456,9 @@ fn locate_mode(
                 }
             }
         });
+    }
+    if !for_test {
+        target.related = context::collect(text, wrapper.clone());
     }
     target.exceptions.sort();
     target.exceptions.dedup();

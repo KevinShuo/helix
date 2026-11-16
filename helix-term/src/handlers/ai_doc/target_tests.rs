@@ -262,3 +262,131 @@ fn ai_doc_python_parenthesized_docstring_may_contain_comments() {
     let source = "def f():\n    ( # existing documentation\n        'old'\n    )\n    return 1\n";
     assert!(find("python", source, "return").is_err());
 }
+
+#[test]
+fn ai_doc_generator_semantics_override_none_annotation() {
+    let target = find(
+        "python",
+        "def f(values) -> None:\n    yield from values\n",
+        "yield",
+    )
+    .unwrap();
+    assert!(
+        target.returns,
+        "a generator returns an iterator even with a misleading annotation"
+    );
+}
+
+#[test]
+fn ai_doc_parenthesized_none_has_no_meaningful_return() {
+    let target = find("python", "def f():\n    return (None)\n", "return").unwrap();
+    assert!(!target.returns);
+}
+
+#[test]
+fn ai_doc_context_resolves_helpers_and_constants_without_other_scopes() {
+    let source = "LIMIT = 8\nUNRELATED = 999\n\ndef normalize(value):\n    return min(value, LIMIT)\n\ndef target(value):\n    return normalize(value)\n\nclass Other:\n    def normalize(self, value):\n        return 'unrelated'\n";
+    let target = find("python", source, "return normalize").unwrap();
+    let request = crate::handlers::ai_doc::client::request(
+        &helix_view::ai::AiProviderConfig {
+            context_size: 16384,
+            ..Default::default()
+        },
+        &helix_view::ai_doc::AiDocConfig::default(),
+        &target,
+    )
+    .unwrap();
+    let context = request["messages"][1]["content"].as_str().unwrap();
+    assert!(context.contains("def normalize(value):"));
+    assert!(context.contains("LIMIT = 8"));
+    assert!(!context.contains("UNRELATED"));
+    assert!(!context.contains("unrelated"));
+    let input: serde_json::Value = serde_json::from_str(context).unwrap();
+    assert!(!input["related"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|block| block.as_str() == Some(target.source.as_str())));
+}
+
+#[test]
+fn ai_doc_related_context_respects_parameter_shadowing() {
+    let source = "LIMIT = 999\n\ndef f(LIMIT):\n    return LIMIT + 1\n";
+    let target = find("python", source, "return").unwrap();
+    assert!(
+        target.related.is_empty(),
+        "a parameter does not reference the same-named global"
+    );
+}
+
+#[test]
+fn ai_doc_related_context_includes_cpp_macros_and_member_helpers() {
+    let source = "#define LIMIT 8\nnamespace Demo {\nint cap(int value) { return value < LIMIT ? value : LIMIT; }\nint f(int value) { return cap(value); }\n}\n";
+    let target = find("cpp", source, "return cap").unwrap();
+    assert!(target
+        .related
+        .iter()
+        .any(|s| s.contains("int cap(int value)")));
+    assert!(target.related.iter().any(|s| s.contains("#define LIMIT 8")));
+    let source = "class C:\n    ceiling = 8\n    def cap(self, value):\n        return min(value, self.ceiling)\n    def f(self, value):\n        return self.cap(value)\n\nclass Other:\n    def cap(self, value):\n        return 'wrong'\n";
+    let target = find("python", source, "return self.cap").unwrap();
+    let context = target.related.join("\n");
+    assert!(context.contains("def cap(self, value):"));
+    assert!(context.contains("ceiling = 8"));
+    assert!(!context.contains("wrong"));
+}
+
+#[test]
+fn ai_doc_callable_facts_do_not_leak_from_nested_functions() {
+    let source = "async def f(value):\n    def inner():\n        yield 1\n    return value\n";
+    let target = find("python", source, "return value").unwrap();
+    assert!(target.facts.asynchronous);
+    assert!(!target.facts.generator);
+    assert!(target.facts.value_return);
+    let target = find(
+        "python",
+        "async def f(values):\n    async for x in values:\n        yield x\n",
+        "yield",
+    )
+    .unwrap();
+    assert!(target.facts.asynchronous && target.facts.generator);
+}
+
+#[test]
+fn ai_doc_helper_dependencies_resolve_in_the_helpers_own_scope() {
+    let source = "LIMIT = 8\n\ndef cap(x):\n    return min(x, LIMIT)\n\nclass C:\n    LIMIT = 999\n    def f(self, x):\n        return cap(x)\n";
+    let target = find("python", source, "return cap").unwrap();
+    let context = target.related.join("\n");
+    assert!(context.contains("LIMIT = 8"), "{context}");
+    assert!(!context.contains("LIMIT = 999"), "{context}");
+}
+
+#[test]
+fn ai_doc_bare_method_names_and_object_attributes_do_not_resolve_as_class_globals() {
+    let source = "def helper(x):\n    return x + 1\n\nfetch = 999\n\nclass C:\n    def helper(self, x):\n        return 'wrong'\n    def f(self, backend, x):\n        backend.fetch(x)\n        return helper(x)\n";
+    let target = find("python", source, "return helper").unwrap();
+    let context = target.related.join("\n");
+    assert!(context.contains("return x + 1"), "{context}");
+    assert!(!context.contains("wrong"), "{context}");
+    assert!(!context.contains("fetch = 999"), "{context}");
+}
+
+#[test]
+fn ai_doc_local_binding_does_not_include_an_unrelated_global() {
+    let source = "LIMIT = 999\n\ndef f():\n    LIMIT = 3\n    return LIMIT\n";
+    assert!(find("python", source, "return").unwrap().related.is_empty());
+}
+
+#[test]
+fn ai_doc_related_context_preserves_local_types_and_enum_error_codes() {
+    let source =
+        "struct Options { int limit; };\nint f() { Options options{}; return options.limit; }\n";
+    let target = find("cpp", source, "return").unwrap();
+    assert!(target.related.iter().any(|s| s.contains("struct Options")));
+    let source = "enum Status { STATUS_OK = 0, STATUS_INVALID = -1 };\nint code(int valid) { return valid ? STATUS_OK : STATUS_INVALID; }\n";
+    let target = find("c", source, "return").unwrap();
+    assert!(target
+        .related
+        .iter()
+        .any(|s| s.contains("STATUS_INVALID = -1")));
+}

@@ -12,6 +12,13 @@ struct Description {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct Evidence {
+    field: String,
+    quote: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Documentation {
     summary: String,
     #[serde(default)]
@@ -23,6 +30,58 @@ struct Documentation {
     returns: Option<String>,
     #[serde(default)]
     raises: Vec<Description>,
+    #[serde(default)]
+    evidence: Vec<Evidence>,
+}
+
+fn grounded(target: &Target, doc: &Documentation, context: &[&str]) -> Result<()> {
+    let mut required = std::collections::BTreeSet::from(["summary".to_owned()]);
+    if doc.details.is_some() {
+        required.insert("details".into());
+    }
+    if doc.returns.is_some() {
+        required.insert("returns".into());
+    }
+    for (prefix, descriptions) in [
+        ("param", &doc.params),
+        ("template", &doc.templates),
+        ("raises", &doc.raises),
+    ] {
+        for description in descriptions {
+            required.insert(format!("{prefix}:{}", description.name));
+        }
+    }
+    ensure!(doc.evidence.len() <= 128, "evidence 证据条目过多");
+    let mut covered = std::collections::HashSet::new();
+    for evidence in &doc.evidence {
+        ensure!(
+            required.contains(&evidence.field),
+            "evidence 引用了不存在的说明字段：{}",
+            evidence.field
+        );
+        ensure!(
+            !evidence.quote.trim().is_empty()
+                && evidence.quote.len() <= 2048
+                && (target.source.contains(&evidence.quote)
+                    || context.iter().any(|s| s.contains(&evidence.quote))),
+            "evidence 的引用必须是本次提供源码中的原文片段：{}",
+            evidence.field
+        );
+        covered.insert(evidence.field.as_str());
+    }
+    for field in required {
+        ensure!(
+            covered.contains(field.as_str()),
+            "evidence 缺少说明字段的源码依据：{field}"
+        );
+    }
+    ensure!(
+        !(target.facts.value_return || target.facts.generator)
+            || !target.returns
+            || doc.returns.is_some(),
+        "有返回值或生成值的函数缺少 returns 说明"
+    );
+    Ok(())
 }
 
 fn plain(value: &str) -> Result<()> {
@@ -58,10 +117,16 @@ fn descriptions(values: Vec<Description>, names: &[&str]) -> Result<HashMap<Stri
     Ok(result)
 }
 
+#[cfg(test)]
 pub(crate) fn render(target: &Target, json: &str) -> Result<String> {
+    render_with_context(target, json, &[])
+}
+
+pub(crate) fn render_with_context(target: &Target, json: &str, context: &[&str]) -> Result<String> {
     ensure!(json.len() <= 32768, "模型返回的注释过长");
     let doc: Documentation =
         serde_json::from_str(json).context("模型未返回有效的文档 JSON，请重新生成")?;
+    grounded(target, &doc, context)?;
     plain(&doc.summary)?;
     let params = descriptions(
         doc.params,
@@ -100,7 +165,11 @@ pub(crate) fn render(target: &Target, json: &str) -> Result<String> {
         fields.push(format!(":returns: {returns}"));
     }
     if target.language == "python" {
-        if let Some(ty) = &target.return_type {
+        if let Some(ty) = target
+            .return_type
+            .as_ref()
+            .filter(|ty| !(target.returns && ty.as_str() == "None"))
+        {
             fields.push(format!(":rtype: {ty}"));
         }
     }

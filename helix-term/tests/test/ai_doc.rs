@@ -9,7 +9,7 @@ use tokio::{
 };
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-const DOC: &str = r#"{"summary":"返回输入值。","params":[{"name":"a","description":"输入值。"}],"returns":"输入值。"}"#;
+const DOC: &str = r#"{"summary":"返回输入值。","params":[{"name":"a","description":"输入值。"}],"returns":"输入值。","evidence":[{"field":"summary","quote":"return a"},{"field":"param:a","quote":"a"},{"field":"returns","quote":"return a"}]}"#;
 
 pub(super) async fn keys(app: &mut Application, input: &str) -> anyhow::Result<()> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
@@ -116,10 +116,20 @@ fn app(
     suffix: &str,
     source: &str,
 ) -> anyhow::Result<(Application, tempfile::NamedTempFile)> {
+    app_with_timeout(endpoint, suffix, source, 30000)
+}
+
+fn app_with_timeout(
+    endpoint: String,
+    suffix: &str,
+    source: &str,
+    timeout_ms: u64,
+) -> anyhow::Result<(Application, tempfile::NamedTempFile)> {
     let mut file = tempfile::Builder::new().suffix(suffix).tempfile()?;
     file.write_all(source.as_bytes())?;
     let mut config = test_config();
     config.editor.ai_doc.enabled = true;
+    config.editor.ai_doc.timeout_ms = timeout_ms;
     config.editor.ai_completion.enabled = false;
     config.editor.ai_completion.endpoint = endpoint;
     config.editor.idle_timeout = Duration::from_millis(50);
@@ -226,6 +236,115 @@ async fn ai_doc_native_command_previews_then_accepts_and_undoes() -> anyhow::Res
     assert_eq!(text(&app), accepted);
     app.close().await;
     task.abort();
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_doc_repairs_missing_evidence_once_before_preview() -> anyhow::Result<()> {
+    let missing = r#"{"summary":"返回输入值。","params":[{"name":"a","description":"输入值。"}],"returns":"输入值。"}"#;
+    let (endpoint, mut requests, task) = server(0, vec![reply(missing), reply(DOC)]).await;
+    let original = "def f(a):\n    return a\n";
+    let (mut app, _file) = app(endpoint, ".py", original)?;
+    keys(&mut app, ":ai-doc<ret>").await?;
+    tokio::time::timeout(Duration::from_secs(3), requests.recv())
+        .await?
+        .unwrap();
+    let repair = tokio::time::timeout(Duration::from_secs(3), requests.recv())
+        .await?
+        .unwrap();
+    let input: Value = serde_json::from_str(repair["messages"][1]["content"].as_str().unwrap())?;
+    assert_eq!(input["source"], original.trim_end());
+    assert!(input["repair"]["diagnostic"]
+        .as_str()
+        .unwrap()
+        .contains("evidence"));
+    assert_eq!(input["repair"]["previous"], missing);
+    settle(&mut app).await;
+    assert_eq!(text(&app), original);
+    assert!(app.editor.ai_doc.as_ref().is_some_and(|op| op.preview));
+    keys(&mut app, "<ret>").await?;
+    assert!(text(&app).contains(":param a: 输入值。"));
+    app.close().await;
+    task.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_doc_stops_after_one_failed_repair_without_editing() -> anyhow::Result<()> {
+    let (endpoint, mut requests, task) =
+        server(0, vec![reply("invalid"), reply("still invalid")]).await;
+    let original = "def f(a):\n    return a\n";
+    let (mut app, _file) = app(endpoint, ".py", original)?;
+    keys(&mut app, ":ai-doc<ret>").await?;
+    for _ in 0..2 {
+        tokio::time::timeout(Duration::from_secs(3), requests.recv())
+            .await?
+            .unwrap();
+    }
+    settle(&mut app).await;
+    assert!(app.editor.ai_doc.is_none());
+    assert_eq!(text(&app), original);
+    assert!(app.editor.get_status().unwrap().0.contains("修订"));
+    app.close().await;
+    task.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_doc_refuses_repair_that_would_drop_target_for_context_budget() -> anyhow::Result<()> {
+    let (endpoint, mut requests, task) = server(0, vec![reply(&"x".repeat(12000))]).await;
+    let original = "def f(a):\n    return a\n";
+    let (mut app, _file) = app(endpoint, ".py", original)?;
+    keys(&mut app, ":ai-doc<ret>").await?;
+    tokio::time::timeout(Duration::from_secs(3), requests.recv())
+        .await?
+        .unwrap();
+    settle(&mut app).await;
+    assert_eq!(text(&app), original);
+    assert!(app.editor.ai_doc.is_none());
+    assert!(app.editor.get_status().unwrap().0.contains("预算"));
+    app.close().await;
+    task.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_doc_timeout_covers_generation_and_repair_together() -> anyhow::Result<()> {
+    let (endpoint, mut requests, task) = server(1300, vec![reply("invalid"), reply(DOC)]).await;
+    let original = "def f(a):\n    return a\n";
+    let (mut app, _file) = app_with_timeout(endpoint, ".py", original, 2000)?;
+    keys(&mut app, ":ai-doc<ret>").await?;
+    for _ in 0..2 {
+        tokio::time::timeout(Duration::from_secs(3), requests.recv())
+            .await?
+            .unwrap();
+    }
+    task.await?;
+    settle(&mut app).await;
+    assert!(app.editor.ai_doc.is_none());
+    assert_eq!(text(&app), original);
+    assert!(app.editor.get_status().unwrap().0.contains("超时"));
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ai_doc_cancel_during_repair_discards_the_second_response() -> anyhow::Result<()> {
+    let (endpoint, mut requests, task) = server(300, vec![reply("invalid"), reply(DOC)]).await;
+    let original = "def f(a):\n    return a\n";
+    let (mut app, _file) = app(endpoint, ".py", original)?;
+    keys(&mut app, ":ai-doc<ret>").await?;
+    for _ in 0..2 {
+        tokio::time::timeout(Duration::from_secs(3), requests.recv())
+            .await?
+            .unwrap();
+    }
+    keys(&mut app, ":ai-doc-cancel<ret>").await?;
+    settle(&mut app).await;
+    assert!(app.editor.ai_doc.is_none());
+    assert_eq!(text(&app), original);
+    app.close().await;
+    task.await?;
     Ok(())
 }
 

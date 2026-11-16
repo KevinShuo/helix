@@ -1,0 +1,112 @@
+   Compiling helix-term v25.7.1 (I:\DEV\helix\helix-term)
+warning: field `line_feed_handling` is never read
+  --> helix-term\tests\test\helpers.rs:74:9
+   |
+67 | pub struct TestCase {
+   |            -------- field in this struct
+...
+74 |     pub line_feed_handling: LineFeedHandling,
+   |         ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `TestCase` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `helix-term` (test "integration") generated 1 warning
+    Finished `integration` profile [unoptimized + debuginfo] target(s) in 52.90s
+     Running tests\integration.rs (target\integration\deps\integration-604200394db039ae.exe)
+
+running 91 tests
+test test::ai_commit::ai_commit_cancel_discards_delayed_model_result_without_git_writes ... ok
+test test::ai_commit::ai_commit_config_change_cancels_old_analysis_immediately ... ok
+test test::ai_commit::ai_commit_disabled_manual_flow_preserves_partial_index_and_unrelated_edits ... ok
+test test::ai_commit::ai_commit_invalid_recommendations_keep_valid_choices_and_preserve_partial_index ... ok
+test test::ai_commit::ai_commit_named_provider_ignores_legacy_local_model ... ok
+test test::ai_commit::ai_commit_native_generation_uses_index_and_language_switch_retains_chinese_draft ... ok
+test test::ai_commit::ai_commit_open_select_enter_and_cancel_are_read_only ... ok
+test test::ai_commit::ai_commit_pasted_multiline_message_does_not_modify_underlying_source ... ok
+test test::ai_commit::ai_commit_real_local_model_recommends_stages_and_commits_chinese_message ... ignored, requires local Qwen3.5-9B-Q6_K at 127.0.0.1:19240
+test test::ai_commit::ai_commit_recommendation_requires_explicit_stage_before_generating_message ... ok
+test test::ai_commit::ai_commit_staging_preserves_manual_draft_until_explicit_review ... ok
+test test::ai_commit::ai_commit_stale_index_refuses_commit_and_retains_draft_for_explicit_review ... ok
+test test::ai_commit::ai_commit_switching_into_nested_repository_uses_its_own_workspace ... ok
+test test::ai_commit::ai_commit_unstage_selected_staged_row_preserves_disk_and_other_index_entries ... ok
+test test::ai_completion::ai_completion_accept_does_not_accept_the_popup ... ok
+test test::ai_completion::ai_completion_accepts_whole_multiline_preview_and_undoes ... ok
+test test::ai_completion::ai_completion_automatically_requests_and_displays_without_editing ... ok
+test test::ai_completion::ai_completion_closing_last_view_with_feature_disabled ... ok
+test test::ai_completion::ai_completion_conservative_blank_line_does_not_send_a_request ... ok
+test test::ai_completion::ai_completion_conservative_short_preview_accepts_and_undoes ... ok
+test test::ai_completion::ai_completion_disabled_local_model_keeps_editing_available ... ok
+test test::ai_completion::ai_completion_empty_accept_cancels_popup_preview ... ok
+test test::ai_completion::ai_completion_gap_accepts_only_the_missing_expression ... ok
+test test::ai_completion::ai_completion_line_mode_preserves_typed_code_and_existing_parenthesis ... ok
+test test::ai_completion::ai_completion_live_clangd_grounded_member ... ignored, requires clangd available on PATH
+test test::ai_completion::ai_completion_live_cpp_line ... ignored, requires HELIX_TEST_AI_ENDPOINT and HELIX_TEST_AI_CPP_FILE for the reported C++ case
+test test::ai_completion::ai_completion_live_local_model ... ignored, requires HELIX_TEST_AI_ENDPOINT pointing to a running local Qwen server
+test test::ai_completion::ai_completion_live_managed_local_model ... ignored, requires HELIX_TEST_AI_CONFIG or HELIX_TEST_AI_MODEL_PATH and HELIX_TEST_AI_SERVER_PATH
+test test::ai_completion::ai_completion_live_next_block_prediction ... ignored, requires HELIX_TEST_AI_ENDPOINT and HELIX_TEST_AI_MODEL
+test test::ai_completion::ai_completion_live_next_line_prediction ... ignored, requires HELIX_TEST_AI_ENDPOINT and HELIX_TEST_AI_MODEL
+test test::ai_completion::ai_completion_macro_replays_literal_without_autopairing ... ok
+test test::ai_completion::ai_completion_missing_local_model_reports_error_without_blocking_editing ... 2026-11-16T15:58:57.002 helix_term::handlers::ai_completion::server [WARN] AI completion: Local AI model not found: C:\Users\wangshuo\AppData\Local\Temp\.tmpyxaYto\missing.gguf
+ok
+test test::ai_completion::ai_completion_move_cancels_inflight_response ... ok
+test test::ai_completion::ai_completion_movement_invalidates_and_empty_accept_does_nothing ... ok
+test test::ai_completion::ai_completion_multi_key_accept_repeats_and_records ... ok
+test test::ai_completion::ai_completion_named_provider_overrides_default_and_legacy_local_model ... ok
+test test::ai_completion::ai_completion_old_response_cannot_replace_new_response ... ok
+test test::ai_completion::ai_completion_prediction_keeps_crlf_and_existing_code ... ok
+test test::ai_completion::ai_completion_prediction_preserves_later_absolute_indentation ... ok
+test test::ai_completion::ai_completion_predicts_a_block_accepts_and_undoes ... ok
+test test::ai_completion::ai_completion_preserves_popup_tab_and_enter ... ok
+test test::ai_completion::ai_completion_preview_wait_respects_resolved_provider_startup ... ok
+test test::ai_completion::ai_completion_recovers_distant_parameters_and_import_aliases ... ok
+test test::ai_completion::ai_completion_rejects_new_syntax_errors_in_valid_code ... ok
+test test::ai_completion::ai_completion_renders_gray_before_the_real_suffix ... ok
+test test::ai_completion::ai_completion_repeat_reuses_accepted_text ... ok
+test test::ai_completion::ai_completion_respects_remapped_accept_key ... ok
+test test::ai_completion::ai_completion_sequence_accept_then_move ... ok
+test test::ai_completion::ai_completion_sequence_accept_then_normal_mode ... ok
+test test::ai_completion::ai_completion_timeout_leaves_editing_usable ... ok
+test test::ai_completion::ai_completion_typing_cancels_a_pending_prediction ... ok
+test test::ai_completion::ai_completion_uses_document_line_endings ... ok
+test test::ai_completion::ai_provider_invalid_runtime_update_preserves_working_configuration ... ok
+test test::ai_doc::ai_doc_accept_reveals_inserted_docs_without_moving_logical_cursor ... ok
+test test::ai_doc::ai_doc_binds_target_when_command_is_submitted ... ok
+test test::ai_doc::ai_doc_c_inserts_rest ... ok
+test test::ai_doc::ai_doc_cancel_during_repair_discards_the_second_response ... ok
+test test::ai_doc::ai_doc_cancel_retry_and_truncated_response_leave_source_intact ... ok
+test test::ai_doc::ai_doc_cpp_inserts_rest ... ok
+test test::ai_doc::ai_doc_delayed_result_is_invalidated_by_edit_and_explicit_cancel ... ok
+test test::ai_doc::ai_doc_focus_change_cancels_even_when_returning_to_original_buffer ... ok
+test test::ai_doc::ai_doc_language_change_invalidates_pending_documentation ... ok
+test test::ai_doc::ai_doc_named_provider_ignores_legacy_local_model ... ok
+test test::ai_doc::ai_doc_native_command_previews_then_accepts_and_undoes ... ok
+test test::ai_doc::ai_doc_preview_opens_above_an_unfocused_git_dock ... ok
+test test::ai_doc::ai_doc_preview_refuses_readonly_target_and_preserves_cursor ... ok
+test test::ai_doc::ai_doc_refuses_repair_that_would_drop_target_for_context_budget ... ok
+test test::ai_doc::ai_doc_repairs_missing_evidence_once_before_preview ... ok
+test test::ai_doc::ai_doc_stops_after_one_failed_repair_without_editing ... ok
+test test::ai_doc::ai_doc_timeout_covers_generation_and_repair_together ... ok
+test test::ai_doc::ai_doc_waits_for_an_existing_prompt_without_stealing_input ... ok
+test test::ai_test::ai_test_cancel_and_stale_dependency_never_apply_results ... ok
+test test::ai_test::ai_test_cmake_and_test_changes_are_accepted_together ... ok
+test test::ai_test::ai_test_failed_repair_keeps_original_test_diagnostics ... ignored, requires HELIX_AI_TEST_PYTHON with pytest installed
+test test::ai_test::ai_test_import_repair_is_previewed_once_and_preserves_assertions ... ignored, requires HELIX_AI_TEST_PYTHON with pytest installed
+test test::ai_test::ai_test_previews_and_applies_to_undoable_buffers_without_touching_source ... ok
+test test::ai_test::ai_test_real_pytest_pass_runs_saved_changes ... ignored, requires HELIX_AI_TEST_PYTHON with pytest installed
+test test::git_conflicts::ai_merge::ai_merge_block_switch_cancels_even_after_return_and_preserves_neighbor ... ok
+test test::git_conflicts::ai_merge::ai_merge_empty_side_delete_modify_waits_for_intent_before_model ... ok
+test test::git_conflicts::ai_merge::ai_merge_file_and_config_switches_cannot_revive_old_candidates ... ok
+test test::git_conflicts::ai_merge::ai_merge_identical_candidate_still_requires_review ... ok
+test test::git_conflicts::ai_merge::ai_merge_invalid_response_and_timeout_preserve_draft ... ok
+test test::git_conflicts::ai_merge::ai_merge_late_replies_after_edit_and_cancel_leave_draft_intact ... ok
+test test::git_conflicts::ai_merge::ai_merge_native_preview_accepts_current_block_and_undoes ... ok
+test test::git_conflicts::ai_merge::ai_merge_preserves_bom_and_crlf_until_reviewed_apply ... ok
+test test::git_conflicts::ai_merge::ai_merge_preview_keeps_actions_visible_in_narrow_terminal ... ok
+test test::git_conflicts::ai_merge::ai_merge_preview_rejects_excessive_display_rows_without_editing ... ok
+test test::git_conflicts::ai_merge::ai_merge_refuses_locked_stale_untrusted_and_whole_file_targets ... ok
+test test::git_conflicts::ai_merge::ai_merge_retry_uncertainty_cancel_and_empty_deletion ... ok
+test test::git_conflicts::ai_merge::ai_merge_uses_its_named_provider_and_excludes_ai_test_generation ... ok
+test test::git_conflicts::ai_merge::ai_merge_waits_for_prompt_then_previews_without_stealing_input ... ok
+
+test result: ok. 81 passed; 0 failed; 10 ignored; 0 measured; 307 filtered out; finished in 178.16s

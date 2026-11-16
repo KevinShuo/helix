@@ -49,12 +49,22 @@ pub struct Parameter {
     pub ty: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+pub struct CallableFacts {
+    pub asynchronous: bool,
+    pub generator: bool,
+    pub value_return: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct Target {
     pub language: String,
     pub name: String,
     pub source: String,
     pub supporting: String,
+    /// Complete relevant same-file declarations; separate from ai-test's scope headers.
+    pub related: Vec<String>,
+    pub facts: CallableFacts,
     pub range: std::ops::Range<usize>,
     pub insert: usize,
     pub indent: String,
