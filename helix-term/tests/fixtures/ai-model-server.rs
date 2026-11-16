@@ -11,6 +11,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let arg = |name: &str| args.windows(2).find(|pair| pair[0] == name).unwrap()[1].clone();
     let model = PathBuf::from(arg("--model"));
+    fs::write(model.with_extension("args"), args.join("\n")).unwrap();
     let options = fs::read_to_string(&model).unwrap();
     let option = |name: &str| {
         options

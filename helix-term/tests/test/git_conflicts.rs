@@ -106,24 +106,24 @@ async fn keys(app: &mut Application, input: &str) -> anyhow::Result<()> {
     app.editor.reset_idle_timer();
     tokio::time::timeout(Duration::from_secs(8), run_event_loop_until_idle(app)).await?;
     if input.contains("<space>vma") || input.contains("<space>vmt") {
-        for _ in 0..100 {
-            if !app
-                .editor
-                .documents()
-                .any(|doc| doc.merge().is_some_and(|state| state.busy))
-            {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(25)).await;
+        // Apply performs several optimistic Git checks before writing/staging.
+        // Poll counts depend on idle/render cadence and can expire mid-transaction
+        // on Windows, where each Git launcher adds measurable overhead.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        while app
+            .editor
+            .documents()
+            .any(|doc| doc.merge().is_some_and(|state| state.busy))
+        {
             app.editor.reset_idle_timer();
-            tokio::time::timeout(Duration::from_secs(8), run_event_loop_until_idle(app)).await?;
+            assert!(
+                tokio::time::timeout_at(deadline, run_event_loop_until_idle(app))
+                    .await
+                    .is_ok(),
+                "Apply is still busy after 30s; editor status: {:?}",
+                app.editor.status_msg,
+            );
         }
-        assert!(
-            !app.editor
-                .documents()
-                .any(|doc| doc.merge().is_some_and(|state| state.busy)),
-            "Apply is still busy"
-        );
     }
     Ok(())
 }

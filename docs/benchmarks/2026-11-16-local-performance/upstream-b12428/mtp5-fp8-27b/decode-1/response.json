@@ -1,0 +1,116 @@
+{
+  "index": 0,
+  "content": "```python\nimport unittest\n\n\nclass TestClampFunctions(unittest.TestCase):\n    \"\"\"Unit tests for clamp_0 through clamp_7 functions.\"\"\"\n\n    def _test_clamp(self, func, name):\n        # Normal cases: value inside interval\n        self.assertEqual(func(5, 0, 10), 5, f\"{name}: value inside interval\")\n        self.assertEqual(func(0, 0, 10), 0, f\"{name}: value at lower bound\")\n        self.assertEqual(func(10, 0, 10), 10, f\"{name}: value at upper bound\")\n\n        # Value below lower bound\n        self.assertEqual(func(-5, 0, 10), 0, f\"{name}: value below lower bound\")\n        self.assertEqual(func(-100, 0, 10), 0, f\"{name}: value far below lower bound\")\n\n        # Value above upper bound\n        self.assertEqual(func(15, 0, 10), 10, f\"{name}: value above upper bound\")\n        self.assertEqual(func(100, 0, 10), 10, f\"{name}: value far above upper bound\")\n\n        # Boundary: single-point interval\n        self.assertEqual(func(5, 5, 5), 5, f\"{name}: single-point interval, value matches\")\n        self.assertEqual(func(3, 5, 5), 5, f\"{name}: single-point interval, value below\")\n        self.assertEqual(func(7, 5, 5), 5, f\"{name}: single-point interval, value above\")\n\n        # Negative interval\n        self.assertEqual(func(-5, -10, 0), -5, f\"{name}: negative",
+  "tokens": [],
+  "id_slot": 0,
+  "stop": true,
+  "model": "27b",
+  "tokens_predicted": 384,
+  "tokens_evaluated": 414,
+  "generation_settings": {
+    "seed": 42,
+    "temperature": 0.0,
+    "dynatemp_range": 0.0,
+    "dynatemp_exponent": 1.0,
+    "top_k": 20,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "top_n_sigma": -1.0,
+    "xtc_probability": 0.0,
+    "xtc_threshold": 0.10000000149011612,
+    "typical_p": 1.0,
+    "repeat_last_n": 64,
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "dry_penalty_last_n": 64,
+    "dry_sequence_breakers": [
+      "\n",
+      ":",
+      "\"",
+      "*"
+    ],
+    "mirostat": 0,
+    "mirostat_tau": 5.0,
+    "mirostat_eta": 0.10000000149011612,
+    "adaptive_target": -1.0,
+    "adaptive_decay": 0.8999999761581421,
+    "stop": [],
+    "max_tokens": 384,
+    "n_predict": 384,
+    "n_keep": 0,
+    "n_discard": 0,
+    "ignore_eos": true,
+    "stream": false,
+    "logit_bias": [
+      {
+        "bias": null,
+        "token": 248044
+      },
+      {
+        "bias": null,
+        "token": 248046
+      },
+      {
+        "bias": null,
+        "token": 248063
+      },
+      {
+        "bias": null,
+        "token": 248064
+      },
+      {
+        "bias": null,
+        "token": 248065
+      }
+    ],
+    "n_probs": 0,
+    "min_keep": 0,
+    "grammar": "",
+    "grammar_lazy": false,
+    "grammar_triggers": [],
+    "preserved_tokens": [],
+    "chat_format": "Content-only",
+    "reasoning_format": "deepseek",
+    "reasoning_in_content": false,
+    "generation_prompt": "",
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "speculative.types": "none,draft-mtp",
+    "timings_per_token": true,
+    "post_sampling_probs": false,
+    "backend_sampling": false,
+    "lora": []
+  },
+  "prompt": "<|im_start|>system\nYou are a precise coding assistant.\n<|im_end|>\n<|im_start|>user\nWrite Python unit tests for these functions. Cover normal, boundary and reversed intervals. Output code only.\ndef clamp_0(value: int, lower: int, upper: int) -> int:\n    # Case 0: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_1(value: int, lower: int, upper: int) -> int:\n    # Case 1: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_2(value: int, lower: int, upper: int) -> int:\n    # Case 2: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_3(value: int, lower: int, upper: int) -> int:\n    # Case 3: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_4(value: int, lower: int, upper: int) -> int:\n    # Case 4: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_5(value: int, lower: int, upper: int) -> int:\n    # Case 5: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_6(value: int, lower: int, upper: int) -> int:\n    # Case 6: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_7(value: int, lower: int, upper: int) -> int:\n    # Case 7: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "has_new_line": true,
+  "truncated": false,
+  "stop_type": "limit",
+  "stopping_word": "",
+  "tokens_cached": 797,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 414,
+    "prompt_ms": 318.278,
+    "prompt_per_token_ms": 0.7687874396135266,
+    "prompt_per_second": 1300.7496591030483,
+    "predicted_n": 384,
+    "predicted_ms": 3109.899,
+    "predicted_per_token_ms": 8.119840731070497,
+    "predicted_per_second": 123.155124973512,
+    "draft_n": 373,
+    "draft_n_accepted": 308
+  }
+}

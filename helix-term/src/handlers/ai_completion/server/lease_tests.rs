@@ -53,6 +53,85 @@ fn port() -> u16 {
         .port()
 }
 
+#[tokio::test]
+async fn local_runtime_arguments_reach_child_and_reload_restarts_only_when_required() {
+    let _messages = status::setup();
+    let dir = tempfile::tempdir().unwrap();
+    let (mut config, _) = models(dir.path(), 0);
+    config.runtime = toml::from_str(
+        "cache-type-k = 'q8_0'\ncache-type-v = 'q8_0'\nspeculative-decoding = 'mtp'\ndraft-tokens = 2\nthreads = 8\nthreads-batch = 12\nbatch-size = 2048\nubatch-size = 256\n",
+    ).unwrap();
+    config.runtime.backend_sampling = true;
+    config.runtime.load_mode = helix_view::ai::AiModelLoadMode::Dio;
+    let path = config.model_path.as_ref().unwrap().clone();
+    let mut server = LocalServer::new(&config);
+    ready(&config).await;
+    let args = std::fs::read_to_string(path.with_extension("args")).unwrap();
+    let pairs: Vec<_> = args.lines().collect();
+    // Explicitly stop before asserting, including on the pre-implementation run.
+    server.stop().await;
+    assert!(
+        pairs.contains(&"--backend-sampling"),
+        "GPU sampling flag must reach the process: {args}"
+    );
+    for (key, expected) in [
+        ("--cache-type-k", "q8_0"),
+        ("--cache-type-v", "q8_0"),
+        ("--spec-type", "draft-mtp"),
+        ("--spec-draft-n-max", "2"),
+        ("--threads", "8"),
+        ("--threads-batch", "12"),
+        ("--batch-size", "2048"),
+        ("--ubatch-size", "256"),
+        ("--load-mode", "dio"),
+    ] {
+        assert!(
+            pairs.windows(2).any(|pair| pair == [key, expected]),
+            "{key} {expected}: {args}"
+        );
+    }
+
+    let mut server = LocalServer::new(&config);
+    ready(&config).await;
+    let starts = || {
+        std::fs::read_to_string(path.with_extension("started"))
+            .unwrap()
+            .lines()
+            .count()
+    };
+    assert_eq!(starts(), 2);
+    config.thinking = true;
+    config.thinking_budget = Some(2048);
+    server.configure(&config);
+    ready(&config).await;
+    assert_eq!(starts(), 2, "request tuning must keep the process");
+    config.runtime.threads = Some(4);
+    server.configure(&config);
+    ready(&config).await;
+    assert_eq!(starts(), 3, "runtime tuning must replace the process");
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn local_runtime_defaults_keep_legacy_cache_and_do_not_require_speculative_support() {
+    let _messages = status::setup();
+    let dir = tempfile::tempdir().unwrap();
+    let (config, _) = models(dir.path(), 0);
+    let mut server = LocalServer::new(&config);
+    ready(&config).await;
+    let args = std::fs::read_to_string(config.model_path.as_ref().unwrap().with_extension("args"))
+        .unwrap();
+    server.stop().await;
+    assert!(args.contains("--cache-type-k\nf16\n--cache-type-v\nf16"));
+    assert!(
+        !args.contains("--spec-type"),
+        "legacy runtimes need no new flags"
+    );
+    assert!(!args.contains("--threads"));
+    assert!(!args.contains("--backend-sampling"));
+    assert!(!args.contains("--load-mode"));
+}
+
 pub(crate) fn models(dir: &Path, delay: u64) -> (AiProviderConfig, AiProviderConfig) {
     let baseline_port = port();
     let mut temporary_port = port();
@@ -402,4 +481,67 @@ async fn local_generation_live_gpu_switches_to_27b_and_restores_9b() {
     );
     std::fs::write(std::env::var("HELIX_AI_LIVE_SMOKE_OUTPUT").expect("output path"),serde_json::json!({"restored_9b":restored,"released_27b":!reachable(&temporary),"elapsed_ms":start.elapsed().as_millis(),"message":message,"thinking_budget":2048,"reasoning_effort":"medium"}).to_string()).unwrap();
     println!("LIVE 9B -> 27B bounded generation -> 9B: passed");
+}
+
+#[tokio::test]
+#[ignore = "requires explicit installed config path and exclusive local GPU access"]
+async fn local_generation_live_installed_runtime_restores_completion_after_commit() {
+    use helix_view::ai::AiFeature;
+    let _messages = status::setup();
+    let text = std::fs::read_to_string(std::env::var("HELIX_AI_LIVE_CONFIG").expect("config path"))
+        .unwrap();
+    let raw: crate::config::ConfigRaw = toml::from_str(&text).unwrap();
+    let config: helix_view::editor::Config = raw.editor.unwrap().try_into().unwrap();
+    let baseline = config.ai_provider(AiFeature::Completion).unwrap();
+    let commit = config.ai_provider(AiFeature::Commit).unwrap();
+    assert!(commit.on_demand);
+    let mut pool = LocalServers::new(&config.active_ai_providers().unwrap());
+    timeout(Duration::from_secs(180), wait_ready(&baseline))
+        .await
+        .unwrap()
+        .unwrap();
+    async fn probe_completion(
+        config: &helix_view::ai_completion::AiCompletionConfig,
+        model: &AiProviderConfig,
+    ) -> anyhow::Result<String> {
+        super::super::client::complete(config, model, &super::super::client::CompletionContext {
+            filename: "synthetic/add.py".into(), language: "python".into(), indent_unit: "    ",
+            prefix: "def add(a: int, b: int) -> int:\n    \"\"\"Return the sum of a and b.\"\"\"\n    return a + ".into(),
+            suffix: "\n".into(), supporting: String::new(), members: None,
+        }).await?.ok_or_else(|| anyhow::anyhow!("9B did not offer the contract-defined continuation"))
+    }
+    let completion_before = probe_completion(&config.ai_completion, &baseline).await;
+    let input = crate::handlers::ai_commit::AiFileInput {
+        id: 1, path: "synthetic/stats.py".into(), staged: true, partial: false, eligible: true,
+        diff: "@@ -1,2 +1,4 @@\n def mean(values):\n+    if not values:\n+        return 0.0\n     return sum(values) / len(values)\n".into(),
+    };
+    let started = Instant::now();
+    let message = crate::handlers::ai_commit::generate_message(
+        &commit,
+        &config.ai_commit,
+        &[input],
+        "说明修复mean空输入除零；未运行测试",
+    )
+    .await;
+    let after_commit = wait_ready(&baseline).await.is_ok() && !reachable(&commit);
+    let completion_after = probe_completion(&config.ai_completion, &baseline).await;
+    pool.stop().await;
+    let message = message.unwrap().text;
+    assert!(after_commit, "generation must restore the resident model");
+    assert!(!message.trim().is_empty());
+    let completion_before = completion_before.unwrap();
+    let completion_after = completion_after.unwrap();
+    assert_eq!(completion_before.trim(), "b");
+    assert_eq!(completion_after.trim(), "b");
+    let evidence = serde_json::json!({
+        "elapsed_seconds": started.elapsed().as_secs_f64(),
+        "restored_after_commit": after_commit,
+        "completion_before": completion_before, "completion_after": completion_after,
+        "commit": {"model": commit.model, "context": commit.context_size, "gpu_layers": commit.gpu_layers, "runtime": commit.runtime, "text": message},
+    });
+    std::fs::write(
+        std::env::var("HELIX_AI_LIVE_SMOKE_OUTPUT").expect("output path"),
+        evidence.to_string(),
+    )
+    .unwrap();
 }

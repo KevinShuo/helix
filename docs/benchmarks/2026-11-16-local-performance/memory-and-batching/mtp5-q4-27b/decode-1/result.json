@@ -1,0 +1,19 @@
+{
+  "workload": "decode",
+  "repetition": 1,
+  "seconds": 3.469592100009322,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 414,
+    "prompt_ms": 332.261,
+    "prompt_per_token_ms": 0.8025628019323672,
+    "prompt_per_second": 1246.00840905192,
+    "predicted_n": 384,
+    "predicted_ms": 3127.209,
+    "predicted_per_token_ms": 8.165036553524804,
+    "predicted_per_second": 122.47342598463999,
+    "draft_n": 368,
+    "draft_n_accepted": 309
+  },
+  "gpu_after": "23113, 93, 432.35, 69"
+}

@@ -1,0 +1,38 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"code\": \"def parse_port(text: str) -> int:\\n    if not text:\\n        raise ValueError(\\\"Input must be nonempty\\\")\\n    \\n    # Check for ASCII decimal digits only\\n    for ch in text:\\n        if ch < '0' or ch > '9':\\n            raise ValueError(\\\"Only ASCII decimal digits are allowed\\\")\\n    \\n    # Convert to integer\\n    try:\\n        value = int(text)\\n    except ValueError:\\n        raise ValueError(\\\"Invalid integer\\\")\\n    \\n    # Check range: 1 to 65535 inclusive\\n    if value < 1 or value > 65535:\\n        raise ValueError(\\\"Port must be between 1 and 65535\\\")\\n    \\n    return value\",\n  \"summary\": \"定义了一个解析端口号的函数，仅接受非空ASCII十进制数字，范围1-65535，允许前导零，拒绝空白、符号、Unicode数字及越界值，否则抛出ValueError。\"\n}"
+      }
+    }
+  ],
+  "created": 1794811687,
+  "model": "27b",
+  "system_fingerprint": "b12428-b4c0e00a4",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 237,
+    "prompt_tokens": 109,
+    "total_tokens": 346,
+    "prompt_tokens_details": {
+      "cached_tokens": 105
+    }
+  },
+  "id": "chatcmpl-ovVh4e38Z3NYpH922yJoQRUqkVZXZXoc",
+  "timings": {
+    "cache_n": 105,
+    "prompt_n": 4,
+    "prompt_ms": 116.816,
+    "prompt_per_token_ms": 29.204,
+    "prompt_per_second": 34.24188467333242,
+    "predicted_n": 237,
+    "predicted_ms": 2354.285,
+    "predicted_per_token_ms": 9.975783898305083,
+    "predicted_per_second": 100.2427488600573,
+    "draft_n": 250,
+    "draft_n_accepted": 186
+  }
+}

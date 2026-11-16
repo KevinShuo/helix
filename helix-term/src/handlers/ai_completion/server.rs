@@ -100,6 +100,7 @@ fn same_server(a: &AiProviderConfig, b: &AiProviderConfig) -> bool {
         && a.api_key_env == b.api_key_env
         && a.context_size == b.context_size
         && a.gpu_layers == b.gpu_layers
+        && a.runtime == b.runtime
         && a.startup_timeout_ms == b.startup_timeout_ms
 }
 
@@ -290,15 +291,40 @@ async fn prepare(config: &AiProviderConfig, child: &mut Option<Child>) -> anyhow
             "--flash-attn",
             "on",
             "--cache-type-k",
-            "f16",
+            config.runtime.cache_type_k.argument(),
             "--cache-type-v",
-            "f16",
+            config.runtime.cache_type_v.argument(),
             "--jinja",
         ])
         .stdin(Stdio::null())
         .stdout(log.try_clone()?)
         .stderr(log)
         .kill_on_drop(true);
+    if config.runtime.speculative_decoding != helix_view::ai::AiSpeculativeDecoding::None {
+        command.args([
+            "--spec-type",
+            config.runtime.speculative_decoding.argument(),
+        ]);
+        command
+            .arg("--spec-draft-n-max")
+            .arg(config.runtime.draft_tokens.to_string());
+    }
+    if config.runtime.backend_sampling {
+        command.arg("--backend-sampling");
+    }
+    if config.runtime.load_mode != helix_view::ai::AiModelLoadMode::Auto {
+        command.args(["--load-mode", config.runtime.load_mode.argument()]);
+    }
+    for (flag, value) in [
+        ("--threads", config.runtime.threads),
+        ("--threads-batch", config.runtime.threads_batch),
+        ("--batch-size", config.runtime.batch_size),
+        ("--ubatch-size", config.runtime.ubatch_size),
+    ] {
+        if let Some(value) = value {
+            command.arg(flag).arg(value.to_string());
+        }
+    }
     #[cfg(windows)]
     command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     *child = Some(command.spawn().with_context(|| {

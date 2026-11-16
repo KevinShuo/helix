@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"code\": \"def parse_port(text: str) -> int:\\n    if not text or not text.isascii():\\n        raise ValueError(\\\"Input must be nonempty ASCII\\\")\\n    if not text.isdigit():\\n        raise ValueError(\\\"Input must contain only digits\\\")\\n    if text == \\\"0\\\":\\n        raise ValueError(\\\"Port cannot be zero\\\")\\n    try:\\n        port = int(text)\\n    except ValueError:\\n        raise ValueError(\\\"Invalid integer\\\")\\n    if port < 1 or port > 65535:\\n        raise ValueError(\\\"Port out of range\\\")\\n    return port\", \"summary\": \"解析端口号：接受非空ASCII十进制数字（1-65535），允许前导零，拒绝空格、符号、Unicode数字、零及越界值。\"}"
+      }
+    }
+  ],
+  "created": 1794811822,
+  "model": "9b",
+  "system_fingerprint": "b12428-b4c0e00a4",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 182,
+    "prompt_tokens": 109,
+    "total_tokens": 291,
+    "prompt_tokens_details": {
+      "cached_tokens": 105
+    }
+  },
+  "id": "chatcmpl-lHdBrYxv6T39yeR0gfxpfAmk3a9WLyoN",
+  "timings": {
+    "cache_n": 105,
+    "prompt_n": 4,
+    "prompt_ms": 35.484,
+    "prompt_per_token_ms": 8.871,
+    "prompt_per_second": 112.72686281140795,
+    "predicted_n": 182,
+    "predicted_ms": 1654.213,
+    "predicted_per_token_ms": 9.139298342541437,
+    "predicted_per_second": 109.4175901168713
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "arguments": {
+    "arms": "baseline-27b",
+    "output": "docs\\benchmarks\\2026-11-16-local-performance\\original-production-control",
+    "server": "C:\\Users\\wangs\\.local\\share\\junie-local\\versions\\0.3.5\\runtime\\llama.cpp-b11081\\llama-server.exe",
+    "context": null,
+    "test_binary": "target\\integration\\deps\\helix_term-46027bd72ae4f034.exe",
+    "production_features": "commit",
+    "extra": [],
+    "workloads": "decode",
+    "repeats": 2,
+    "tokens": 256,
+    "long_functions": 400
+  },
+  "script_sha256": "2bfe4464c2f790abe9262b8f892b88af913e44f4b8922bb4c57a9e078c4b1429",
+  "gpu_initial": "1680, 9, 46.44, 50",
+  "results": {
+    "baseline-27b": {
+      "error": "Production commit: exit 0, rows 6, failures ['commit_select_tests']"
+    }
+  }
+}

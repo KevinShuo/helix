@@ -1,0 +1,9 @@
+{
+  "prompt": "<|im_start|>system\nYou are a precise coding assistant.\n<|im_end|>\n<|im_start|>user\nWrite Python unit tests for these functions. Cover normal, boundary and reversed intervals. Output code only.\ndef clamp_0(value: int, lower: int, upper: int) -> int:\n    # Case 0: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_1(value: int, lower: int, upper: int) -> int:\n    # Case 1: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_2(value: int, lower: int, upper: int) -> int:\n    # Case 2: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_3(value: int, lower: int, upper: int) -> int:\n    # Case 3: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_4(value: int, lower: int, upper: int) -> int:\n    # Case 4: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_5(value: int, lower: int, upper: int) -> int:\n    # Case 5: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_6(value: int, lower: int, upper: int) -> int:\n    # Case 6: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n\ndef clamp_7(value: int, lower: int, upper: int) -> int:\n    # Case 7: retain values inside the inclusive interval.\n    return max(lower, min(upper, value))\n<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "n_predict": 256,
+  "temperature": 0,
+  "seed": 42,
+  "cache_prompt": false,
+  "ignore_eos": true,
+  "timings_per_token": true
+}

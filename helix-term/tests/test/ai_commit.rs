@@ -102,7 +102,9 @@ async fn keys(app: &mut Application, input: &str) -> anyhow::Result<()> {
 }
 
 async fn wait_for(app: &mut Application, text: &str) -> anyhow::Result<()> {
-    wait_for_with_timeout(app, text, Duration::from_secs(8)).await
+    // Full snapshot/staging validation starts multiple Git processes. Keep this
+    // workflow bound separate from explicit timeout/heartbeat latency assertions.
+    wait_for_with_timeout(app, text, Duration::from_secs(30)).await
 }
 
 async fn wait_for_with_timeout(

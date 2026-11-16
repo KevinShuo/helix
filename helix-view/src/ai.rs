@@ -1,4 +1,7 @@
 //! Provider configuration shared by automatic and explicit AI features.
+mod runtime;
+pub use runtime::{AiCacheType, AiModelLoadMode, AiRuntimeConfig, AiSpeculativeDecoding};
+
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{bail, ensure, Context, Result};
@@ -50,6 +53,7 @@ pub struct AiProviderConfig {
     pub server_path: PathBuf,
     pub gpu_layers: u32,
     pub startup_timeout_ms: u64,
+    pub runtime: AiRuntimeConfig,
 }
 
 impl Default for AiProviderConfig {
@@ -69,6 +73,7 @@ impl Default for AiProviderConfig {
             server_path: "llama-server".into(),
             gpu_layers: 99,
             startup_timeout_ms: 120_000,
+            runtime: AiRuntimeConfig::default(),
         }
     }
 }
@@ -91,6 +96,11 @@ impl AiProviderConfig {
     }
 
     fn validate(&self) -> Result<()> {
+        self.runtime.validate()?;
+        ensure!(
+            self.kind == AiProviderType::LlamaCpp || self.runtime == AiRuntimeConfig::default(),
+            "AI runtime settings require type = 'llama-cpp'"
+        );
         ensure!(
             !self.endpoint.trim().is_empty(),
             "AI provider endpoint is empty"

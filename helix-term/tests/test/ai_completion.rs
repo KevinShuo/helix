@@ -331,15 +331,56 @@ async fn ai_provider_invalid_runtime_update_preserves_working_configuration() ->
     Ok(())
 }
 
-async fn wait_for_preview(app: &mut Application) {
-    let config = &app.editor.config().ai_completion;
-    let startup_ms = if config.model_path.is_some() {
-        config.startup_timeout_ms.clamp(100, 600_000)
+fn preview_wait_budget(editor: &helix_view::editor::Config) -> std::time::Duration {
+    let config = &editor.ai_completion;
+    let provider = editor
+        .ai_provider(helix_view::ai::AiFeature::Completion)
+        .expect("completion test configuration must resolve a provider");
+    let startup_ms = if provider.model_path.is_some() {
+        provider.startup_timeout_ms.clamp(100, 600_000)
     } else {
         0
     };
-    let until = tokio::time::Instant::now()
-        + std::time::Duration::from_millis(startup_ms + config.timeout_ms + 2000);
+    std::time::Duration::from_millis(startup_ms + config.timeout_ms + 2000)
+}
+
+#[test]
+fn ai_completion_preview_wait_respects_resolved_provider_startup() {
+    let mut config = helix_view::editor::Config::default();
+    config.ai_completion.timeout_ms = 15_000;
+    config.ai_completion.provider = Some("named".into());
+    config.ai.providers.insert(
+        "named".into(),
+        helix_view::ai::AiProviderConfig {
+            kind: helix_view::ai::AiProviderType::LlamaCpp,
+            endpoint: "http://127.0.0.1:19240/v1/chat/completions".into(),
+            model: "named".into(),
+            model_path: Some("named.gguf".into()),
+            startup_timeout_ms: 45_000,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        preview_wait_budget(&config),
+        std::time::Duration::from_secs(62)
+    );
+    // An external named provider must not inherit legacy local startup settings.
+    config.ai.providers.get_mut("named").unwrap().model_path = None;
+    config.ai_completion.model_path = Some("legacy.gguf".into());
+    config.ai_completion.startup_timeout_ms = 600_000;
+    assert_eq!(
+        preview_wait_budget(&config),
+        std::time::Duration::from_secs(17)
+    );
+    config.ai_completion.provider = None;
+    assert_eq!(
+        preview_wait_budget(&config),
+        std::time::Duration::from_secs(617)
+    );
+}
+
+async fn wait_for_preview(app: &mut Application) {
+    let until = tokio::time::Instant::now() + preview_wait_budget(&app.editor.config());
     loop {
         idle(app).await;
         if current_ref!(app.editor).1.ai_completion.is_some() {
@@ -1003,17 +1044,39 @@ async fn ai_completion_live_local_model() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "requires HELIX_TEST_AI_MODEL_PATH and HELIX_TEST_AI_SERVER_PATH"]
+#[ignore = "requires HELIX_TEST_AI_CONFIG or HELIX_TEST_AI_MODEL_PATH and HELIX_TEST_AI_SERVER_PATH"]
 async fn ai_completion_live_managed_local_model() -> anyhow::Result<()> {
     use helix_view::editor::ConfigEvent;
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let address = listener.local_addr()?;
     drop(listener);
     let mut config = model_config(format!("http://{address}/v1/chat/completions"));
-    config.editor.ai_completion.model_path =
-        Some(std::env::var("HELIX_TEST_AI_MODEL_PATH")?.into());
-    config.editor.ai_completion.server_path = std::env::var("HELIX_TEST_AI_SERVER_PATH")?.into();
-    config.editor.ai_completion.model = "helix-managed-test-model".into();
+    if let Ok(path) = std::env::var("HELIX_TEST_AI_CONFIG") {
+        let raw: helix_term::config::ConfigRaw = toml::from_str(&std::fs::read_to_string(path)?)?;
+        let installed: helix_view::editor::Config = raw
+            .editor
+            .ok_or_else(|| anyhow::anyhow!("installed configuration has no editor section"))?
+            .try_into()?;
+        let mut provider = installed.ai_provider(helix_view::ai::AiFeature::Completion)?;
+        anyhow::ensure!(
+            provider.model_path.is_some(),
+            "HELIX_TEST_AI_CONFIG must select a managed local completion model"
+        );
+        provider.endpoint = format!("http://{address}/v1/chat/completions");
+        provider.on_demand = false;
+        config
+            .editor
+            .ai
+            .providers
+            .insert("live-installed".into(), provider);
+        config.editor.ai_completion.provider = Some("live-installed".into());
+    } else {
+        config.editor.ai_completion.model_path =
+            Some(std::env::var("HELIX_TEST_AI_MODEL_PATH")?.into());
+        config.editor.ai_completion.server_path =
+            std::env::var("HELIX_TEST_AI_SERVER_PATH")?.into();
+        config.editor.ai_completion.model = "helix-managed-test-model".into();
+    }
     config.editor.ai_completion.conservative = true;
     config.editor.ai_completion.prompt_mode = serde_json::from_value(serde_json::json!(
         std::env::var("HELIX_TEST_AI_PROMPT_MODE").unwrap_or_else(|_| "line".into())

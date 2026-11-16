@@ -1,0 +1,18 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "Return one JSON object, without Markdown fences."
+    },
+    {
+      "role": "user",
+      "content": "Return {\"code\": \"...\", \"summary\": \"...\"}. code must define parse_port(text: str) -> int in Python. Accept only nonempty ASCII decimal digits representing 1 through 65535 inclusive. Reject whitespace, signs, Unicode digits, zero and out-of-range values by raising ValueError. Leading zeroes are accepted. No imports or top-level effects. summary is a brief description in Chinese."
+    }
+  ],
+  "temperature": 0,
+  "seed": 42,
+  "max_tokens": 768,
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  }
+}

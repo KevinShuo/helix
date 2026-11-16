@@ -37,6 +37,8 @@ thinking = true
 thinking-budget = 2048
 reasoning-effort = "medium"
 proxy = "none"
+# Optional after benchmarking a compatible MTP-enabled GGUF and recent llama.cpp:
+# runtime = { cache-type-k = "q8_0", cache-type-v = "q8_0", speculative-decoding = "mtp", draft-tokens = 5, threads = 8, threads-batch = 8, ubatch-size = 256, backend-sampling = true }
 
 # Direct JSON generation for Merge, sharing the 27B GGUF on a distinct endpoint.
 [editor.ai.providers.local-27b-direct]

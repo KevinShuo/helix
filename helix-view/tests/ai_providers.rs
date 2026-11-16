@@ -4,6 +4,113 @@ use helix_view::{
 };
 
 #[test]
+fn local_runtime_settings_parse_and_round_trip_without_changing_defaults() {
+    let provider = toml::from_str::<AiProviderConfig>(
+        "type = 'llama-cpp'\nmodel = 'local'\n[runtime]\ncache-type-k = 'q8_0'\ncache-type-v = 'q8_0'\nspeculative-decoding = 'mtp'\ndraft-tokens = 3\nthreads = 8\nthreads-batch = 12\nbatch-size = 2048\nubatch-size = 256\n",
+    );
+    assert!(
+        provider.is_ok(),
+        "local runtime settings must parse: {provider:?}"
+    );
+    let provider = provider.unwrap();
+    let serialized = toml::to_string(&provider).unwrap();
+    let round_trip: AiProviderConfig = toml::from_str(&serialized).unwrap();
+    assert_eq!(provider, round_trip);
+    assert!(serialized.contains("cache-type-k = \"q8_0\""));
+    assert!(serialized.contains("speculative-decoding = \"mtp\""));
+    let legacy = AiProviderConfig::from_legacy(&Config::default().ai_completion);
+    assert_eq!(
+        legacy.context_size,
+        Config::default().ai_completion.context_size
+    );
+}
+
+#[test]
+fn local_runtime_rejects_unknown_values_and_invalid_resource_budgets() {
+    for runtime in [
+        "cache-type-k = 'typo'",
+        "cache-type-v = 'typo'",
+        "speculative-decoding = 'typo'",
+        "threads = 0",
+        "threads = 1025",
+        "threads-batch = 0",
+        "batch-size = 0",
+        "ubatch-size = 0",
+        "batch-size = 65537",
+        "draft-tokens = 0",
+        "draft-tokens = 65",
+        "batch-size = 256\nubatch-size = 512",
+        "extra-args = '--host 0.0.0.0'",
+    ] {
+        let parsed = toml::from_str::<AiProviderConfig>(&format!(
+            "type = 'llama-cpp'\nmodel = 'test'\nendpoint = 'http://127.0.0.1:19240/v1/chat/completions'\n[runtime]\n{runtime}\n"
+        ));
+        if let Ok(provider) = parsed {
+            let mut config = Config::default();
+            config.ai.default_provider = Some("test".into());
+            config.ai.providers.insert("test".into(), provider);
+            assert!(
+                config.ai_provider(AiFeature::Completion).is_err(),
+                "{runtime}"
+            );
+        }
+    }
+}
+
+#[test]
+fn local_runtime_settings_are_rejected_for_remote_provider_types() {
+    for kind in ["deepseek", "openai-compatible"] {
+        let provider: AiProviderConfig = toml::from_str(&format!(
+            "type = '{kind}'\nmodel = 'test'\nendpoint = 'http://127.0.0.1:19240/v1/chat/completions'\n[runtime]\ncache-type-k = 'q8_0'\n"
+        )).unwrap();
+        let mut config = Config::default();
+        config.ai.default_provider = Some("test".into());
+        config.ai.providers.insert("test".into(), provider);
+        assert!(config
+            .ai_provider(AiFeature::Completion)
+            .unwrap_err()
+            .to_string()
+            .contains("runtime"));
+    }
+}
+
+#[test]
+fn local_runtime_backend_sampling_is_opt_in_and_round_trips() {
+    let parsed = toml::from_str::<AiProviderConfig>(
+        "type = 'llama-cpp'\n[runtime]\nbackend-sampling = true\n",
+    );
+    assert!(
+        parsed.is_ok(),
+        "backend sampling must be configurable: {parsed:?}"
+    );
+    let provider = parsed.unwrap();
+    let serialized = toml::to_string(&provider).unwrap();
+    assert!(serialized.contains("backend-sampling = true"));
+    assert_eq!(provider, toml::from_str(&serialized).unwrap());
+    assert!(toml::from_str::<AiProviderConfig>("[runtime]\nbackend-sampling = 'yes'\n").is_err());
+    assert!(toml::to_string(&AiProviderConfig::default())
+        .unwrap()
+        .contains("backend-sampling = false"));
+}
+
+#[test]
+fn local_runtime_model_loading_mode_is_typed_and_opt_in() {
+    for mode in ["auto", "mmap", "none", "dio"] {
+        let parsed = toml::from_str::<AiProviderConfig>(&format!(
+            "type = 'llama-cpp'\n[runtime]\nload-mode = '{mode}'\n"
+        ));
+        assert!(parsed.is_ok(), "load mode {mode} must parse: {parsed:?}");
+        assert!(toml::to_string(&parsed.unwrap())
+            .unwrap()
+            .contains(&format!("load-mode = \"{mode}\"")));
+    }
+    assert!(toml::from_str::<AiProviderConfig>("[runtime]\nload-mode = 'typo'\n").is_err());
+    assert!(toml::to_string(&AiProviderConfig::default())
+        .unwrap()
+        .contains("load-mode = \"auto\""));
+}
+
+#[test]
 fn merge_loads_27b_on_demand_without_changing_resident_completion_9b() {
     let parsed = toml::from_str::<Config>(
         r#"

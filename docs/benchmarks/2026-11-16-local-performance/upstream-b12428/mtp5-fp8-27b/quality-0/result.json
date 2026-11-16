@@ -1,0 +1,31 @@
+{
+  "workload": "quality",
+  "repetition": 0,
+  "seconds": 2.5479366999934427,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 109,
+    "prompt_ms": 193.528,
+    "prompt_per_token_ms": 1.77548623853211,
+    "prompt_per_second": 563.2259931379439,
+    "predicted_n": 234,
+    "predicted_ms": 2171.685,
+    "predicted_per_token_ms": 9.320536480686695,
+    "predicted_per_second": 107.28996148152241,
+    "draft_n": 265,
+    "draft_n_accepted": 180
+  },
+  "gpu_after": "23879, 92, 355.10, 67",
+  "quality": {
+    "passed": true,
+    "assertions": 18
+  },
+  "usage": {
+    "completion_tokens": 234,
+    "prompt_tokens": 109,
+    "total_tokens": 343,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  }
+}

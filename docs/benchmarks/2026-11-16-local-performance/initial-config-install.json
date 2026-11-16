@@ -1,0 +1,41 @@
+{
+  "source": "C:\\Users\\wangs\\AppData\\Roaming\\helix\\config.toml",
+  "candidate": "C:\\dev\\helix\\target\\local-performance-config.toml",
+  "original_sha256": "934479eba7c94aa1a14ec79d201562939d47e5b000990449d56dd36ae0e3ee57",
+  "candidate_sha256": "36d1291408be590ddc37e4bf3f950437f09b85aafe0f10dea416cdd1d09b9dff",
+  "profiles": {
+    "local": {
+      "cache-type-k": "q8_0",
+      "cache-type-v": "q8_0",
+      "speculative-decoding": "ngram-simple",
+      "draft-tokens": 3,
+      "threads": 8,
+      "threads-batch": 8,
+      "ubatch-size": 256,
+      "backend-sampling": true
+    },
+    "local-27b": {
+      "cache-type-k": "q8_0",
+      "cache-type-v": "q8_0",
+      "speculative-decoding": "mtp",
+      "draft-tokens": 5,
+      "threads": 8,
+      "threads-batch": 8,
+      "ubatch-size": 256,
+      "backend-sampling": true
+    },
+    "local-27b-direct": {
+      "cache-type-k": "q8_0",
+      "cache-type-v": "q8_0",
+      "speculative-decoding": "mtp",
+      "draft-tokens": 5,
+      "threads": 8,
+      "threads-batch": 8,
+      "ubatch-size": 256,
+      "backend-sampling": true
+    }
+  },
+  "preserved_other_parsed_values": true,
+  "backup": "C:\\Users\\wangs\\AppData\\Roaming\\helix\\config.before-local-performance-20261116-150155.toml",
+  "installed_sha256": "36d1291408be590ddc37e4bf3f950437f09b85aafe0f10dea416cdd1d09b9dff"
+}

@@ -1,0 +1,32 @@
+{
+  "arguments": {
+    "arms": "mtp5-q8-27b,mtp5-q4-27b",
+    "output": "docs\\benchmarks\\2026-11-16-local-performance\\final-long-and-production",
+    "server": "target\\local-performance-runtime\\b12428\\llama-server.exe",
+    "context": null,
+    "test_binary": "target\\integration\\deps\\helix_term-46027bd72ae4f034.exe",
+    "extra": [
+      "--threads",
+      "8",
+      "--threads-batch",
+      "8",
+      "--ubatch-size",
+      "256",
+      "--backend-sampling"
+    ],
+    "workloads": "decode,prefill,retrieval,quality",
+    "repeats": 2,
+    "tokens": 512,
+    "long_functions": 1100
+  },
+  "script_sha256": "acd0f3dcb02a40d4c14aca18371527ed93da300eddede71db39f43f6594d0f15",
+  "gpu_initial": "1647, 16, 51.22, 52",
+  "results": {
+    "mtp5-q8-27b": {
+      "error": "Production commit: exit 0, rows 6, failures ['commit_select_tests']"
+    },
+    "mtp5-q4-27b": {
+      "error": "Production commit: exit 0, rows 6, failures ['commit_select_tests']"
+    }
+  }
+}

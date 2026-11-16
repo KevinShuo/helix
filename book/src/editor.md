@@ -845,6 +845,51 @@ in their respective sections.
 | `server-path` | Executable for a managed local model | `"llama-server"` |
 | `gpu-layers` | Managed local GPU layers, capped at 999; `0` uses CPU | `99` |
 | `startup-timeout-ms` | Managed local loading timeout, clamped to 100–600000 ms | `120000` |
+| `runtime` | Typed managed llama.cpp performance settings (see below); only non-default settings on `llama-cpp` providers | defaults below |
+
+Managed llama.cpp servers already enable FlashAttention and use one inference
+slot. Tune their memory footprint and speculative decoding per provider:
+
+```toml
+[editor.ai.providers.local-27b.runtime]
+cache-type-k = "q8_0"
+cache-type-v = "q8_0"
+speculative-decoding = "mtp"
+draft-tokens = 3
+threads = 8
+threads-batch = 8
+ubatch-size = 256
+```
+
+Both cache types accept `f16` (default), `q8_0` and `q4_0`. Quantized KV caches
+reduce cache memory, with model-dependent precision/performance tradeoffs.
+`speculative-decoding` accepts `none` (default), `mtp`, `ngram-simple` and
+`ngram-mod`. MTP requires a compatible model with prediction heads and a runtime
+supporting `--spec-type draft-mtp`; it does not enable thinking or use another
+downloaded model. `draft-tokens` is 1–64 (default 3).
+
+`backend-sampling = true` enables llama.cpp's experimental GPU sampler; it is
+disabled by default and requires a supporting runtime and sampler chain.
+
+`load-mode` accepts `auto` (default), `mmap`, `none` (ordinary reads), or `dio`
+(Direct I/O). Explicit modes require a supporting llama.cpp runtime; benchmark
+startup on the actual model/storage before overriding `auto`. This controls
+loading only and does not change model weights or the context budget.
+
+Optional `threads` and `threads-batch` accept 1–1024. Optional `batch-size` and
+`ubatch-size` accept 1–65536; the microbatch must not exceed the logical batch
+(runtime defaults 512 and 2048 respectively). Omitted optional settings use
+llama.cpp defaults. Runtime changes reload the managed process; thinking and
+output-budget edits keep it loaded. These settings apply to processes Helix
+starts, not to an externally managed server. Defaults keep the previous F16
+caches and omit speculative flags for compatibility with older runtimes.
+
+Measure prompt processing and generation separately. If weights or caches exceed
+dedicated GPU memory, CPU offload or Windows shared-memory paging can outweigh
+kernel optimizations. Reducing cache memory can permit full GPU offload without
+reducing model weight precision or the context window. A performance comparison
+runner is available at `contrib/ai-local-performance.py`.
+
 
 Set the API key in the environment inherited by Helix, then launch Helix from
 that environment. For example, in PowerShell:

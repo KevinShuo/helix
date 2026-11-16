@@ -1,0 +1,148 @@
+{
+  "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b12428",
+  "binary_archive_sha256": "f16b22ade49824faba82f8d9a95e670fad9a8b420cacf2bbfbd692fdc7d7ff12",
+  "cuda_archive_sha256": "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6",
+  "installed_directory": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4",
+  "files": [
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\cublas64_12.dll",
+      "Hash": "E40202FE4223C1CD2D2DCE7BEEC59E1ED61C7801BD827309183BE9B50E358F4C"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\cublasLt64_12.dll",
+      "Hash": "2A896460BEF60ED57EF32B0875812F355A6984E671D638BB632F5E8C1D7A831F"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\cudart64_12.dll",
+      "Hash": "D28E42265DA7462162A54DA6B7A99EA4FA2CAF8139D862BB500DB875D0B32DFC"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-base.dll",
+      "Hash": "5F97228523A2206B0216CA76B1D7FEF4795328B1C81323026FFFB32899518783"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-alderlake.dll",
+      "Hash": "3073B70FDA8C7416CE1A2FEE009C677E3C035C45CDA5467B087FE6DE6C09DC13"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-cannonlake.dll",
+      "Hash": "5AB2104FE92735BD303C3D266FC68661436BA77EA3656AD41BB19BB15B3440B2"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-cascadelake.dll",
+      "Hash": "174FA414EDC7CAACA2FF10B2125172E1EB4D195B4F442E8B8DE65DEB909EE2C7"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-cooperlake.dll",
+      "Hash": "F232161B6135E193875EAA6EAA4C0E97E93ED84EB24775FAB0B7D455BC49EF11"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-haswell.dll",
+      "Hash": "0E54075180DCB4656C1D80019253D47A5C428191E73D6DAB6B1B8153DCBFAA93"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-icelake.dll",
+      "Hash": "232782DAB164BC73D8348CC2F187EFF41C86EA3C7377341A7AD9EB082CAF76CB"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-ivybridge.dll",
+      "Hash": "8244D8F64B675E576126AFF7A66073D9CE4A802242EA1F9B34AEE1A2B8F791A0"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-piledriver.dll",
+      "Hash": "5F7BF6F711E4A6FFF9A281592360F07211DC24373261426E565359C2F78E7F26"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-sandybridge.dll",
+      "Hash": "DE2B43D62935D5D5177430589640E7FFBC5494D973969522BBAED01FD223E6F6"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-sapphirerapids.dll",
+      "Hash": "E09AB00398501B360D1172BD455560138071C411EDCBEF159400A56E9D8712DD"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-skylakex.dll",
+      "Hash": "75A7436AB0B443A33D8C4472490F883FDA6C82A132B175AD294F48538FCBB5CF"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-sse42.dll",
+      "Hash": "AE9B5D88C8DAD7377E49A5827166C9A5E20FEC0AE95B76F27FF60F91E725B994"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-x64.dll",
+      "Hash": "AE2B227C731CF40EE607349B215459ABB625C743F986C4BBE807485AD8B4765F"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cpu-zen4.dll",
+      "Hash": "B156044B7C04C9DD4389B0B3345592794401FD0773E145DC1C474101C3C4741B"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-cuda.dll",
+      "Hash": "32E2C1231A4507BD98F110C391E3F33E03951A5BA6ADE93DBF8076FDD950D3E5"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml-rpc.dll",
+      "Hash": "DEFB40C5231B0A1044B943A920F3653A7305C2AFD794C5776AB5D9A42EA4BE1A"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\ggml.dll",
+      "Hash": "6F4F6F4BF18E0BB6A261920E764D71C0F62DCBAD1EAA8D6A832992947205D677"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\libomp.dll",
+      "Hash": "A12116BA72D1D6820407CF30BE23DA04CE79D6BB8A71A5EE71759C5A1FAA6F1C"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\LICENSE-LLVM-OpenMP",
+      "Hash": "FDAD1758A9E1F9D5A81E18879B3406772115EDC92C24BFA36B70C654F325E8E4"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-batched-bench-impl.dll",
+      "Hash": "001413A419629FDD501F1A670224EE12E994C4EDBC645F08075EF80F7F2AB8E2"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-bench-impl.dll",
+      "Hash": "F3B02C5BFD268AE228C09A7F05A9CC0AE20009A6FD4EA312E2824F6BE77B628A"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-cli-impl.dll",
+      "Hash": "79CA74071110CE2A6DF5D5CC96E7A8AE86CDC64F513B1D106D0C66C77942EBC0"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-common.dll",
+      "Hash": "2570D0FF4F53149E5A2244BCB877150A04CB51CD3B8509265D88E8C2201CFE21"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-completion-impl.dll",
+      "Hash": "26F77DC4C7AA28A8E28BC67177A17820A157A019D3F8463766DFAEEC2F08730E"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-fit-params-impl.dll",
+      "Hash": "E12EB93991D70AC52FA373BB77893D4B9A8EA228DBC628C9CFD4107ACE0922F7"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-perplexity-impl.dll",
+      "Hash": "B5FF859E309BF8DE73A1E99E621835294BDF045253E368FEB202AFF0A5DCB461"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-quantize-impl.dll",
+      "Hash": "83A2866275FB9644B49D94BA4D0673F30EEE4532F8E48711D002720D55C4FE1C"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-server-impl.dll",
+      "Hash": "0C3FD30E109F3404321AB8F8FC49767821DD9532B91AA350E3F42D92241B1AEF"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama-server.exe",
+      "Hash": "E79C1C2D1A6CE09768CB5805F1B349F5676758CB652A5B24A8C047F16577210E"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\llama.dll",
+      "Hash": "D8ACDFEAAC24356E57034F3446443BB06BA8381AE048BE0E00D16BDCA42456D6"
+    },
+    {
+      "Path": "C:\\Users\\wangs\\.local\\share\\helix\\llama.cpp-b12428-cuda12.4\\mtmd.dll",
+      "Hash": "12BAB6297179454268BAF2595C225B8B67046ECDF57AE78E1284AA541BC58022"
+    }
+  ]
+}

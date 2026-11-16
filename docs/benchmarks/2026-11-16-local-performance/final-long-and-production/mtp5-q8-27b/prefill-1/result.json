@@ -1,0 +1,19 @@
+{
+  "workload": "prefill",
+  "repetition": 1,
+  "seconds": 46.136850200011395,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 55026,
+    "prompt_ms": 36394.138,
+    "prompt_per_token_ms": 0.6613989386835314,
+    "prompt_per_second": 1511.946786595138,
+    "predicted_n": 512,
+    "predicted_ms": 9680.165,
+    "predicted_per_token_ms": 18.94357142857143,
+    "predicted_per_second": 52.78835639681761,
+    "draft_n": 435,
+    "draft_n_accepted": 424
+  },
+  "gpu_after": "23804, 93, 280.54, 64"
+}
