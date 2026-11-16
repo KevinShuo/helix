@@ -23,19 +23,45 @@ runtime_local! {
     static STATE: parking_lot::Mutex<BTreeMap<String, watch::Receiver<ServerState>>> = parking_lot::Mutex::new(BTreeMap::new());
 }
 
+#[cfg(any(test, feature = "integration", not(any(windows, target_os = "linux"))))]
 mod pool;
-pub(crate) use pool::{with_model, LocalServers};
+#[cfg(any(test, feature = "integration", not(any(windows, target_os = "linux"))))]
+pub(crate) use pool::LocalServers;
+
+pub(crate) async fn with_model<T>(
+    model: &AiProviderConfig,
+    operation: impl std::future::Future<Output = anyhow::Result<T>>,
+) -> anyhow::Result<T> {
+    if crate::ai_manager::is_registered(model) {
+        return crate::ai_manager::with_model(model, operation).await;
+    }
+    #[cfg(any(test, feature = "integration", not(any(windows, target_os = "linux"))))]
+    {
+        pool::with_model(model, operation).await
+    }
+    #[cfg(not(any(test, feature = "integration", not(any(windows, target_os = "linux")))))]
+    {
+        anyhow::ensure!(
+            model.model_path.is_none(),
+            "Local AI provider is not registered; reload configuration"
+        );
+        operation.await
+    }
+}
 
 /// The application owns this task, rather than a keystroke's cancelable request.
 /// Aborting the task drops its kill-on-drop child even during model loading.
 pub(crate) struct LocalServer {
-    config: watch::Sender<AiProviderConfig>,
+    _config: watch::Sender<AiProviderConfig>,
     state: watch::Sender<ServerState>,
     task: Option<JoinHandle<()>>,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl LocalServer {
+    pub(crate) fn is_owned(&self) -> bool {
+        self.state.borrow().owned
+    }
     pub(crate) fn new(config: &AiProviderConfig) -> Self {
         let (config_tx, config_rx) = watch::channel(config.clone());
         let (state_tx, state_rx) = watch::channel(ServerState {
@@ -47,16 +73,17 @@ impl LocalServer {
         let (shutdown, stop) = tokio::sync::oneshot::channel();
         let task = tokio::spawn(supervise(config_rx, state_tx.clone(), stop));
         Self {
-            config: config_tx,
+            _config: config_tx,
             state: state_tx,
             task: Some(task),
             shutdown: Some(shutdown),
         }
     }
 
+    #[cfg(any(test, feature = "integration", not(any(windows, target_os = "linux"))))]
     pub(crate) fn configure(&mut self, config: &AiProviderConfig) {
         let failed = matches!(self.state.borrow().ready, Some(Err(_)));
-        if same_server(&self.config.borrow(), config) && !failed {
+        if same_server(&self._config.borrow(), config) && !failed {
             return;
         }
         self.state.send_replace(ServerState {
@@ -64,7 +91,7 @@ impl LocalServer {
             ready: None,
             owned: false,
         });
-        self.config.send_replace(config.clone());
+        self._config.send_replace(config.clone());
     }
 
     pub(crate) async fn stop(&mut self) {
@@ -92,7 +119,7 @@ impl Drop for LocalServer {
     }
 }
 
-fn same_server(a: &AiProviderConfig, b: &AiProviderConfig) -> bool {
+pub(crate) fn same_server(a: &AiProviderConfig, b: &AiProviderConfig) -> bool {
     a.model_path == b.model_path
         && a.server_path == b.server_path
         && a.endpoint == b.endpoint
@@ -105,6 +132,21 @@ fn same_server(a: &AiProviderConfig, b: &AiProviderConfig) -> bool {
 }
 
 pub(crate) async fn wait_ready(config: &AiProviderConfig) -> anyhow::Result<()> {
+    if config.model_path.is_none() {
+        return Ok(());
+    }
+    if crate::ai_manager::is_registered(config) {
+        if !serves_model(&models_request(config)?, &config.model).await {
+            bail!("Shared AI endpoint no longer serves model {}", config.model);
+        }
+        return Ok(());
+    }
+    wait_managed_ready(config).await
+}
+
+/// Readiness of a server owned/observed in this process, independent of the
+/// editor's shared-manager registration. Also used by the helper itself.
+pub(crate) async fn wait_managed_ready(config: &AiProviderConfig) -> anyhow::Result<()> {
     if config.model_path.is_none() {
         return Ok(());
     }
@@ -219,7 +261,7 @@ async fn stop_child(child: &mut Option<Child>) {
     }
 }
 
-pub(super) fn local_url(config: &AiProviderConfig) -> anyhow::Result<reqwest::Url> {
+pub(crate) fn local_url(config: &AiProviderConfig) -> anyhow::Result<reqwest::Url> {
     let url = reqwest::Url::parse(&config.endpoint).ok();
     url.filter(|url| {
         url.scheme() == "http"
@@ -327,6 +369,7 @@ async fn prepare(config: &AiProviderConfig, child: &mut Option<Child>) -> anyhow
     }
     #[cfg(windows)]
     command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    crate::ai_manager::configure_model_child(&mut command);
     *child = Some(command.spawn().with_context(|| {
         format!(
             "Could not start {}; set server-path to the llama-server executable",

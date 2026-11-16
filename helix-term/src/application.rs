@@ -79,7 +79,7 @@ pub struct Application {
     lsp_progress: LspProgressMap,
 
     theme_mode: Option<theme::Mode>,
-    ai_completion_server: handlers::ai_completion::server::LocalServers,
+    ai_completion_server: crate::ai_manager::LocalServers,
 }
 
 #[cfg(feature = "integration")]
@@ -260,9 +260,8 @@ impl Application {
         ])
         .context("build signal handler")?;
 
-        let ai_completion_server = handlers::ai_completion::server::LocalServers::new(
-            &config.load().editor.active_ai_providers()?,
-        );
+        let ai_completion_server =
+            crate::ai_manager::LocalServers::new(&config.load().editor.active_ai_providers()?);
         let app = Self {
             compositor,
             terminal,

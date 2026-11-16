@@ -75,7 +75,7 @@ impl Shared {
                 models
                     .servers
                     .get(&p.endpoint)
-                    .is_some_and(|server| super::same_server(&server.config.borrow(), p))
+                    .is_some_and(|server| super::same_server(&server._config.borrow(), p))
             })
         {
             for provider in residents {
@@ -256,7 +256,7 @@ impl Lease {
             drop(listener);
             // Reused external processes cannot be unloaded safely by this editor.
             for server in models.servers.values() {
-                let resident = server.config.borrow().clone();
+                let resident = server._config.borrow().clone();
                 tokio::select! {
                     result = wait_ready(&resident) => result?,
                     _ = changes.changed() => anyhow::bail!("AI model configuration changed"),

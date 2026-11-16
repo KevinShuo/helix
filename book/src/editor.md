@@ -951,13 +951,23 @@ follow global mode. Conditional providers must be managed `llama-cpp` models wit
 a `model-path`. Omitted thinking budgets/efforts on conditional thinking providers
 default to 2048/`medium`.
 
-The larger model is not loaded at startup. Before its first request the editor
-stops its resident managed models and waits for process exit. One lease covers
-the whole documentation request or multi-call commit analysis. On completion,
-failure or cancellation it unloads the temporary model and restores the latest
-configured resident models. Reloading into online mode or shutting down does
-not restart obsolete models. An externally owned resident server cannot be
-unloaded safely, so the task reports an error asking you to close its owner.
+The larger model is not loaded at startup. On Windows and Linux, editor instances
+share a user-local background model manager. Requests queue for one model lease;
+the manager unloads the ordinary model before loading a temporary generation
+model, then restores the requesting editor's ordinary model. One lease covers the
+whole documentation request or multi-call commit analysis. Other windows' inline
+completion waits during generation and remains cancelable. Matching model and
+runtime settings reuse one process; differing settings reload it between requests.
+
+Closing the first editor does not stop models used by other instances. Ten seconds
+after the last editor and request disconnect, the manager exits and releases its
+models, including a model still loading. Configuration reload cancels requests
+using the previous configuration. Restart all existing editors after upgrading
+from the older editor-owned model process. A live server started outside the
+shared manager can be reused for matching completion, but cannot be unloaded for
+model switching; close its owner first. If that external owner exits, a later
+request can take over its now-free endpoint. macOS/BSD retain the original
+editor-owned lifecycle until equivalent process-crash cleanup is available.
 
 For these bounded-thinking requests, `max-tokens` reserves final-output capacity;
 the HTTP generation cap adds `thinking-budget`, and context validation includes

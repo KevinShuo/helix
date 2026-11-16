@@ -165,8 +165,12 @@ pub fn trigger(editor: &mut Editor) {
                     context.members = members.names;
                 }
             }
-            server::wait_ready(&model).await?;
-            let Some(text) = client::complete(&config, &model, &context).await? else {
+            let text = server::with_model(&model, async {
+                server::wait_ready(&model).await?;
+                client::complete(&config, &model, &context).await
+            })
+            .await?;
+            let Some(text) = text else {
                 return Ok(None);
             };
             if let Some((source, language)) = syntax_snapshot {

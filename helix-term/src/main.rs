@@ -24,6 +24,9 @@ fn main() -> Result<()> {
 
 #[tokio::main]
 async fn main_impl() -> Result<i32> {
+    if helix_term::ai_manager::run_if_requested().await? {
+        return Ok(0);
+    }
     let args = Args::parse_args().context("could not parse arguments")?;
 
     helix_loader::initialize_config_file(args.config_file.clone());

@@ -95,7 +95,8 @@ impl AiProviderConfig {
         }
     }
 
-    fn validate(&self) -> Result<()> {
+    /// Validate provider and runtime settings before starting a managed model.
+    pub fn validate(&self) -> Result<()> {
         self.runtime.validate()?;
         ensure!(
             self.kind == AiProviderType::LlamaCpp || self.runtime == AiRuntimeConfig::default(),
