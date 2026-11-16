@@ -121,6 +121,7 @@
 | `git_fetch` | Fetch Git remotes | normal: `` <space>vf ``, select: `` <space>vf `` |
 | `git_pull` | Pull Git changes (fast-forward only) | normal: `` <space>vp ``, select: `` <space>vp `` |
 | `git_push` | Push current Git branch | normal: `` <space>vP ``, select: `` <space>vP `` |
+| `gitignore` | Generate .gitignore from built-in templates | normal: `` <space>vi ``, select: `` <space>vi `` |
 | `select_references_to_symbol_under_cursor` | Select symbol references | normal: `` <space>h ``, select: `` <space>h `` |
 | `workspace_symbol_picker` | Open workspace symbol picker |  |
 | `syntax_workspace_symbol_picker` | Open workspace symbol picker from syntax information |  |

@@ -342,6 +342,7 @@ Type `Space v` in normal or select mode to open the Git command group.
 | `g` | Open commit graph and log | `git_log` |
 | `b` | Open branches and tags | `git_branches` |
 | `c` | Open working-tree changes | `git_status` |
+| `i` | Generate an editable `.gitignore` from built-in templates | `gitignore` |
 | `h` | Open the current file's history | `git_file_history` |
 | `n` | Create a branch from the selected commit | `git_new_branch` |
 | `f` | Fetch remotes | `git_fetch` |

@@ -20,6 +20,28 @@ No file or directory is created until you save. Use `:w` to save, or `:w!` if
 the path requires new parent directories. Escape cancels the prompt. The `:new`
 command continues to create an unnamed scratch buffer.
 
+Use `:gitignore` (or `Space v i`) to generate an editable `.gitignore` draft.
+Helix checks project markers in the nearest Git working-tree root, or the
+workspace/current file's directory when no Git root is found. The target path
+is shown before generation. Subdirectories are not scanned.
+
+Recognized project markers recommend Rust, Node, Python, Go, Java/Maven,
+Java/Gradle, C/C++/CMake and .NET templates. Search the list to add other
+templates. Windows, macOS, Linux, VS Code, JetBrains, Vim, Emacs, temporary-file
+and dotenv templates are optional and are never selected automatically.
+The templates are built in and work offline, even before `git init`.
+
+Move with the arrow keys or `Ctrl-n`/`Ctrl-p`, toggle a template with Tab,
+and press Enter to generate from all selected templates, including selections
+hidden by the current search. Escape cancels. Review and edit the resulting
+buffer, then use `:w` to create the file. No file or directory is created during
+selection or generation. Existing `.gitignore` files and buffers are opened
+without replacing their contents; automatic merging is not supported.
+
+Templates preserve lockfiles. The dotenv template keeps `.env.example`,
+`.env.sample` and `.env.template`; add exceptions for any other example names.
+Git already-tracked files remain tracked even if a new rule matches them.
+
 Use `:delete-file` to permanently delete the current file from disk and close
 its buffer. The confirmation prompt shows the path: type `yes` and press Enter
 to delete, or press Escape to cancel. Any other answer also cancels. Files with
