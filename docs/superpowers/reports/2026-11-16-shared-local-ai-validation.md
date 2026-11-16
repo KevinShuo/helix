@@ -47,4 +47,8 @@ RTX 4090 24GB，使用已安装的官方 llama.cpp b12428 CUDA 12.4 和用户现
 
 ## 安装
 
-旧版备份：`I:\DEV\helix\target\release\hx.before-shared-ai-20261116-220446.exe`。最终 Release 构建及安装结果将在构建后记录。保留用户正在运行的旧 hx 进程，用户需重新打开旧实例以使用共享管理器。
+旧版备份：`I:\DEV\helix\target\release\hx.before-shared-ai-20261116-220446.exe`。正在运行的旧程序另保留为 `hx.running-before-shared-ai-20261116-221537.exe`。
+
+`cargo build --release --locked --jobs 2 -p helix-term --bin hx` 成功，耗时 3 分 43 秒，沿用仓库原有 thin LTO 优化。已替换 `I:\DEV\helix\target\release\hx.exe`，版本为 `helix 25.07.1 (78ace1e0)`。SHA-256：`9bbb3e7525859915981eb9adc75b731d5a752b2fa149471db7dec39fdf6df424`。
+
+安装后 `hx --health` 确认现有配置有效，最终 Release 可执行文件再次通过全部 11 项进程回归（0 失败）。测试模型子进程已清理。保留用户正在运行的旧 hx 进程，用户需重新打开所有旧实例以使用共享管理器。代码保留在本地 `codex/shared-local-ai` 分支。

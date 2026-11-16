@@ -49,8 +49,8 @@ Files: docs validation report and user-facing AI configuration documentation.
 
 - [x] Run formatting and default package tests, report any baseline/platform failures explicitly; run focused lifecycle and multi-process checks.
 - [x] Request one fresh whole-change review and resolve substantive findings with regression tests.
-- [ ] Build Release, verify two real hx instances share the installed 9B server and survive closing the first; verify 9B → 27B → 9B with the installed models on isolated endpoints.
-- [ ] Back up/replace `I:/DEV/helix/target/release/hx.exe`, verify version/config/model paths and clean temporary processes. Document the required restart of existing old hx instances.
+- [x] Build Release, verify two real hx instances share the installed 9B server and survive closing the first; verify 9B → 27B → 9B with the installed models on isolated endpoints.
+- [x] Back up/replace `I:/DEV/helix/target/release/hx.exe`, verify version/config/model paths and clean temporary processes. Document the required restart of existing old hx instances.
 
 ## Execution record
 
