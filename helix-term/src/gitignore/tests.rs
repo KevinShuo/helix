@@ -117,6 +117,22 @@ fn composition_is_ordered_and_preserves_exception_blocks() -> anyhow::Result<()>
     Ok(())
 }
 
+#[test]
+fn crlf_assets_keep_repeated_rules_and_emit_lf() -> anyhow::Result<()> {
+    let template = Template {
+        id: "example",
+        name: "Example",
+        category: "General",
+        description: "",
+        aliases: "",
+        text: "cache/\r\n!cache/\r\ncache/\r\n",
+    };
+    let text = compose(&[&template])?;
+    assert!(text.contains("cache/\n!cache/\ncache/\n"));
+    assert!(!text.contains('\r'));
+    Ok(())
+}
+
 fn ignored(root: &Path, file: &str) -> bool {
     Command::new("git")
         .args([

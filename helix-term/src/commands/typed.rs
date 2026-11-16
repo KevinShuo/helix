@@ -750,6 +750,17 @@ fn new_named_file(
     open_new_file(cx.editor, &directory, args.first().unwrap())
 }
 
+fn generate_gitignore(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        ui::gitignore::open_typed(cx);
+    }
+    Ok(())
+}
+
 fn format(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
     if event != PromptEvent::Validate {
         return Ok(());
@@ -3541,6 +3552,17 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
         completer: CommandCompleter::none(),
         signature: Signature {
             positionals: (1, Some(1)),
+            ..Signature::DEFAULT
+        },
+    },
+    TypableCommand {
+        name: "gitignore",
+        aliases: &[],
+        doc: "Generate an editable .gitignore draft from built-in templates. Existing files and buffers are opened unchanged; save with :w.",
+        fun: generate_gitignore,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, Some(0)),
             ..Signature::DEFAULT
         },
     },

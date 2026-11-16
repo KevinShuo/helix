@@ -5,6 +5,7 @@ mod completion;
 mod document;
 pub(crate) mod editor;
 pub(crate) mod git;
+pub(crate) mod gitignore;
 mod info;
 pub mod lsp;
 mod markdown;

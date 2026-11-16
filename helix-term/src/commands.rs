@@ -458,6 +458,7 @@ impl MappableCommand {
         git_fetch, "Fetch Git remotes",
         git_pull, "Pull Git changes (fast-forward only)",
         git_push, "Push current Git branch",
+        gitignore, "Generate .gitignore from built-in templates",
         select_references_to_symbol_under_cursor, "Select symbol references",
         workspace_symbol_picker, "Open workspace symbol picker",
         syntax_workspace_symbol_picker, "Open workspace symbol picker from syntax information",
@@ -3231,6 +3232,10 @@ fn new_file_directory(editor: &Editor) -> PathBuf {
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or_else(helix_stdx::env::current_working_dir)
+}
+
+fn gitignore(cx: &mut Context) {
+    ui::gitignore::open(cx);
 }
 
 fn open_new_file(editor: &mut Editor, directory: &Path, filename: &str) -> anyhow::Result<()> {

@@ -244,6 +244,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "m" => git_merge_menu,
                 "b" => git_branches,
                 "c" => git_status,
+                "i" => gitignore,
                 "h" => git_file_history,
                 "n" => git_new_branch,
                 "f" => git_fetch,
