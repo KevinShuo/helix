@@ -19,10 +19,11 @@ pub(super) fn request(
         "请先在 [editor.ai-merge] 中启用 enabled = true"
     );
     ensure!(
-        config.max_tokens > 0 && config.max_input_bytes > 0,
+        model.automatic_budget() || (config.max_tokens > 0 && config.max_input_bytes > 0),
         "AI Merge 输入和输出预算必须大于零"
     );
-    let max_tokens = config.max_tokens.clamp(128, 4096) + model.reasoning_tokens();
+    let max_tokens =
+        model.budget_output_tokens(config.max_tokens.max(128)) + model.reasoning_tokens();
     let mut data = json!({
         "block_id":target.block, "path":target.path, "language":target.language,
         "base":target.base, "current":target.current, "incoming":target.incoming,
@@ -31,9 +32,8 @@ pub(super) fn request(
     });
     let fits = |data: &Value| {
         let input = SYSTEM.len().saturating_add(data.to_string().len());
-        input <= config.max_input_bytes
-            && input.saturating_add(max_tokens as usize + 512)
-                <= model.context_size.min(131_072) as usize
+        input <= model.budget_input_bytes(config.max_input_bytes)
+            && model.budget_fits(input, max_tokens, 512)
     };
     ensure!(fits(&data), "当前冲突块超出 AI 上下文或输入预算；请增加 context-size / max-input-bytes，完整冲突不会被截断");
     for context in &target.context {
@@ -49,6 +49,10 @@ pub(super) fn request(
 }
 
 pub(super) fn parse(response: &Value, block: usize) -> Result<Suggestion> {
+    parse_with_limit(response, block, 65_536)
+}
+
+fn parse_with_limit(response: &Value, block: usize, max_bytes: usize) -> Result<Suggestion> {
     let choice = &response["choices"][0];
     ensure!(
         choice["finish_reason"].as_str() == Some("stop"),
@@ -77,7 +81,7 @@ pub(super) fn parse(response: &Value, block: usize) -> Result<Suggestion> {
     );
     ensure!(
         !response.explanation.trim().is_empty()
-            && response.explanation.len() <= 8192
+            && response.explanation.len() <= if max_bytes > 65_536 { max_bytes } else { 8192 }
             && plain(&response.explanation),
         "AI Merge 解释为空、过长或包含控制字符"
     );
@@ -85,7 +89,7 @@ pub(super) fn parse(response: &Value, block: usize) -> Result<Suggestion> {
         ("resolved", Some(code)) => {
             let code = code.replace("\r\n", "\n");
             ensure!(
-                code.len() <= 65_536 && plain(&code),
+                code.len() <= max_bytes && plain(&code),
                 "AI Merge 代码过长或包含控制字符"
             );
             ensure!(
@@ -142,7 +146,7 @@ pub(super) async fn generate(
     crate::handlers::ai_completion::server::with_model(model, async {
         crate::handlers::ai_completion::server::wait_ready(model).await?;
         let response = crate::handlers::ai::post(model, &body, config.timeout_ms).await?;
-        parse(&response, target.block)
+        parse_with_limit(&response, target.block, model.budget_artifact_bytes(65_536))
     })
     .await
 }

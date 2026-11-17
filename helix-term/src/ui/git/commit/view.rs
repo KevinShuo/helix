@@ -246,17 +246,16 @@ fn pane(frame: &mut Buffer, area: Rect, title: &str, text: &str, scroll: usize) 
     }
     let safe = text
         .lines()
+        .skip(scroll)
+        .take(area.height as usize)
         .map(super::super::render::safe_text)
         .collect::<Vec<_>>()
         .join("\n");
     if area.height < 3 || area.width < 3 {
-        Paragraph::new(&Text::from(safe))
-            .scroll((scroll.min(u16::MAX as usize) as u16, 0))
-            .render(area, frame);
+        Paragraph::new(&Text::from(safe)).render(area, frame);
         return;
     }
     Paragraph::new(&Text::from(safe))
         .block(Block::default().borders(Borders::ALL).title(title))
-        .scroll((scroll.min(u16::MAX as usize) as u16, 0))
         .render(area, frame);
 }

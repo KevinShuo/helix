@@ -84,9 +84,9 @@ fn grounded(target: &Target, doc: &Documentation, context: &[&str]) -> Result<()
     Ok(())
 }
 
-fn plain(value: &str) -> Result<()> {
+fn plain(value: &str, max_bytes: usize) -> Result<()> {
     ensure!(
-        !value.trim().is_empty() && value.len() <= 4096,
+        !value.trim().is_empty() && value.len() <= max_bytes,
         "模型返回了空白或过长的说明"
     );
     ensure!(
@@ -100,7 +100,11 @@ fn plain(value: &str) -> Result<()> {
     Ok(())
 }
 
-fn descriptions(values: Vec<Description>, names: &[&str]) -> Result<HashMap<String, String>> {
+fn descriptions(
+    values: Vec<Description>,
+    names: &[&str],
+    max_bytes: usize,
+) -> Result<HashMap<String, String>> {
     ensure!(values.len() == names.len(), "模型返回的参数数量与签名不符");
     let mut result = HashMap::new();
     for value in values {
@@ -108,7 +112,7 @@ fn descriptions(values: Vec<Description>, names: &[&str]) -> Result<HashMap<Stri
             names.contains(&value.name.as_str()),
             "模型返回了签名中不存在的参数"
         );
-        plain(&value.description)?;
+        plain(&value.description, max_bytes)?;
         ensure!(
             result.insert(value.name, value.description).is_none(),
             "模型返回了重复参数"
@@ -122,12 +126,31 @@ pub(crate) fn render(target: &Target, json: &str) -> Result<String> {
     render_with_context(target, json, &[])
 }
 
+#[cfg(test)]
 pub(crate) fn render_with_context(target: &Target, json: &str, context: &[&str]) -> Result<String> {
-    ensure!(json.len() <= 32768, "模型返回的注释过长");
+    render_with_context_and_limit(target, json, context, 32768)
+}
+
+#[cfg(test)]
+pub(crate) fn render_with_limit(target: &Target, json: &str, max_bytes: usize) -> Result<String> {
+    render_with_context_and_limit(target, json, &[], max_bytes)
+}
+
+pub(crate) fn render_with_context_and_limit(
+    target: &Target,
+    json: &str,
+    context: &[&str],
+    max_bytes: usize,
+) -> Result<String> {
+    ensure!(
+        max_bytes > 0 && max_bytes <= 16 * 1024 * 1024 && json.len() <= max_bytes,
+        "模型返回的注释过长"
+    );
+    let description_limit = if max_bytes <= 32768 { 4096 } else { max_bytes };
     let doc: Documentation =
         serde_json::from_str(json).context("模型未返回有效的文档 JSON，请重新生成")?;
     grounded(target, &doc, context)?;
-    plain(&doc.summary)?;
+    plain(&doc.summary, description_limit)?;
     let params = descriptions(
         doc.params,
         &target
@@ -135,6 +158,7 @@ pub(crate) fn render_with_context(target: &Target, json: &str, context: &[&str])
             .iter()
             .map(|p| p.name.as_str())
             .collect::<Vec<_>>(),
+        description_limit,
     )?;
     let templates = descriptions(
         doc.templates,
@@ -143,10 +167,11 @@ pub(crate) fn render_with_context(target: &Target, json: &str, context: &[&str])
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>(),
+        description_limit,
     )?;
     let mut lines = vec![doc.summary];
     if let Some(details) = doc.details {
-        plain(&details)?;
+        plain(&details, description_limit)?;
         lines.extend([String::new(), details]);
     }
     let mut fields = Vec::new();
@@ -160,7 +185,7 @@ pub(crate) fn render_with_context(target: &Target, json: &str, context: &[&str])
         }
     }
     if let Some(returns) = doc.returns {
-        plain(&returns)?;
+        plain(&returns, description_limit)?;
         ensure!(target.returns, "模型为无返回值函数生成了返回说明");
         fields.push(format!(":returns: {returns}"));
     }
@@ -176,12 +201,12 @@ pub(crate) fn render_with_context(target: &Target, json: &str, context: &[&str])
     let mut exceptions = std::collections::HashSet::new();
     for error in doc.raises {
         // Source-derived C++ names may contain string literals in template arguments.
-        plain(&error.name)?;
+        plain(&error.name, 4096)?;
         ensure!(
             target.exceptions.contains(&error.name) && exceptions.insert(error.name.clone()),
             "模型返回了无依据或重复的异常类型"
         );
-        plain(&error.description)?;
+        plain(&error.description, description_limit)?;
         let field = if target.language == "python" {
             "raises"
         } else {
@@ -231,3 +256,73 @@ pub(crate) fn render_with_context(target: &Target, json: &str, context: &[&str])
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod budget_tests {
+    use super::tests::evidenced;
+    use super::*;
+    use crate::handlers::ai_doc::target::tests::find;
+
+    #[test]
+    fn ai_doc_provider_budget_allows_complete_large_descriptions() {
+        let target = find("python", "def f(x: str):\n    return x\n", "return").unwrap();
+        let description = "说明".repeat(6000);
+        let json = evidenced(
+            &target,
+            serde_json::json!({
+                "summary": "完整说明。", "params": [{"name": "x", "description": description}]
+            }),
+        );
+        assert!(json.len() > 32768);
+        assert!(render(&target, &json).is_err());
+        let rendered = render_with_limit(&target, &json, 128 * 1024).unwrap();
+        assert!(rendered.contains(&format!(":param x: {description}\n")));
+        assert!(render_with_limit(&target, &json, json.len() - 1).is_err());
+    }
+
+    #[test]
+    fn ai_doc_provider_budget_retains_semantic_and_plain_text_checks() {
+        let target = find("python", "def f(x: int):\n    return x\n", "return").unwrap();
+        for description in [
+            ".. include:: private.txt",
+            ":param fake: injected",
+            "safe\n:returns: injected",
+            "unsafe\u{1b}",
+            "unsafe */",
+        ] {
+            let json = evidenced(
+                &target,
+                serde_json::json!({"summary": "值", "params": [{"name": "x", "description": description}]}),
+            );
+            assert!(render_with_limit(&target, &json, 128 * 1024).is_err());
+        }
+        for json in [
+            r#"{"summary":"值","params":[{"name":"invented","description":"值"}]}"#,
+            r#"{"summary":"值","params":[{"name":"x","description":"值","type":"Invented"}]}"#,
+            r#"{"summary":"值","params":[{"name":"x","description":"值"},{"name":"x","description":"值"}]}"#,
+            r#"{"summary":"值","params":[{"name":"x","description":"值"}],"raises":[{"name":"Invented","description":"值"}]}"#,
+        ] {
+            let json = evidenced(&target, serde_json::from_str(json).unwrap());
+            assert!(render_with_limit(&target, &json, 128 * 1024).is_err());
+        }
+        let void = find("c", "void f(void) {}", "f").unwrap();
+        assert!(render_with_limit(
+            &void,
+            r#"{"summary":"值","params":[],"returns":"invented"}"#,
+            128 * 1024
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn ai_doc_default_description_limit_is_unchanged() {
+        let target = find("python", "def f():\n    pass\n", "pass").unwrap();
+        let json = evidenced(
+            &target,
+            serde_json::json!({"summary": "a".repeat(4097), "params": []}),
+        );
+        assert!(render(&target, &json).is_err());
+        assert!(render_with_limit(&target, &json, 64 * 1024).is_ok());
+        assert!(render_with_limit(&target, &json, usize::MAX).is_err());
+    }
+}

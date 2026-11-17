@@ -1,4 +1,5 @@
 //! Provider configuration shared by automatic and explicit AI features.
+mod budget;
 mod runtime;
 pub use runtime::{AiCacheType, AiModelLoadMode, AiRuntimeConfig, AiSpeculativeDecoding};
 
@@ -33,6 +34,14 @@ pub enum AiProxy {
     None,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AiBudgetMode {
+    #[default]
+    Auto,
+    Configured,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct AiProviderConfig {
@@ -42,6 +51,7 @@ pub struct AiProviderConfig {
     pub model: String,
     pub api_key_env: Option<String>,
     pub context_size: u32,
+    pub budget_mode: AiBudgetMode,
     pub thinking: bool,
     pub thinking_budget: Option<u32>,
     pub reasoning_effort: Option<String>,
@@ -64,6 +74,7 @@ impl Default for AiProviderConfig {
             model: String::new(),
             api_key_env: None,
             context_size: 4096,
+            budget_mode: AiBudgetMode::Auto,
             thinking: false,
             thinking_budget: None,
             reasoning_effort: None,

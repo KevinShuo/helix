@@ -14,8 +14,7 @@ fn fits(model: &AiProviderConfig, body: &Value) -> bool {
         .iter()
         .map(|message| message["content"].as_str().unwrap().len())
         .sum();
-    input + body["max_tokens"].as_u64().unwrap() as usize + 256
-        <= model.context_size.clamp(512, 131072) as usize
+    model.budget_fits(input, body["max_tokens"].as_u64().unwrap() as u32, 256)
 }
 
 pub(crate) fn request(
@@ -54,7 +53,8 @@ pub(crate) fn request(
         "parameters":target.parameters.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
         "template_parameters":target.templates,"local_raise_candidates":target.exceptions,
         "has_return":target.returns,"requires_returns":target.returns && (target.facts.value_return || target.facts.generator),"callable":target.facts});
-    let max_tokens = config.max_tokens.clamp(128, 4096) + model.reasoning_tokens();
+    let max_tokens =
+        model.budget_output_tokens(config.max_tokens.max(128)) + model.reasoning_tokens();
     let mut evidence = vec![json!({"field":"summary","quote":"<exact source substring>"})];
     for (prefix, names) in [
         (
@@ -166,7 +166,10 @@ fn repair_request(
     previous: &str,
     diagnostic: &str,
 ) -> Result<Value> {
-    ensure!(previous.len() <= 32768, "模型返回的注释过长，未自动修订");
+    ensure!(
+        previous.len() <= model.budget_artifact_bytes(32768),
+        "模型返回的注释过长，未自动修订"
+    );
     let mut body = original.clone();
     let mut input: Value = serde_json::from_str(body["messages"][1]["content"].as_str().unwrap())?;
     input["repair"] =
@@ -195,7 +198,12 @@ fn content(response: &Value) -> Result<&str> {
     message["content"].as_str().context("模型未返回文档内容")
 }
 
-fn render(target: &Target, body: &Value, content: &str) -> Result<String> {
+fn render(
+    model: &AiProviderConfig,
+    target: &Target,
+    body: &Value,
+    content: &str,
+) -> Result<String> {
     let input: Value = serde_json::from_str(body["messages"][1]["content"].as_str().unwrap())?;
     let mut context = input["related"]
         .as_array()
@@ -204,7 +212,12 @@ fn render(target: &Target, body: &Value, content: &str) -> Result<String> {
         .map(|v| v.as_str().unwrap())
         .collect::<Vec<_>>();
     context.push(input["supporting"].as_str().unwrap());
-    super::format::render_with_context(target, content, &context)
+    super::format::render_with_context_and_limit(
+        target,
+        content,
+        &context,
+        model.budget_artifact_bytes(32768),
+    )
 }
 
 pub(crate) async fn generate(
@@ -216,17 +229,17 @@ pub(crate) async fn generate(
     crate::handlers::ai_completion::server::with_model(model, async {
         crate::handlers::ai_completion::server::wait_ready(model).await?;
         tokio::time::timeout(
-            Duration::from_millis(config.timeout_ms.clamp(100, 120000)),
+            Duration::from_millis(model.budget_timeout_ms(config.timeout_ms)),
             async {
                 let response = crate::handlers::ai::post(model, &body, config.timeout_ms).await?;
                 let previous = content(&response)?;
-                match render(target, &body, previous) {
+                match render(model, target, &body, previous) {
                     Ok(text) => Ok(text),
                     Err(error) => {
                         let repair = repair_request(model, &body, previous, &format!("{error:#}"))?;
                         let response =
                             crate::handlers::ai::post(model, &repair, config.timeout_ms).await?;
-                        render(target, &repair, content(&response)?)
+                        render(model, target, &repair, content(&response)?)
                             .map_err(|error| anyhow::anyhow!("自动修订后仍未通过文档校验：{error}"))
                     }
                 }
@@ -242,6 +255,55 @@ pub(crate) async fn generate(
 mod tests {
     use super::*;
     use crate::handlers::ai_doc::target::tests::find;
+
+    #[test]
+    fn ai_doc_deepseek_auto_preserves_complete_large_input_and_official_output() {
+        let mut target = find("python", "def f(a):\n    return a\n", "return").unwrap();
+        target.source = format!(
+            "def f(a):\n    # {}\n    return a\n",
+            "context".repeat(30_000)
+        );
+        let mut model = AiProviderConfig {
+            kind: helix_view::ai::AiProviderType::Deepseek,
+            model: "deepseek-flash".into(),
+            ..Default::default()
+        };
+        let config = AiDocConfig {
+            max_tokens: 128,
+            ..Default::default()
+        };
+        let body = request(&model, &config, &target).unwrap();
+        assert_eq!(body["max_tokens"], 393_216);
+        let input: Value =
+            serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(input["source"], target.source);
+        model.budget_mode = helix_view::ai::AiBudgetMode::Configured;
+        assert!(request(&model, &config, &target).is_err());
+        model.budget_mode = helix_view::ai::AiBudgetMode::Auto;
+        model.model = "unrecognized-future-model".into();
+        assert!(request(&model, &config, &target).is_err());
+    }
+
+    #[test]
+    fn ai_doc_generous_output_budget_keeps_reasoning_and_context_reservations() {
+        let target = find("python", "def f(a):\n    return a\n", "return").unwrap();
+        let mut model = AiProviderConfig::from_legacy(
+            &helix_view::ai_completion::AiCompletionConfig::default(),
+        );
+        model.context_size = 65_536;
+        model.thinking = true;
+        model.thinking_budget = Some(4096);
+        let config = AiDocConfig {
+            max_tokens: 16_384,
+            ..Default::default()
+        };
+        assert_eq!(
+            request(&model, &config, &target).unwrap()["max_tokens"],
+            20_480
+        );
+        model.context_size = 20_480;
+        assert!(request(&model, &config, &target).is_err());
+    }
 
     #[test]
     fn ai_doc_thinking_reserves_final_json_and_checks_combined_context() {
@@ -319,9 +381,9 @@ mod tests {
         );
         let body = request(&model, &AiDocConfig::default(), &target).unwrap();
         let content = r#"{"summary":"返回辅助函数结果。","params":[],"returns":"辅助函数结果。","evidence":[{"field":"summary","quote":"return helper()"},{"field":"returns","quote":"return helper()"}]}"#;
-        assert!(render(&target, &body, content).is_ok());
+        assert!(render(&model, &target, &body, content).is_ok());
         let fabricated = content.replace("return helper()", "return 7");
-        assert!(render(&target, &body, &fabricated).is_err());
+        assert!(render(&model, &target, &body, &fabricated).is_err());
     }
 
     #[test]

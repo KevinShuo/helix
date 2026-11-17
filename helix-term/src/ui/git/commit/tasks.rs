@@ -145,16 +145,16 @@ impl CommitWorkspace {
             .ok_or_else(|| anyhow::anyhow!("请先 r 刷新"))?;
         let mut config = editor.config().ai_commit.clone();
         config.language = self.language;
-        ensure!(
-            snapshot.files.len() <= config.max_files.clamp(1, 1024),
-            "改动文件超过 max-files；请缩小仓库改动范围或调整配置后刷新，仍可手动暂存提交"
-        );
         let ids = snapshot
             .files
             .iter()
             .filter(|f| recommend || f.staged)
             .map(|f| f.id)
             .collect::<Vec<_>>();
+        let model = editor
+            .config()
+            .ai_provider(helix_view::ai::AiFeature::Commit)?;
+        ai_commit::validate_file_count_for_model(&model, &config, ids.len())?;
         ensure!(
             !self.dirty(editor, Some(&ids)),
             "分析涉及未保存缓冲区，请保存后 r 刷新"
@@ -182,9 +182,6 @@ impl CommitWorkspace {
                 eligible: f.ai_eligible,
             })
             .collect::<Vec<_>>();
-        let model = editor
-            .config()
-            .ai_provider(helix_view::ai::AiFeature::Commit)?;
         for doc in editor.documents_mut() {
             doc.ai_completion_controller.cancel();
             doc.ai_completion = None;
@@ -198,27 +195,33 @@ impl CommitWorkspace {
             self.draft.revision,
             self.intent.clone(),
         );
-        self.message = if recommend {
-            "AI 正在逐批分析并推荐文件… Ctrl-c 取消"
-        } else {
-            "AI 正在根据真实暂存区生成信息… Ctrl-c 取消"
-        }
-        .into();
+        self.message = "AI 校验仓库状态 · 已用 0s · 本步 0s · Ctrl-c 取消".into();
         self.task = Some(tokio::spawn(async move {
-            let result = async {
+            let (progress, mut updates) = tokio::sync::watch::channel("AI 校验仓库状态".to_owned());
+            let report = |stage| {
+                progress.send_replace(stage);
+            };
+            let operation = async {
                 ensure!(
                     repo.commit_snapshot().await? == snapshot,
                     "仓库状态已变化，请 r 刷新后重试"
                 );
                 let result = if recommend {
                     AiResult::Recommendation(
-                        ai_commit::recommend(&model, &config, &files, &intent).await?,
+                        ai_commit::recommend_with_progress(
+                            &model, &config, &files, &intent, &report,
+                        )
+                        .await?,
                     )
                 } else {
                     AiResult::Message(
-                        ai_commit::generate_message(&model, &config, &files, &intent).await?,
+                        ai_commit::generate_message_with_progress(
+                            &model, &config, &files, &intent, &report,
+                        )
+                        .await?,
                     )
                 };
+                report("AI 校验仓库状态并整理结果".into());
                 let now = repo.commit_snapshot().await?;
                 ensure!(
                     if recommend {
@@ -229,8 +232,52 @@ impl CommitWorkspace {
                     "仓库状态已变化，已丢弃旧 AI 结果，请刷新"
                 );
                 Ok::<_, anyhow::Error>(result)
-            }
-            .await;
+            };
+            // Poll the request and its heartbeat in one cancelable task. No
+            // detached timer can survive Ctrl-c, closing or replacing the panel.
+            let result = {
+                use tokio::time::{Duration, Instant};
+                let started = Instant::now();
+                let mut stage_started = started;
+                let mut stage = updates.borrow_and_update().clone();
+                let mut ticks = tokio::time::interval(Duration::from_secs(1));
+                ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                let (samples, mut token_updates) =
+                    tokio::sync::watch::channel((String::new(), None));
+                let token_monitor = super::progress::track_tokens(&model, updates.clone(), samples);
+                tokio::pin!(token_monitor);
+                tokio::pin!(operation);
+                loop {
+                    tokio::select! {
+                        result = &mut operation => break result,
+                        _ = updates.changed() => {
+                            stage = updates.borrow_and_update().clone();
+                            stage_started = Instant::now();
+                        }
+                        _ = ticks.tick() => {}
+                        _ = token_updates.changed() => {}
+                        _ = &mut token_monitor => unreachable!("token monitor runs until canceled"),
+                    }
+                    let tokens = {
+                        let sample = token_updates.borrow();
+                        sample.1.filter(|_| sample.0 == stage)
+                    };
+                    let tokens = tokens.map_or_else(|| "暂不可用".into(), |n| n.to_string());
+                    let message = format!(
+                        "{stage} · 本次 token {tokens} · 已用 {}s · 本步 {}s · Ctrl-c 取消",
+                        started.elapsed().as_secs(),
+                        stage_started.elapsed().as_secs(),
+                    );
+                    job::dispatch(move |_, c| {
+                        if let Some(p) = c.find::<Self>().filter(|p| {
+                            p.instance == instance && p.serial == serial && p.busy == Busy::Ai
+                        }) {
+                            p.message = message;
+                        }
+                    })
+                    .await;
+                }
+            };
             job::dispatch(move |editor, c| {
                 let Some(p) = c
                     .find::<Self>()
@@ -348,7 +395,18 @@ impl CommitWorkspace {
                 self.draft.reviewed,
                 "提交范围变化或 AI 分析不完整：请 g 重新生成，或检查 diff 后 v 保留手动文本"
             );
-            ai_commit::validate_message(&self.draft.text)?;
+            if let Ok(model) = cx
+                .editor
+                .config()
+                .ai_provider(helix_view::ai::AiFeature::Commit)
+            {
+                ai_commit::validate_message_with_limit(
+                    &self.draft.text,
+                    model.budget_artifact_bytes(16_384),
+                )?;
+            } else {
+                ai_commit::validate_message(&self.draft.text)?;
+            }
         }
         self.serial += 1;
         self.busy = Busy::Writing;

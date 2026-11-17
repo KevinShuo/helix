@@ -26,6 +26,97 @@ fn enabled() -> AiCommitConfig {
     }
 }
 
+#[tokio::test]
+async fn provider_contract_deepseek_does_not_split_unrelated_bad_requests() {
+    let (mut model, rx) = provider(vec![
+        json!({"_http_status":400,"error":{"message":"unsupported parameter"}}),
+        json!({"_http_status":400,"error":{"message":"unsupported parameter"}}),
+    ]);
+    model.kind = helix_view::ai::AiProviderType::Deepseek;
+    model.model = "deepseek-flash".into();
+    let error = recommend(&model, &enabled(), &[file(1), file(2)], "")
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("HTTP 400"));
+    assert_eq!(
+        rx.try_iter().count(),
+        1,
+        "an unrelated API error cannot be repaired by splitting unchanged files"
+    );
+}
+
+#[tokio::test]
+async fn ai_commit_deepseek_auto_accepts_full_scope_despite_local_limits() {
+    let files = (0..129)
+        .map(|id| AiFileInput {
+            eligible: false,
+            ..file(id)
+        })
+        .collect::<Vec<_>>();
+    let (mut model, rx) = provider(vec![
+        json!({"selected":[],"reasons":files.iter().map(|f|json!({"id":f.id,"reason":"manual review"})).collect::<Vec<_>>()}),
+    ]);
+    model.kind = helix_view::ai::AiProviderType::Deepseek;
+    model.model = "deepseek-flash".into();
+    let config = AiCommitConfig {
+        max_input_bytes: 32,
+        max_tokens: 32,
+        ..enabled()
+    };
+    let result = recommend(&model, &config, &files, "").await.unwrap();
+    assert!(result.incomplete);
+    assert_eq!(result.reasons.len(), 129);
+    let request = rx.recv().unwrap();
+    assert_eq!(request["max_tokens"], 393_216);
+    let data: Value =
+        serde_json::from_str(request["messages"][1]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(data["files"].as_array().unwrap().len(), 129);
+}
+
+#[test]
+fn ai_commit_generous_output_budget_reaches_request_and_counts_against_context() {
+    let mut model = AiProviderConfig {
+        context_size: 65_536,
+        ..Default::default()
+    };
+    let config = AiCommitConfig {
+        max_tokens: 16_384,
+        ..enabled()
+    };
+    let body = request(&model, &config, "Return JSON", &json!({"files":[]})).unwrap();
+    assert_eq!(body["max_tokens"], 16_384);
+    model.context_size = 12_000;
+    assert!(request(&model, &config, "Return JSON", &json!({"files":[]})).is_err());
+}
+
+#[tokio::test]
+async fn ai_commit_deepseek_preserves_large_reviewable_message_and_incomplete_coverage() {
+    let body = "- Describe a coherent change.\n".repeat(1200);
+    let (mut model, _) = provider(vec![
+        json!({"type":"fix","scope":null,"subject":"describe the reviewed changes","body":body}),
+    ]);
+    model.kind = helix_view::ai::AiProviderType::Deepseek;
+    model.model = "deepseek-flash".into();
+    let input = AiFileInput {
+        staged: true,
+        eligible: false,
+        ..file(1)
+    };
+    let generated = generate_message(&model, &enabled(), &[input], "")
+        .await
+        .unwrap();
+    assert!(
+        generated.incomplete,
+        "budget relaxation cannot turn absent analysis into complete coverage"
+    );
+    assert!(generated.text.ends_with(body.trim_end()));
+    assert!(
+        validate_message(&generated.text).is_err(),
+        "configured/local message limit remains intact"
+    );
+    validate_message_with_limit(&generated.text, model.budget_artifact_bytes(16_384)).unwrap();
+}
+
 #[test]
 fn ai_commit_thinking_reserves_final_json_and_accounts_for_reasoning_context() {
     let mut model =
@@ -407,6 +498,84 @@ async fn ai_commit_refuses_over_file_limit_and_duplicate_ids_before_http() {
         .is_err());
 }
 
+#[test]
+fn ai_commit_configured_file_limit_accepts_more_than_64_and_keeps_bounds() {
+    let files = (0..1025).map(file).collect::<Vec<_>>();
+    let config = AiCommitConfig {
+        max_files: 128,
+        ..enabled()
+    };
+    check_inputs(&config, &files[..65]).unwrap();
+    check_inputs(&config, &files[..128]).unwrap();
+    let error = check_inputs(&config, &files[..129])
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("129") && error.contains("128"), "{error}");
+    for (limit, accepted, rejected) in [(2, 2, 3), (usize::MAX, 1024, 1025)] {
+        let config = AiCommitConfig {
+            max_files: limit,
+            ..enabled()
+        };
+        check_inputs(&config, &files[..accepted]).unwrap();
+        assert!(check_inputs(&config, &files[..rejected]).is_err());
+    }
+    let config = AiCommitConfig {
+        max_files: 0,
+        ..enabled()
+    };
+    assert!(check_inputs(&config, &files[..1]).is_err());
+}
+
+#[tokio::test]
+async fn ai_commit_configured_file_limit_preserves_all_65_files_through_http() {
+    for staged in [false, true] {
+        let files = (0..65)
+            .map(|id| AiFileInput { staged, ..file(id) })
+            .collect::<Vec<_>>();
+        let mut responses = files.chunks(4).map(|batch| {
+            json!({"summaries": batch.iter().map(|file| json!({"id":file.id,"summary":"change"})).collect::<Vec<_>>()})
+        }).collect::<Vec<_>>();
+        responses.push(if staged {
+            json!({"type":"fix","scope":null,"subject":"handle configured file count","body":null})
+        } else {
+            json!({"selected": (0..65).collect::<Vec<_>>(), "reasons": files.iter().map(|file| json!({"id":file.id,"reason":"related change"})).collect::<Vec<_>>()})
+        });
+        let (mut model, rx) = provider(responses);
+        model.context_size = 65_536;
+        let config = AiCommitConfig {
+            max_files: 128,
+            max_input_bytes: 32_768,
+            max_tokens: 4096,
+            ..enabled()
+        };
+        if staged {
+            let result = generate_message(&model, &config, &files, "").await.unwrap();
+            assert!(!result.incomplete);
+            assert_eq!(result.text, "fix: handle configured file count");
+        } else {
+            let result = recommend(&model, &config, &files, "").await.unwrap();
+            assert!(!result.incomplete);
+            assert_eq!(result.selected, (0..65).collect::<Vec<_>>());
+            assert_eq!(result.reasons.len(), 65);
+        }
+        let requests = rx.try_iter().collect::<Vec<_>>();
+        assert_eq!(requests.len(), 18);
+        let data: Value = serde_json::from_str(
+            requests.last().unwrap()["messages"][1]["content"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let aggregated = data["files"].as_array().unwrap();
+        assert_eq!(aggregated.len(), 65);
+        for (id, file) in aggregated.iter().enumerate() {
+            assert_eq!(file["id"], id);
+            assert_eq!(file["summary"], "change");
+            assert_eq!(file["manual_review"], false);
+        }
+    }
+}
+
 #[tokio::test]
 async fn ai_commit_rejects_malformed_json_unknown_summary_ids_and_invalid_types() {
     for summary in [
@@ -507,6 +676,39 @@ async fn ai_commit_actual_model_window_and_aggregation_budget_are_checked() {
         .unwrap_err()
         .to_string()
         .contains("staged"));
+}
+
+#[tokio::test]
+async fn ai_commit_progress_counts_validated_files_and_expands_retried_batches() {
+    let (model, _) = provider(vec![
+        json!({"_http_status":413}),
+        json!({"summaries":[{"id":1,"summary":"one"}]}),
+        json!({"summaries":[{"id":2,"summary":"two"}]}),
+        json!({"selected":[1,2],"reasons":[{"id":1,"reason":"one"},{"id":2,"reason":"two"},{"id":3,"reason":"manual"}]}),
+    ]);
+    let mut sensitive = file(3);
+    sensitive.path = ".env".into();
+    let events = parking_lot::Mutex::new(Vec::new());
+    let result = recommend_with_progress(
+        &model,
+        &enabled(),
+        &[file(1), file(2), sensitive],
+        "",
+        &|event| events.lock().push(event),
+    )
+    .await
+    .unwrap();
+    assert!(result.incomplete);
+    let events = events.into_inner();
+    let batches: Vec<_> = events.iter().filter(|s| s.contains("批次")).collect();
+    assert_eq!(batches.len(), 3);
+    assert!(batches[0].contains("批次 1/1 · 文件 0/3 · 需手查 1"));
+    assert!(batches[1].contains("重试分析批次 1/2 · 文件 0/3 · 需手查 1"));
+    assert!(batches[2].contains("批次 2/2 · 文件 1/3 · 需手查 1"));
+    assert!(events
+        .last()
+        .unwrap()
+        .contains("汇总推荐 · 文件 2/3 · 需手查 1"));
 }
 
 #[tokio::test]

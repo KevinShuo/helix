@@ -26,9 +26,10 @@ pub(crate) fn request(
     project: &Project,
     repair: Option<(&str, &str)>,
 ) -> Result<Value> {
+    let output_limit = model.budget_output_tokens(u32::MAX);
     ensure!(
-        (512..=8192).contains(&config.max_tokens),
-        "ai-test.max-tokens 必须在 512..8192 之间"
+        model.automatic_budget() || (512..=output_limit).contains(&config.max_tokens),
+        "ai-test.max-tokens 必须在 512..{output_limit} 之间"
     );
     let framework = if project.language == "python" {
         "pytest"
@@ -47,15 +48,24 @@ pub(crate) fn request(
             diagnostic.chars().take(6000).collect::<String>()
         ));
     }
-    let max_tokens = config.max_tokens + model.reasoning_tokens();
-    let window = model.context_size.clamp(512, 131_072) as usize;
-    let used = system.len() + prompt.len() + max_tokens as usize + 512;
+    let max_tokens = model.budget_output_tokens(config.max_tokens) + model.reasoning_tokens();
+    let input = system.len().saturating_add(prompt.len());
     ensure!(
-        used <= window,
+        model.budget_fits(input, max_tokens, 512),
         "测试生成超出模型上下文预算；请缩小函数或增加 provider.context-size"
     );
     // Include complete file blocks only; never cut a target or dependency midway.
-    let mut available = window - used;
+    let mut available = if model.automatic_budget() {
+        model
+            .budget_input_bytes(0)
+            .saturating_sub(input.saturating_add(512))
+    } else {
+        model.budget_context().saturating_sub(
+            input
+                .saturating_add(max_tokens as usize)
+                .saturating_add(512),
+        )
+    };
     for block in project.context.split_inclusive("</FILE>\n") {
         if block.len() <= available {
             prompt.push_str(block);
@@ -89,10 +99,11 @@ pub(crate) async fn generate(
                 && message["function_call"].is_null(),
             "测试生成不接受模型工具调用"
         );
-        let generated = validate(
+        let generated = validate_with_limit(
             &project.language,
             &project.test_filter,
             message["content"].as_str().context("模型未返回测试代码")?,
+            model.budget_artifact_bytes(65_536),
         )?;
         if let Some((previous, _)) = repair {
             preserve_assertions(&project.language, previous, &generated.code)?;
@@ -148,9 +159,18 @@ fn preserve_assertions(language: &str, previous: &str, repaired: &str) -> Result
 }
 
 pub(crate) fn validate(language: &str, suite: &str, content: &str) -> Result<Generated> {
+    validate_with_limit(language, suite, content, 65_536)
+}
+
+fn validate_with_limit(
+    language: &str,
+    suite: &str,
+    content: &str,
+    max_bytes: usize,
+) -> Result<Generated> {
     let result: Generated = serde_json::from_str(content).context("测试响应不符合 JSON 格式")?;
     ensure!(
-        !result.code.trim().is_empty() && result.code.len() <= 65_536,
+        !result.code.trim().is_empty() && result.code.len() <= max_bytes,
         "测试代码为空或过大"
     );
     ensure!(
@@ -310,6 +330,124 @@ pub(crate) fn validate(language: &str, suite: &str, content: &str) -> Result<Gen
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ai_test_deepseek_auto_preserves_large_target_and_uses_official_output() {
+        let mut target = crate::handlers::ai_doc::target::tests::find(
+            "python",
+            "def f(a):\n    return a\n",
+            "return",
+        )
+        .unwrap();
+        target.source = format!(
+            "def f(a):\n    # {}\n    return a\n",
+            "context".repeat(30_000)
+        );
+        let root = std::path::PathBuf::from("/fixture");
+        let project = Project {
+            source: root.join("source.py"),
+            test_file: root.join("test_source.py"),
+            root,
+            language: "python".into(),
+            target_name: "f".into(),
+            test_filter: "test_f".into(),
+            context: String::new(),
+            snapshots: vec![],
+            build_changes: vec![],
+            notes: vec![],
+        };
+        let model = AiProviderConfig {
+            kind: helix_view::ai::AiProviderType::Deepseek,
+            model: "deepseek-flash".into(),
+            ..Default::default()
+        };
+        let config = AiTestConfig::default();
+        let body = request(&model, &config, &target, &project, None).unwrap();
+        assert_eq!(body["max_tokens"], 393_216);
+        assert!(body["messages"][1]["content"]
+            .as_str()
+            .unwrap()
+            .contains(&target.source));
+    }
+
+    #[tokio::test]
+    async fn ai_test_deepseek_accepts_large_meaningful_generated_test() {
+        let target = crate::handlers::ai_doc::target::tests::find(
+            "python",
+            "def f(a):\n    return a\n",
+            "return",
+        )
+        .unwrap();
+        let root = std::path::PathBuf::from("/fixture");
+        let project = Project {
+            source: root.join("source.py"),
+            test_file: root.join("test_source.py"),
+            root,
+            language: "python".into(),
+            target_name: "f".into(),
+            test_filter: "test_f".into(),
+            context: String::new(),
+            snapshots: vec![],
+            build_changes: vec![],
+            notes: vec![],
+        };
+        let code = format!(
+            "from source import f\ndef test_f():\n    # {}\n    assert f(1) == 1\n",
+            "context".repeat(20_000)
+        );
+        let payload = json!({"choices":[{"finish_reason":"stop","message":{"content":json!({"code":code,"assumptions":[]}).to_string()}}]});
+        let (endpoint, server) = crate::handlers::ai::tests::server(200, payload.to_string()).await;
+        let model = AiProviderConfig {
+            kind: helix_view::ai::AiProviderType::Deepseek,
+            model: "deepseek-flash".into(),
+            endpoint,
+            ..Default::default()
+        };
+        let result = generate(&model, &AiTestConfig::default(), &target, &project, None)
+            .await
+            .unwrap();
+        assert_eq!(result.code, code);
+        server.await.unwrap();
+    }
+
+    #[test]
+    fn ai_test_generous_output_budget_preserves_complete_target_and_context() {
+        let target = crate::handlers::ai_doc::target::tests::find(
+            "python",
+            "def f(a):\n    return a\n",
+            "return",
+        )
+        .unwrap();
+        let root = std::path::PathBuf::from("/fixture");
+        let project = Project {
+            source: root.join("source.py"),
+            test_file: root.join("test_source.py"),
+            root,
+            language: "python".into(),
+            target_name: "f".into(),
+            test_filter: "test_f".into(),
+            context: String::new(),
+            snapshots: vec![],
+            build_changes: vec![],
+            notes: vec![],
+        };
+        let mut model = AiProviderConfig {
+            context_size: 65_536,
+            ..Default::default()
+        };
+        let config = AiTestConfig {
+            max_tokens: 16_384,
+            ..Default::default()
+        };
+        let body = request(&model, &config, &target, &project, None).unwrap();
+        assert_eq!(body["max_tokens"], 16_384);
+        assert!(body["messages"][1]["content"]
+            .as_str()
+            .unwrap()
+            .contains(&target.source));
+        model.context_size = 16_384;
+        assert!(request(&model, &config, &target, &project, None).is_err());
+    }
 
     #[test]
     fn repair_may_fix_imports_but_never_weaken_or_delete_assertions() {

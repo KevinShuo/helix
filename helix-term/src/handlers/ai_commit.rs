@@ -32,21 +32,35 @@ pub(crate) struct GeneratedMessage {
     pub incomplete: bool,
 }
 
-const MAX_REQUESTS: usize = 64;
 const MAX_SUMMARY_CHARS: usize = 160;
 const TYPES: &[&str] = &[
     "feat", "fix", "refactor", "docs", "test", "perf", "build", "ci", "chore", "style", "revert",
 ];
 
+#[cfg(test)]
 pub(crate) async fn recommend(
     model: &AiProviderConfig,
     config: &AiCommitConfig,
     files: &[AiFileInput],
     intent: &str,
 ) -> Result<Recommendation> {
-    check_inputs(config, files)?;
-    super::ai_completion::server::with_model(model, recommend_inner(model, config, files, intent))
-        .await
+    recommend_with_progress(model, config, files, intent, &|_| {}).await
+}
+
+pub(crate) async fn recommend_with_progress(
+    model: &AiProviderConfig,
+    config: &AiCommitConfig,
+    files: &[AiFileInput],
+    intent: &str,
+    progress: &(dyn Fn(String) + Sync),
+) -> Result<Recommendation> {
+    check_inputs_for_model(model, config, files)?;
+    progress("AI 等待模型就绪".into());
+    super::ai_completion::server::with_model(
+        model,
+        recommend_inner(model, config, files, intent, progress),
+    )
+    .await
 }
 
 async fn recommend_inner(
@@ -54,8 +68,10 @@ async fn recommend_inner(
     config: &AiCommitConfig,
     files: &[AiFileInput],
     intent: &str,
+    progress: &(dyn Fn(String) + Sync),
 ) -> Result<Recommendation> {
-    let analysis = analyze(model, config, files, intent).await?;
+    super::ai_completion::server::wait_ready(model).await?;
+    let analysis = analyze(model, config, files, intent, progress).await?;
     let selectable: BTreeSet<_> = files
         .iter()
         .filter(|file| !file.staged && !file.partial && analysis.summaries.contains_key(&file.id))
@@ -65,6 +81,7 @@ async fn recommend_inner(
     let mut data = analysis.data(files, intent);
     data["selectable_ids"] = json!(selectable);
     let body = request(model, config, &system, &data)?;
+    progress(analysis.progress("汇总推荐", files));
     let content = complete(model, config, &body).await?;
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -112,7 +129,7 @@ async fn recommend_inner(
         );
         plain_text(
             &reason.reason,
-            1024,
+            model.budget_artifact_bytes(1024),
             false,
             &format!("AI recommendation reason for file ID {}", reason.id),
         )?;
@@ -135,20 +152,32 @@ async fn recommend_inner(
     })
 }
 
+#[cfg(test)]
 pub(crate) async fn generate_message(
     model: &AiProviderConfig,
     config: &AiCommitConfig,
     files: &[AiFileInput],
     intent: &str,
 ) -> Result<GeneratedMessage> {
-    check_inputs(config, files)?;
+    generate_message_with_progress(model, config, files, intent, &|_| {}).await
+}
+
+pub(crate) async fn generate_message_with_progress(
+    model: &AiProviderConfig,
+    config: &AiCommitConfig,
+    files: &[AiFileInput],
+    intent: &str,
+    progress: &(dyn Fn(String) + Sync),
+) -> Result<GeneratedMessage> {
+    check_inputs_for_model(model, config, files)?;
     ensure!(
         files.iter().all(|file| file.staged),
         "Commit message input must contain only actual staged diffs"
     );
+    progress("AI 等待模型就绪".into());
     super::ai_completion::server::with_model(
         model,
-        generate_message_inner(model, config, files, intent),
+        generate_message_inner(model, config, files, intent, progress),
     )
     .await
 }
@@ -158,10 +187,13 @@ async fn generate_message_inner(
     config: &AiCommitConfig,
     files: &[AiFileInput],
     intent: &str,
+    progress: &(dyn Fn(String) + Sync),
 ) -> Result<GeneratedMessage> {
-    let analysis = analyze(model, config, files, intent).await?;
+    super::ai_completion::server::wait_ready(model).await?;
+    let analysis = analyze(model, config, files, intent, progress).await?;
     let system = instructions(config, "Write a Conventional Commits message from staged summaries only. Return ONLY {\"type\":\"feat|fix|refactor|docs|test|perf|build|ci|chore|style|revert\",\"scope\":optional English identifier or null,\"subject\":single line,\"body\":optional plain text or null}. Use an allowed type, no breaking-change marker. Subject should fit 72 display columns. When manual_review is true coverage is incomplete: do not invent that file's changes. Never claim tests or checks ran/passed: no execution evidence is provided.");
     let body = request(model, config, &system, &analysis.data(files, intent))?;
+    progress(analysis.progress("生成提交信息", files));
     let content = complete(model, config, &body).await?;
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -188,7 +220,12 @@ async fn generate_message_inner(
     };
     let mut text = format!("{}{scope}: {}", message.kind, message.subject);
     if let Some(body) = message.body.filter(|body| !body.trim().is_empty()) {
-        plain_text(&body, 8192, true, "AI commit body")?;
+        plain_text(
+            &body,
+            model.budget_artifact_bytes(8192),
+            true,
+            "AI commit body",
+        )?;
         text.push_str("\n\n");
         text.push_str(body.trim());
     }
@@ -196,7 +233,7 @@ async fn generate_message_inner(
         !test_claim(&text),
         "AI claimed test/check results without execution evidence; regenerate or edit manually"
     );
-    validate_message(&text)?;
+    validate_message_with_limit(&text, model.budget_artifact_bytes(16_384))?;
     Ok(GeneratedMessage {
         text,
         incomplete: analysis.incomplete(files),
@@ -205,7 +242,11 @@ async fn generate_message_inner(
 
 /// Validate manual Conventional Commits, including user-written `!` and footers.
 pub(crate) fn validate_message(text: &str) -> Result<()> {
-    plain_text(text, 16_384, true, "Commit message")?;
+    validate_message_with_limit(text, 16_384)
+}
+
+pub(crate) fn validate_message_with_limit(text: &str, max_bytes: usize) -> Result<()> {
+    plain_text(text, max_bytes, true, "Commit message")?;
     let mut lines = text.lines();
     let title = lines.next().context("Commit message is empty")?;
     let (prefix, subject) = title
@@ -290,18 +331,24 @@ fn test_claim(text: &str) -> bool {
             .any(|word| words.contains(word)))
 }
 
+#[cfg(test)]
 fn check_inputs(config: &AiCommitConfig, files: &[AiFileInput]) -> Result<()> {
+    check_inputs_for_model(&AiProviderConfig::default(), config, files)
+}
+
+fn check_inputs_for_model(
+    model: &AiProviderConfig,
+    config: &AiCommitConfig,
+    files: &[AiFileInput],
+) -> Result<()> {
     ensure!(
         config.enabled,
         "Enable [editor.ai-commit] enabled = true first"
     );
     ensure!(!files.is_empty(), "No changed/staged files to analyze");
+    validate_file_count_for_model(model, config, files.len())?;
     ensure!(
-        config.max_files > 0 && files.len() <= config.max_files.min(64),
-        "Too many files: narrow the scope (maximum 64 or configured max-files)"
-    );
-    ensure!(
-        config.max_input_bytes > 0 && config.max_tokens > 0,
+        model.automatic_budget() || (config.max_input_bytes > 0 && config.max_tokens > 0),
         "AI input/output budgets must be positive"
     );
     let mut ids = BTreeSet::new();
@@ -309,6 +356,29 @@ fn check_inputs(config: &AiCommitConfig, files: &[AiFileInput]) -> Result<()> {
         files.iter().all(|file| ids.insert(file.id)),
         "Duplicate input file IDs"
     );
+    Ok(())
+}
+
+pub(crate) fn validate_file_count(config: &AiCommitConfig, count: usize) -> Result<()> {
+    ensure!(config.max_files > 0, "AI max-files must be positive");
+    let limit = config.max_files.min(1024);
+    ensure!(
+        count <= limit,
+        "Too many files: {count} files exceed the effective max-files limit of {limit} (configurable up to 1024); narrow scope or adjust [editor.ai-commit] max-files"
+    );
+    Ok(())
+}
+
+pub(crate) fn validate_file_count_for_model(
+    model: &AiProviderConfig,
+    config: &AiCommitConfig,
+    count: usize,
+) -> Result<()> {
+    if !model.automatic_budget() {
+        return validate_file_count(config, count);
+    }
+    let limit = model.budget_file_limit(config.max_files);
+    ensure!(count <= limit, "Too many files: {count} files exceed the automatic provider limit of {limit}; narrow scope");
     Ok(())
 }
 
@@ -327,12 +397,11 @@ fn request(
     data: &Value,
 ) -> Result<Value> {
     let prompt = serde_json::to_string(data)?;
-    ensure!(prompt.len() <= config.max_input_bytes, "AI data exceeds max-input-bytes; narrow scope or increase the budget (no content was truncated)");
-    let tokens = config.max_tokens.min(4096) + model.reasoning_tokens();
-    // Byte-fallback vocabularies can use a token per UTF-8 byte. This is a
-    // conservative bound, not an assertion that bytes measure exact tokens.
-    let window = model.context_size.min(131_072) as usize;
-    ensure!(system.len() + prompt.len() + tokens as usize + 256 <= window, "AI request exceeds model context-size; narrow scope or configure a larger context (no content was truncated)");
+    ensure!(prompt.len() <= model.budget_input_bytes(config.max_input_bytes), "AI data exceeds max-input-bytes; narrow scope or increase the budget (no content was truncated)");
+    let tokens = model.budget_output_tokens(config.max_tokens) + model.reasoning_tokens();
+    // Configured providers retain a conservative byte upper bound; automatic
+    // DeepSeek leaves exact token accounting to the API within a memory envelope.
+    ensure!(model.budget_fits(system.len().saturating_add(prompt.len()), tokens, 256), "AI request exceeds model context-size; narrow scope or configure a larger context (no content was truncated)");
     Ok(
         json!({"model": model.model, "messages":[{"role":"system","content":system},{"role":"user","content":prompt}], "max_tokens":tokens,"temperature":0.0,"stream":false,"response_format":{"type":"json_object"}}),
     )
@@ -366,6 +435,15 @@ struct Analysis {
 }
 
 impl Analysis {
+    fn progress(&self, stage: &str, files: &[AiFileInput]) -> String {
+        format!(
+            "AI {stage} · 文件 {}/{} · 需手查 {}",
+            self.summaries.len(),
+            files.len(),
+            files.len() - self.summaries.len(),
+        )
+    }
+
     fn incomplete(&self, files: &[AiFileInput]) -> bool {
         self.summaries.len() != files.len()
     }
@@ -407,6 +485,7 @@ async fn analyze(
     config: &AiCommitConfig,
     files: &[AiFileInput],
     intent: &str,
+    progress: &(dyn Fn(String) + Sync),
 ) -> Result<Analysis> {
     let system = instructions(config, &format!("Summarize each supplied complete file diff, noting only visible changes. Return ONLY {{\"summaries\":[{{\"id\":file ID,\"summary\":brief single-line description of at most {MAX_SUMMARY_CHARS} Unicode characters}}]}}. Use exactly the supplied IDs once each. No test execution evidence is supplied."));
     let mut batches: VecDeque<Vec<Value>> = VecDeque::new();
@@ -415,7 +494,7 @@ async fn analyze(
         let data = json!({"id":file.id,"path":file.path,"staged":file.staged,"partial":file.partial,"diff":file.diff});
         let mut trial = current.clone();
         trial.push(data.clone());
-        if trial.len() <= 4
+        if trial.len() <= model.budget_batch_files()
             && request(
                 model,
                 config,
@@ -445,10 +524,14 @@ async fn analyze(
     if !current.is_empty() {
         batches.push_back(current);
     }
+    let mut total_batches = batches.len();
+    let manual = files.len() - batches.iter().map(Vec::len).sum::<usize>();
+    let mut completed_batches = 0;
+    let mut retrying = false;
     let mut analysis = Analysis::default();
     // Reserve a request for aggregation. Never start an unbounded retry loop.
     let mut calls = 0;
-    while calls < MAX_REQUESTS - 1 {
+    while calls < model.budget_request_limit().saturating_sub(1) {
         let Some(mut batch) = batches.pop_front() else {
             break;
         };
@@ -459,11 +542,21 @@ async fn analyze(
             &json!({"intent":intent,"files":batch}),
         )?;
         calls += 1;
+        progress(format!(
+            "AI {}分析批次 {}/{} · 文件 {}/{} · 需手查 {manual}",
+            if retrying { "重试" } else { "" },
+            completed_batches + 1,
+            total_batches,
+            analysis.summaries.len(),
+            files.len(),
+        ));
         let content = match complete(model, config, &body).await {
             Ok(content) => content,
             Err(error)
-                if error.to_string().contains("HTTP 400")
-                    || error.to_string().contains("HTTP 413") =>
+                if (model.automatic_budget() && super::ai::can_reduce_batch(&error))
+                    || (!model.automatic_budget()
+                        && (error.to_string().contains("HTTP 400")
+                            || error.to_string().contains("HTTP 413"))) =>
             {
                 // Count rejected attempts too. Retry smaller complete batches,
                 // never slices of a file or an unbounded context retry loop.
@@ -471,6 +564,8 @@ async fn analyze(
                     let rest = batch.split_off(batch.len() / 2);
                     batches.push_front(rest);
                     batches.push_front(batch);
+                    total_batches += 1;
+                    retrying = true;
                     continue;
                 }
                 return Err(error.context("AI server rejected a complete file batch after reducing the batch size; narrow scope or configure a matching model context-size (no diff was truncated)"));
@@ -519,6 +614,8 @@ async fn analyze(
             seen == expected,
             "AI omitted a file summary; no complete analysis is available"
         );
+        completed_batches += 1;
+        retrying = false;
     }
     Ok(analysis)
 }

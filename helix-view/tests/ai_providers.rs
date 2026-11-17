@@ -1,5 +1,5 @@
 use helix_view::{
-    ai::{AiFeature, AiProviderConfig, AiProviderType, AiProxy},
+    ai::{AiBudgetMode, AiFeature, AiProviderConfig, AiProviderType, AiProxy},
     editor::Config,
 };
 
@@ -108,6 +108,160 @@ fn local_runtime_model_loading_mode_is_typed_and_opt_in() {
     assert!(toml::to_string(&AiProviderConfig::default())
         .unwrap()
         .contains("load-mode = \"auto\""));
+}
+
+#[test]
+fn provider_budget_mode_configuration_is_accepted() {
+    for (mode, expected) in [
+        ("auto", AiBudgetMode::Auto),
+        ("configured", AiBudgetMode::Configured),
+    ] {
+        let parsed = toml::from_str::<AiProviderConfig>(&format!(
+            "type = 'deepseek'\nmodel = 'deepseek-flash'\nbudget-mode = '{mode}'\n"
+        ));
+        assert!(parsed.is_ok(), "budget-mode {mode} must parse: {parsed:?}");
+        let provider = parsed.unwrap();
+        assert_eq!(provider.budget_mode, expected);
+        let serialized = toml::to_string(&provider).unwrap();
+        assert!(serialized.contains(&format!("budget-mode = \"{mode}\"")));
+    }
+    assert_eq!(AiProviderConfig::default().budget_mode, AiBudgetMode::Auto);
+    assert_eq!(
+        AiProviderConfig::from_legacy(&Config::default().ai_completion).budget_mode,
+        AiBudgetMode::Auto
+    );
+    let defaulted: AiProviderConfig =
+        toml::from_str("type = 'deepseek'\nmodel = 'deepseek-flash'\n").unwrap();
+    assert!(defaulted.automatic_budget());
+    assert!(toml::from_str::<AiProviderConfig>("budget-mode = 'unbounded'").is_err());
+}
+
+fn deepseek_budget(model: &str) -> AiProviderConfig {
+    AiProviderConfig {
+        kind: AiProviderType::Deepseek,
+        model: model.into(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn recognized_deepseek_models_use_official_automatic_budgets() {
+    for id in [
+        "deepseek-flash",
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-vision-exp",
+    ] {
+        let mut model = deepseek_budget(id);
+        assert!(model.automatic_budget(), "{id}");
+        assert_eq!(model.budget_context(), 1_048_576);
+        assert_eq!(model.budget_input_bytes(1), 16_777_216);
+        assert_eq!(model.budget_output_tokens(1), 393_216);
+        assert_eq!(model.budget_timeout_ms(1), 7_200_000);
+        assert_eq!(model.budget_response_bytes(), 16_777_216);
+        assert_eq!(model.budget_artifact_bytes(1), 16_777_216);
+        assert_eq!(model.budget_file_limit(1), 4096);
+        assert_eq!(model.budget_batch_files(), 128);
+        assert_eq!(model.budget_request_limit(), 256);
+        // Bytes are not a tokenizer: a complete large UTF-8 request can be
+        // admitted without treating every byte as a token.
+        assert!(model.budget_fits(2_000_000, 393_216, 1024));
+        assert!(model.budget_fits(16_777_200, 393_216, 16));
+        assert!(!model.budget_fits(16_777_200, 393_216, 17));
+        assert!(!model.budget_fits(1, 393_217, 1));
+        assert!(!model.budget_fits(usize::MAX, 1, 1));
+        assert!(!model.budget_fits(1, 1, usize::MAX));
+        assert_eq!(model.budget_input_bytes(usize::MAX), 16_777_216);
+        assert_eq!(model.budget_output_tokens(u32::MAX), 393_216);
+        assert_eq!(model.budget_timeout_ms(u64::MAX), 7_200_000);
+        assert_eq!(model.budget_artifact_bytes(usize::MAX), 16_777_216);
+        assert_eq!(model.budget_file_limit(usize::MAX), 4096);
+        model.context_size = 0;
+        assert_eq!(model.budget_context(), 1_048_576);
+        model.context_size = u32::MAX;
+        assert_eq!(model.budget_context(), 1_048_576);
+        assert_eq!(model.budget_input_bytes(0), 16_777_216);
+        assert_eq!(model.budget_output_tokens(0), 393_216);
+        assert_eq!(model.budget_timeout_ms(0), 7_200_000);
+        assert_eq!(model.budget_artifact_bytes(0), 16_777_216);
+        assert_eq!(model.budget_file_limit(0), 4096);
+    }
+}
+
+#[test]
+fn configured_deepseek_honors_feature_limits_with_service_ceiling() {
+    let mut model = deepseek_budget("deepseek-flash");
+    model.budget_mode = AiBudgetMode::Configured;
+    model.context_size = 8192;
+    assert!(!model.automatic_budget());
+    assert_eq!(model.budget_context(), 8192);
+    assert_eq!(model.budget_input_bytes(4096), 4096);
+    assert_eq!(model.budget_output_tokens(20_000), 20_000);
+    assert_eq!(model.budget_timeout_ms(900_000), 900_000);
+    assert_eq!(model.budget_response_bytes(), 16_777_216);
+    assert_eq!(model.budget_artifact_bytes(8192), 16_777_216);
+    assert_eq!(model.budget_file_limit(128), 128);
+    assert_eq!(model.budget_file_limit(usize::MAX), 1024);
+    assert_eq!(model.budget_batch_files(), 4);
+    assert_eq!(model.budget_request_limit(), 64);
+    assert!(model.budget_fits(6000, 2000, 192));
+    assert!(!model.budget_fits(6000, 2000, 193));
+    assert!(!model.budget_fits(usize::MAX, u32::MAX, usize::MAX));
+    model.context_size = u32::MAX;
+    assert_eq!(model.budget_context(), 1_048_576);
+    assert_eq!(model.budget_output_tokens(u32::MAX), 393_216);
+    assert_eq!(model.budget_timeout_ms(u64::MAX), 7_200_000);
+    model.context_size = 0;
+    assert_eq!(model.budget_context(), 512);
+    assert_eq!(model.budget_output_tokens(0), 0);
+    assert_eq!(model.budget_input_bytes(0), 0);
+    assert_eq!(model.budget_timeout_ms(0), 100);
+    assert_eq!(model.budget_file_limit(0), 0);
+}
+
+#[test]
+fn unknown_models_and_other_provider_types_keep_configured_budgets() {
+    for (kind, id) in [
+        (AiProviderType::Deepseek, "future-model"),
+        (AiProviderType::Deepseek, "deepseek-flash-custom"),
+        (AiProviderType::Deepseek, "DEEPSEEK-FLASH"),
+        (AiProviderType::LlamaCpp, "deepseek-flash"),
+        (AiProviderType::OpenaiCompatible, "deepseek-flash"),
+    ] {
+        for mode in [AiBudgetMode::Auto, AiBudgetMode::Configured] {
+            let mut model = deepseek_budget(id);
+            model.kind = kind;
+            model.budget_mode = mode;
+            model.context_size = 16384;
+            assert!(!model.automatic_budget(), "{kind:?} {id} {mode:?}");
+            assert_eq!(model.budget_context(), 16384);
+            assert_eq!(model.budget_input_bytes(12_000), 12_000);
+            assert_eq!(model.budget_output_tokens(2048), 2048);
+            assert_eq!(model.budget_timeout_ms(180_000), 180_000);
+            assert_eq!(model.budget_response_bytes(), 262_144);
+            assert_eq!(model.budget_artifact_bytes(12_000), 12_000);
+            assert_eq!(model.budget_file_limit(128), 128);
+            assert_eq!(model.budget_batch_files(), 4);
+            assert_eq!(model.budget_request_limit(), 64);
+            assert!(model.budget_fits(12_000, 4096, 288));
+            assert!(!model.budget_fits(12_000, 4096, 289));
+            assert!(!model.budget_fits(usize::MAX, u32::MAX, usize::MAX));
+            model.context_size = u32::MAX;
+            assert_eq!(model.budget_context(), 131_072);
+            assert_eq!(model.budget_output_tokens(u32::MAX), 16_384);
+            assert_eq!(model.budget_timeout_ms(u64::MAX), 600_000);
+            assert_eq!(model.budget_file_limit(usize::MAX), 1024);
+            assert_eq!(model.budget_input_bytes(usize::MAX), usize::MAX);
+            assert_eq!(model.budget_artifact_bytes(usize::MAX), usize::MAX);
+            model.context_size = 0;
+            assert_eq!(model.budget_context(), 512);
+            assert_eq!(model.budget_input_bytes(0), 0);
+            assert_eq!(model.budget_output_tokens(0), 0);
+            assert_eq!(model.budget_timeout_ms(0), 100);
+            assert_eq!(model.budget_artifact_bytes(0), 0);
+            assert_eq!(model.budget_file_limit(0), 0);
+        }
+    }
 }
 
 #[test]

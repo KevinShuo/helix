@@ -253,7 +253,12 @@ pub(crate) fn refresh(editor: &mut Editor, compositor: &mut Compositor) {
     };
     if compositor.component_has_focus("git-merge-editor") && !op.preview {
         if let Some(suggestion) = &op.suggestion {
-            match ui::ai_merge::Preview::new(op.id, &op.target, suggestion) {
+            match ui::ai_merge::Preview::new_with_limit(
+                op.id,
+                &op.target,
+                suggestion,
+                op.model.budget_artifact_bytes(60_000),
+            ) {
                 Ok(preview) => {
                     editor.ai_merge.as_mut().unwrap().preview = true;
                     compositor.push(Box::new(preview));

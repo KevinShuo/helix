@@ -1,4 +1,5 @@
 //! Scrollable multi-file test/build preview and execution report.
+use super::ai_preview_text::{scroll_key, PreviewText};
 use crate::{
     compositor::{Component, Context, Event, EventResult},
     ctrl,
@@ -13,13 +14,12 @@ use helix_view::{
 };
 use tui::{
     buffer::Buffer,
-    text::Text,
-    widgets::{Block, Borders, Paragraph, Widget, Wrap},
+    widgets::{Block, Borders, Widget},
 };
 
 pub(crate) struct Preview {
     id: u64,
-    text: Text<'static>,
+    text: PreviewText,
     scroll: usize,
     applied: bool,
 }
@@ -96,13 +96,9 @@ impl Preview {
                 report.log
             ));
         }
-        let text = text
-            .chars()
-            .filter(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
-            .collect::<String>();
         Self {
             id: op.id,
-            text: Text::from(text),
+            text: PreviewText::new(text),
             scroll: 0,
             applied: op.applied,
         }
@@ -124,28 +120,15 @@ impl Component for Preview {
         let Event::Key(key) = event else {
             return EventResult::Consumed(None);
         };
+        if scroll_key(*key, &mut self.scroll) {
+            return EventResult::Consumed(None);
+        }
         let applied = self.applied;
         let action = match *key {
             key!(Enter) => 0,
             key!(Esc) | ctrl!('c') => 1,
             key!('r') if !applied => 2,
             key!('v') if applied => 3,
-            key!(Down) | key!('j') => {
-                self.scroll = self.scroll.saturating_add(1);
-                return EventResult::Consumed(None);
-            }
-            key!(Up) | key!('k') => {
-                self.scroll = self.scroll.saturating_sub(1);
-                return EventResult::Consumed(None);
-            }
-            key!(PageDown) | ctrl!('d') => {
-                self.scroll = self.scroll.saturating_add(10);
-                return EventResult::Consumed(None);
-            }
-            key!(PageUp) | ctrl!('u') => {
-                self.scroll = self.scroll.saturating_sub(10);
-                return EventResult::Consumed(None);
-            }
             _ => return EventResult::Consumed(None),
         };
         EventResult::Consumed(Some(Box::new(move |compositor, cx| {
@@ -167,6 +150,9 @@ impl Component for Preview {
     }
 
     fn render(&mut self, area: Rect, surface: &mut Buffer, cx: &mut Context) {
+        if area.area() == 0 {
+            return;
+        }
         let width = area.width.saturating_sub(4).clamp(1, 120).min(area.width);
         let height = area.height.saturating_sub(4).clamp(1, 40).min(area.height);
         let popup = Rect::new(
@@ -176,21 +162,20 @@ impl Component for Preview {
             height,
         );
         surface.clear_with(popup, cx.editor.theme.get("ui.popup"));
-        let rows =
-            super::text::required_size(&self.text, width.saturating_sub(2).max(1)).1 as usize;
-        self.scroll = self
-            .scroll
-            .min(rows.saturating_sub(height.saturating_sub(2) as usize));
         let title = if self.applied {
             " AI 测试结果 | Enter/Esc 关闭 · v 再次运行 "
         } else {
             " AI 单元测试 | Enter 接受全部 · Esc 取消 · r 重试 "
         };
-        Paragraph::new(&self.text)
-            .block(Block::default().borders(Borders::ALL).title(title))
-            .wrap(Wrap { trim: false })
-            .scroll((self.scroll.min(u16::MAX as usize) as u16, 0))
-            .render(popup, surface);
+        let block = Block::default().borders(Borders::ALL).title(title);
+        let body = block.inner(popup);
+        block.render(popup, surface);
+        self.text.render(
+            body,
+            surface,
+            cx.editor.theme.get("ui.popup"),
+            &mut self.scroll,
+        );
     }
     fn cursor(&self, _area: Rect, _editor: &Editor) -> (Option<Position>, CursorKind) {
         (Some(Position::new(0, 0)), CursorKind::Hidden)

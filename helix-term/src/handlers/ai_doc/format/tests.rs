@@ -3,7 +3,7 @@ use crate::handlers::ai_doc::target::tests::find;
 use serde_json::json;
 
 // Supply otherwise valid grounding so negative tests reach the guard they name.
-fn evidenced(target: &Target, mut doc: serde_json::Value) -> String {
+pub(super) fn evidenced(target: &Target, mut doc: serde_json::Value) -> String {
     if target.returns && doc["returns"].is_null() {
         doc["returns"] = json!("返回结果。");
     }

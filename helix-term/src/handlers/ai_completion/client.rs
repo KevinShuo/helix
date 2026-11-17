@@ -167,7 +167,11 @@ pub(super) async fn complete(
         "max_tokens": if predicting { config.prediction_tokens.clamp(1, 256) } else { config.max_tokens.clamp(1, if config.conservative { 64 } else { 512 }) },
         "stream": false
     });
-    let response = crate::handlers::ai::post(model, &body, config.timeout_ms).await?;
+    // Inline completion has a deliberately short response/deadline contract.
+    // Keep that contract even when explicit generation uses automatic maxima.
+    let mut request_model = model.clone();
+    request_model.budget_mode = helix_view::ai::AiBudgetMode::Configured;
+    let response = crate::handlers::ai::post(&request_model, &body, config.timeout_ms).await?;
     let choice = &response["choices"][0];
     if (predicting && choice["finish_reason"].as_str() != Some("stop"))
         || (config.conservative
@@ -564,6 +568,50 @@ mod tests {
             "role": "assistant", "content": content, "reasoning_content": "unused"
         }}]})
         .to_string()
+    }
+
+    #[tokio::test]
+    async fn provider_contract_short_deepseek_completion_keeps_task_sized_output() {
+        for predicting in [false, true] {
+            let (endpoint, capture) = server(
+                200,
+                reply(if predicting {
+                    "return sum(items)"
+                } else {
+                    "sum(items)"
+                }),
+            )
+            .await;
+            let model = helix_view::ai::AiProviderConfig {
+                kind: helix_view::ai::AiProviderType::Deepseek,
+                model: "deepseek-flash".into(),
+                endpoint,
+                ..Default::default()
+            };
+            let config = AiCompletionConfig {
+                conservative: true,
+                predict_next: predicting,
+                prompt_mode: AiCompletionPromptMode::Gap,
+                max_tokens: 48,
+                prediction_tokens: 192,
+                ..Default::default()
+            };
+            let mut context = context("\n");
+            context.prefix = if predicting {
+                "def total(items):\n    "
+            } else {
+                "def total(items):\n    return "
+            }
+            .into();
+            let result = super::complete(&config, &model, &context).await.unwrap();
+            assert!(result.is_some());
+            let body = capture.await.unwrap();
+            assert_eq!(body["max_tokens"], if predicting { 192 } else { 48 });
+            assert!(
+                model.automatic_budget(),
+                "a completion request must not mutate the selected provider"
+            );
+        }
     }
 
     #[tokio::test]

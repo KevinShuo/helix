@@ -458,6 +458,46 @@ async fn server(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_commit_shows_batch_progress_and_ticks_while_provider_is_silent() -> anyhow::Result<()> {
+    let repo = repository();
+    for name in [
+        "a-choice.txt",
+        "b-partial.txt",
+        "z-unrelated.txt",
+        "c.txt",
+        "d.txt",
+    ] {
+        fs::write(repo.path().join(name), "changed\n")?;
+    }
+    let before_index = fs::read(repo.path().join(".git/index"))?;
+    let (endpoint, mut requests, task) =
+        server(vec![Reply::Summary, Reply::Summary, Reply::Recommend], 2400).await;
+    let mut app = open(repo.path(), Some(endpoint))
+        .await
+        .map_err(|e| anyhow::anyhow!("open progress fixture: {e:#}"))?;
+    wait_for(&mut app, "批次 1/2")
+        .await
+        .map_err(|e| anyhow::anyhow!("first batch progress: {e:#}\n{}", screen(&app)))?;
+    request(&mut requests).await?;
+    wait_for(&mut app, "本步 1s").await?;
+    assert!(screen(&app).contains("本次 token 暂不可用"));
+    assert!(screen(&app).contains("文件 0/5"));
+    wait_for(&mut app, "批次 2/2").await?;
+    assert!(screen(&app).contains("文件 4/5"));
+    wait_for(&mut app, "汇总推荐").await?;
+    assert!(screen(&app).contains("文件 5/5"));
+    keys(&mut app, "<C-c>").await?;
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    keys(&mut app, "").await?;
+    assert!(screen(&app).contains("已取消分析"));
+    assert!(!app.editor.ai_commit_running);
+    assert_eq!(fs::read(repo.path().join(".git/index"))?, before_index);
+    close(app).await?;
+    task.abort();
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ai_commit_config_change_cancels_old_analysis_immediately() -> anyhow::Result<()> {
     let repo = repository();
     fs::write(repo.path().join("a-choice.txt"), "pending change\n")?;
@@ -519,6 +559,46 @@ async fn ai_commit_named_provider_ignores_legacy_local_model() -> anyhow::Result
         assert_eq!(body["thinking"]["type"], "disabled");
         assert_eq!(body["response_format"]["type"], "json_object");
     }
+    close(app).await?;
+    task.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_commit_file_limit_counts_only_staged_files_for_generation() -> anyhow::Result<()> {
+    let repo = repository();
+    fs::write(repo.path().join("a-choice.txt"), "staged change\n")?;
+    git(repo.path(), &["add", "--", "a-choice.txt"]);
+    fs::write(repo.path().join("unrelated.txt"), "unstaged change\n")?;
+    let before_index = fs::read(repo.path().join(".git/index"))?;
+    let before_head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let (endpoint, mut requests, task) = server(vec![Reply::Summary, Reply::Chinese], 0).await;
+    let mut config = test_config();
+    config.editor.ai_commit.enabled = true;
+    config.editor.ai_commit.max_files = 1;
+    config.editor.ai_completion.enabled = false;
+    config.editor.ai_completion.context_size = 8192;
+    config.editor.ai_completion.endpoint = endpoint;
+    config.editor.idle_timeout = Duration::from_millis(30);
+    let mut app = open_config(repo.path(), config).await?;
+    wait_for(&mut app, "max-files").await?;
+    assert!(!app.editor.ai_commit_running);
+    assert!(
+        requests.try_recv().is_err(),
+        "over-limit recommendation must fail before HTTP"
+    );
+    keys(&mut app, "g").await?;
+    wait_for(&mut app, "fix(fixture): 保留暂存版本").await?;
+    for _ in 0..2 {
+        let body = request(&mut requests).await?;
+        let data: Value = serde_json::from_str(body["messages"][1]["content"].as_str().unwrap())?;
+        let files = data["files"].as_array().unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0]["path"], "a-choice.txt");
+        assert_eq!(files[0]["staged"], true);
+    }
+    assert_eq!(fs::read(repo.path().join(".git/index"))?, before_index);
+    assert_eq!(git(repo.path(), &["rev-parse", "HEAD"]), before_head);
     close(app).await?;
     task.await?;
     Ok(())

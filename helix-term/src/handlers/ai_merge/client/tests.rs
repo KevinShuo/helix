@@ -2,6 +2,69 @@ use super::*;
 use helix_view::ai_merge::{AiMergeConfig, Target};
 use serde_json::json;
 
+#[test]
+fn ai_merge_deepseek_auto_preserves_large_sides_despite_local_input_budget() {
+    let model = AiProviderConfig {
+        kind: helix_view::ai::AiProviderType::Deepseek,
+        model: "deepseek-flash".into(),
+        ..Default::default()
+    };
+    let config = AiMergeConfig {
+        enabled: true,
+        max_input_bytes: 32,
+        max_tokens: 128,
+        ..Default::default()
+    };
+    let mut target = target();
+    target.current = "incoming_line();\n".repeat(20_000);
+    let body = request(&model, &config, &target).unwrap();
+    assert_eq!(body["max_tokens"], 393_216);
+    let data: Value =
+        serde_json::from_str(body["messages"][1]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(data["current"], target.current);
+    assert_eq!(data["base"], target.base);
+}
+
+#[tokio::test]
+async fn ai_merge_deepseek_accepts_large_complete_generated_candidate() {
+    let code = "merged_line();\n".repeat(6000);
+    let payload = response("resolved", json!(code));
+    let (endpoint, server) = crate::handlers::ai::tests::server(200, payload.to_string()).await;
+    let model = AiProviderConfig {
+        kind: helix_view::ai::AiProviderType::Deepseek,
+        model: "deepseek-flash".into(),
+        endpoint,
+        ..Default::default()
+    };
+    let config = AiMergeConfig {
+        enabled: true,
+        ..Default::default()
+    };
+    let result = generate(&model, &config, &target()).await.unwrap();
+    assert_eq!(result.code.as_deref(), Some(code.as_str()));
+    server.await.unwrap();
+}
+
+#[test]
+fn ai_merge_generous_output_budget_reaches_request_and_reserves_context() {
+    let mut model = AiProviderConfig {
+        context_size: 65_536,
+        ..Default::default()
+    };
+    let config = AiMergeConfig {
+        enabled: true,
+        max_tokens: 16_384,
+        max_input_bytes: 49_152,
+        ..Default::default()
+    };
+    assert_eq!(
+        request(&model, &config, &target()).unwrap()["max_tokens"],
+        16_384
+    );
+    model.context_size = 16_384;
+    assert!(request(&model, &config, &target()).is_err());
+}
+
 fn target() -> Target {
     Target {
         block: 2,

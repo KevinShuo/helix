@@ -206,12 +206,24 @@ max-files = 64
 ```
 
 The feature is disabled by default. `max-input-bytes` bounds each batch's data,
-not tokens; the actual configured model context is checked separately. At most
-64 model calls are made for each explicit analysis/generation. Large diffs,
+not tokens; the actual configured model context is checked separately.
+`max-files` defaults to 64 and can be increased up to an effective ceiling of
+1024; it must be positive. Recommendation counts all changed files, while message
+generation counts only staged files. Increasing this limit may also require a
+larger `max-input-bytes` and model context to fit the final summaries; summaries
+and diffs are never truncated to fit. Configured/local analysis uses at most 64
+logical model calls. Automatic DeepSeek uses up to 256, with up to three HTTP
+attempts per call for recognized input/context limits. Large diffs,
 binary files, symlinks, submodules and common credential paths require manual
 review; their contents are not sent to the model. These heuristics cannot
 identify every secret. The configured provider receives eligible diffs when
 you explicitly request analysis. Ignored files are not added.
+
+Configured local commit `max-tokens` allows up to 16384 final-output tokens,
+with reasoning reserved separately. Local HTTP timeouts are bounded to
+100–600000 ms. Known DeepSeek automatic budgets use the provider policy described
+below instead of these feature resource limits. Complete-input and review checks
+remain in effect.
 
 Open with `:ai-commit [optional intent]` or the Git action menu's `A` entry.
 The workspace defaults to the bottom dock; F11 toggles fullscreen. Space toggles
@@ -230,6 +242,17 @@ refreshes. Ctrl-c or `:ai-commit-cancel` cancels reads/AI requests, preserving t
 draft and index. `q` closes the workspace; confirmed Git writes finish in the
 background and report their result. Ctrl-w releases keyboard focus to the editor;
 click the workspace or invoke `:ai-commit` again to return.
+
+During AI work, the status line shows the current stage, batch count and analyzed
+file count. Elapsed and current-stage timers refresh every second even while the
+model is silent. File counts advance only after valid summaries arrive; files
+requiring manual review are counted separately. Batch totals adjust when rejected
+requests are split for retry. The timer indicates waiting, not model token progress.
+For managed local llama.cpp models, `本次 token` samples the active request's actual
+decoded-token count about once per second. It resets for each batch/request stage.
+Unsupported providers and unavailable telemetry show `暂不可用`; no estimated token
+count is substituted. Token samples do not reset the stage timer, and stop with
+the canceled or completed operation.
 
 Save related modified editor buffers before analyzing or staging them. Stale
 HEAD/index/file snapshots are rejected before writes. Git hooks and signing are
@@ -260,8 +283,8 @@ is unloaded before generation and restored after success, error or cancellation.
 `local-provider` applies when inheriting local mode; an explicit `provider` takes
 precedence, and an inherited online provider follows the global switch.
 
-Output is bounded to 128–4096 final tokens,
-and the HTTP timeout to 100–120000 ms; model startup uses its existing separate
+Configured local output is bounded to 128–16384 final tokens,
+and its HTTP timeout to 100–600000 ms; model startup uses its existing separate
 timeout. `max-input-bytes` bounds the system prompt and serialized input, while
 the actual model context is checked independently with space reserved for output
 and any configured reasoning budget.
@@ -279,9 +302,11 @@ explanation. Enter accepts, Escape/Ctrl-c cancels, `r` regenerates, and `j/k`,
 arrows or PageUp/PageDown scroll. A `needs-manual` response displays the reason
 without an accept action. While generating, use `:ai-merge-cancel` to cancel.
 An existing prompt keeps keyboard focus until closed.
-The complete decorated preview is limited to 60,000 UTF-8 bytes so its contents
-remain scrollable even in narrow terminals; oversized candidates are rejected
-without editing the draft. Compact terminals reserve visible status and controls.
+Configured/local decorated previews retain a 60,000-byte bound. Known DeepSeek
+supports larger provider-sized previews with viewport-only rendering and `usize`
+scrolling; Home/End jump to the start/end, including in narrow terminals.
+Oversized candidates are rejected without editing the draft. Compact terminals
+reserve visible status and controls.
 
 Acceptance replaces only the selected Result range and is one undo/redo step.
 The block remains **Needs Review**, even if the suggested text is identical.
@@ -836,7 +861,8 @@ in their respective sections.
 | `endpoint` | Full HTTP(S) chat completions URL, without embedded credentials | required |
 | `model` | Model identifier or local server alias | required |
 | `api-key-env` | Environment variable containing the bearer token | unset |
-| `context-size` | Conservative input/output budget for explicit generation; at least 512, currently capped at 131072 | `4096` |
+| `budget-mode` | `auto` uses a known provider/model capability profile; `configured` uses feature limits. Unknown models use configured limits in either mode | `"auto"` |
+| `context-size` | Configured context budget; local/unknown models cap at 131072. Known DeepSeek auto mode uses its official context instead | `4096` |
 | `thinking` | Enable provider-specific thinking for DeepSeek or llama.cpp; generic endpoints receive no thinking extensions | `false` |
 | `thinking-budget` | llama.cpp reasoning token budget, 1–8192; does not enable thinking by itself | unset |
 | `reasoning-effort` | Model-specific reasoning depth: `low`, `medium`, `high`, `xhigh`, or `max`; sent to llama.cpp when thinking is enabled | unset |
@@ -890,6 +916,38 @@ kernel optimizations. Reducing cache memory can permit full GPU offload without
 reducing model weight precision or the context window. A performance comparison
 runner is available at `contrib/ai-local-performance.py`.
 
+Known DeepSeek automatic budgets currently recognize `deepseek-flash`,
+`deepseek-v4-pro` and the documented Flash aliases `deepseek-v4-flash` and
+`deepseek-v4-flash-vision-exp`. The profile verified on 2026-11-16 allows 1048576
+context tokens and up to 393216 generated tokens. The API, not a character or byte
+estimate, enforces exact token accounting. These are ceilings, not requested
+response lengths; the task instructions still determine what to generate.
+
+```toml
+[editor.ai.providers.deepseek]
+type = "deepseek"
+endpoint = "https://api.deepseek.com/chat/completions"
+model = "deepseek-flash"
+budget-mode = "auto" # "configured" restores explicit feature resource limits
+api-key-env = "DEEPSEEK_API_KEY"
+```
+
+In auto mode, legacy `max-input-bytes`, `max-tokens` and commit `max-files` do not
+silently impose local-model limits. Complete requests/responses/generated
+artifacts retain a finite 16 MiB memory envelope; commit snapshots retain their
+4096-file ceiling, with batches up to 128 files. A two-hour finite request deadline
+includes all retries and remains cancellable. On a recognized context reservation
+error, the client retries with a small output reservation, retaining identical
+input. If a length-limited response reports actual prompt-token usage, one final
+attempt can use the remaining model context. At most three attempts are made;
+unrelated errors do not trigger automatic retries or input truncation.
+
+Automatic inline completion retains its short output/deadline contract, even
+with a DeepSeek auto provider. Unknown model IDs and local providers retain
+configured behavior. In configured mode, known DeepSeek still permits manually
+chosen limits up to its official capacity and accepts provider-sized responses.
+Provider selection, credentials, thinking mode and explicit acceptance do not
+change merely by selecting a budget mode.
 
 Set the API key in the environment inherited by Helix, then launch Helix from
 that environment. For example, in PowerShell:
@@ -1023,7 +1081,7 @@ establish type or semantic correctness, and may hide useful incomplete blocks.
 | `prompt-mode` | `insertion` requests missing code directly; `line` requests a complete current line; `gap` requests a short missing fragment with format examples and echo/boundary checks | `"insertion"` |
 | `api-key-env` | Optional environment variable containing the bearer token | unset |
 | `debounce-ms` | Pause after editing before a request, capped at 5000 ms | `350` |
-| `timeout-ms` | Request timeout, clamped to 100–120000 ms | `5000` |
+| `timeout-ms` | Request timeout, clamped to 100–600000 ms | `5000` |
 | `max-tokens` | Maximum generated tokens, clamped to 1–512 | `128` |
 | `prefix-chars` | Characters before the cursor sent as context, capped at 64000 | `8000` |
 | `suffix-chars` | Characters after the cursor sent as context, capped at 16000 | `2000` |
@@ -1232,8 +1290,8 @@ a local provider share its process. No model is downloaded automatically.
 | `local-provider` | Managed model to load temporarily when inheriting local mode; ignored online or with an explicit `provider` | unset |
 | `language` | Description language: `zh-CN` or `en` | `"zh-CN"` |
 | `style` | Documentation style; currently only `rest` | `"rest"` |
-| `timeout-ms` | Combined generation and repair timeout (100–120000 ms); model startup has its separate existing timeout | `30000` |
-| `max-tokens` | Output budget, bounded to 128–4096 tokens | `768` |
+| `timeout-ms` | Combined generation and repair timeout; model startup has its separate existing timeout | `30000` |
+| `max-tokens` | Configured local output budget, bounded to 128–16384 tokens; known DeepSeek auto uses its provider profile | `768` |
 
 Move into a function and run `:ai-doc`. The preview shows the exact insertion;
 Enter accepts, Escape/Ctrl-C cancels, `r` regenerates, and arrows/`j`/`k` or
@@ -1376,6 +1434,11 @@ provider is llama.cpp. An explicit `provider` wins. Thus completion can remain
 on a small resident model while test generation temporarily uses a 27B model
 with bounded thinking; switching the global provider to DeepSeek also switches
 test generation. A local failure never uploads code to another provider.
+
+Configured local test `max-tokens` accepts 512–16384 final-output tokens. The provider context
+must also fit the input, chat overhead and any separate reasoning budget.
+Generation requests and individual run stages can wait up to 600000 ms when
+configured through `timeout-ms` and `run-timeout-ms` respectively.
 
 Preview shows the exact test and CMake diffs plus inferred behavior assumptions.
 Enter accepts all changes into editable buffers; Esc cancels; `r` regenerates.

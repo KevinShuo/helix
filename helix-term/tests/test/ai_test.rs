@@ -51,6 +51,82 @@ async fn generate(
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn ai_test_large_preview_reaches_tail_and_home_without_editing_source() -> anyhow::Result<()>
+{
+    use helix_view::ai::{AiProviderConfig, AiProviderType, AiProxy};
+    let code = format!("{CODE}{}# TAIL_MARKER\n", "\n".repeat(70_000));
+    let (endpoint, mut requests, task) = server(0, vec![reply(&code)]).await;
+    let dir = tempfile::tempdir()?;
+    std::fs::write(
+        dir.path().join("pyproject.toml"),
+        "[tool.pytest.ini_options]\n",
+    )?;
+    let source = dir.path().join("maths.py");
+    std::fs::write(&source, SOURCE)?;
+    let mut config = test_config();
+    config.editor.ai_completion.enabled = false;
+    config.editor.ai_test.enabled = true;
+    config.editor.ai_test.provider = Some("large-test".into());
+    config.editor.ai.providers.insert(
+        "large-test".into(),
+        AiProviderConfig {
+            kind: AiProviderType::Deepseek,
+            model: "deepseek-flash".into(),
+            endpoint,
+            proxy: AiProxy::None,
+            ..Default::default()
+        },
+    );
+    config.editor.idle_timeout = Duration::from_millis(50);
+    let mut app = AppBuilder::new()
+        .with_config(config)
+        .with_file(&source, None)
+        .build()?;
+    app.test_resize(48, 22).await?;
+    generate(&mut app, &mut requests).await?;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while app
+        .editor
+        .ai_test
+        .as_ref()
+        .is_some_and(|op| op.changes.is_none())
+        && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        settle(&mut app).await;
+    }
+    assert!(
+        app.editor
+            .ai_test
+            .as_ref()
+            .is_some_and(|op| op.changes.is_some()),
+        "large result did not reach preview: {:?}",
+        app.editor.get_status()
+    );
+    let screen = |app: &Application| {
+        app.test_screen()
+            .content
+            .iter()
+            .map(|cell| cell.symbol.as_str())
+            .collect::<String>()
+    };
+    keys(&mut app, "<end>").await?;
+    assert!(screen(&app).contains("TAIL_MARKER"));
+    app.test_resize(20, 22).await?;
+    keys(&mut app, "<C-end>").await?;
+    assert!(screen(&app).contains("TAIL_MARKER"));
+    keys(&mut app, "<home>").await?;
+    assert!(screen(&app).contains("add"));
+    assert!(!screen(&app).contains("TAIL_MARKER"));
+    assert_eq!(current_ref!(app.editor).1.text().to_string(), SOURCE);
+    assert_eq!(std::fs::read_to_string(&source)?, SOURCE);
+    keys(&mut app, "<esc>").await?;
+    app.close().await;
+    task.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn ai_test_previews_and_applies_to_undoable_buffers_without_touching_source(
 ) -> anyhow::Result<()> {
     let (endpoint, mut requests, task) = server(0, vec![reply(CODE)]).await;

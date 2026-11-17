@@ -1,4 +1,5 @@
 mod draft;
+mod progress;
 mod tasks;
 mod view;
 

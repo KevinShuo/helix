@@ -1,4 +1,5 @@
 //! A read-only preview of the exact block replacement, separate from the draft.
+use super::ai_preview_text::{display, scroll_key, PreviewText};
 use crate::{
     compositor::{Component, Context, Event, EventResult},
     ctrl,
@@ -14,36 +15,86 @@ use helix_view::{
 };
 use tui::{
     buffer::Buffer,
-    text::Text,
-    widgets::{Block, Borders, Paragraph, Widget, Wrap},
+    widgets::{Block, Borders, Widget},
 };
 
 pub(crate) struct Preview {
     id: u64,
     title: String,
-    text: Text<'static>,
+    text: PreviewText,
     can_accept: bool,
     scroll: usize,
 }
 
-fn display(text: &str) -> String {
-    text.chars()
-        .map(|c| {
-            if c == '\t' {
-                ' '
-            } else if c.is_control()
-                || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
-            {
-                '�'
-            } else {
-                c
-            }
-        })
-        .collect()
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use helix_view::graphics::Style;
+
+    fn target() -> Target {
+        Target {
+            block: 0,
+            path: "test.rs".into(),
+            language: "rust".into(),
+            base: String::new(),
+            current: String::new(),
+            incoming: String::new(),
+            result: "old();\n".into(),
+            context: Vec::new(),
+            intent: String::new(),
+            range: 0..7,
+        }
+    }
+
+    #[test]
+    fn ai_merge_large_preview_requires_explicit_budget_without_changing_candidate() {
+        let target = target();
+        let suggestion = Suggestion {
+            code: Some(format!("{}TAIL\n", "x".repeat(70_000))),
+            explanation: "建议".into(),
+        };
+        let code = suggestion.code.clone();
+        assert!(Preview::new(1, &target, &suggestion).is_err());
+        let mut preview = Preview::new_with_limit(1, &target, &suggestion, 128 * 1024).unwrap();
+        assert!(preview.can_accept);
+        let area = Rect::new(0, 0, 1, 4);
+        let mut buffer = Buffer::empty(area);
+        preview.scroll = 70_000;
+        preview
+            .text
+            .render(area, &mut buffer, Style::default(), &mut preview.scroll);
+        assert!(preview.scroll > u16::MAX as usize);
+        assert_eq!(suggestion.code, code);
+        assert_eq!(target.result, "old();\n");
+    }
+
+    #[test]
+    fn ai_merge_budget_counts_complete_decorated_preview() {
+        let target = target();
+        let suggestion = Suggestion {
+            code: Some("x".repeat(100)),
+            explanation: "建议".into(),
+        };
+        assert!(Preview::new_with_limit(1, &target, &suggestion, 100).is_err());
+        assert!(Preview::new_with_limit(1, &target, &suggestion, usize::MAX).is_err());
+    }
 }
 
 impl Preview {
     pub(crate) fn new(id: u64, target: &Target, suggestion: &Suggestion) -> Result<Self> {
+        Self::new_with_limit(id, target, suggestion, 60_000)
+    }
+
+    pub(crate) fn new_with_limit(
+        id: u64,
+        target: &Target,
+        suggestion: &Suggestion,
+        max_bytes: usize,
+    ) -> Result<Self> {
+        ensure!(
+            max_bytes > 0 && max_bytes <= 16 * 1024 * 1024,
+            "AI 预览预算无效"
+        );
         let status = if suggestion.code.is_some() {
             "候选待复核"
         } else {
@@ -83,10 +134,8 @@ impl Preview {
             ]);
         }
         let text = lines.join("\n");
-        // At one display column, the UTF-8 byte count also bounds the wrapped
-        // row count. Reserve headroom below Paragraph's u16 size/scroll limit.
         ensure!(
-            text.len() <= 60_000,
+            text.len() <= max_bytes,
             "AI 候选过大，无法完整预览；请缩小冲突块或减少 max-tokens，草稿已保留"
         );
         Ok(Self {
@@ -96,7 +145,7 @@ impl Preview {
                 display(&target.path),
                 target.block + 1
             ),
-            text: Text::from(text),
+            text: PreviewText::new(text),
             can_accept: suggestion.code.is_some(),
             scroll: 0,
         })
@@ -123,26 +172,13 @@ impl Component for Preview {
         let Event::Key(key) = event else {
             return EventResult::Consumed(None);
         };
+        if scroll_key(*key, &mut self.scroll) {
+            return EventResult::Consumed(None);
+        }
         let action = match *key {
             key!(Enter) if self.can_accept => 0,
             key!(Esc) | ctrl!('c') => 1,
             key!('r') => 2,
-            key!('j') | key!(Down) => {
-                self.scroll = self.scroll.saturating_add(1);
-                return EventResult::Consumed(None);
-            }
-            key!('k') | key!(Up) => {
-                self.scroll = self.scroll.saturating_sub(1);
-                return EventResult::Consumed(None);
-            }
-            key!(PageDown) | ctrl!('d') => {
-                self.scroll = self.scroll.saturating_add(10);
-                return EventResult::Consumed(None);
-            }
-            key!(PageUp) | ctrl!('u') => {
-                self.scroll = self.scroll.saturating_sub(10);
-                return EventResult::Consumed(None);
-            }
             _ => return EventResult::Consumed(None),
         };
         EventResult::Consumed(Some(Box::new(move |c, cx| {
@@ -228,14 +264,7 @@ impl Component for Preview {
         };
         let footer_height = inner.height.min(help.len() as u16);
         let body = inner.clip_bottom(footer_height);
-        let paragraph = Paragraph::new(&self.text)
-            .style(style)
-            .wrap(Wrap { trim: false });
-        let rows = paragraph.required_size(body.width.max(1)).1 as usize;
-        self.scroll = self.scroll.min(rows.saturating_sub(body.height as usize));
-        paragraph
-            .scroll((self.scroll.min(u16::MAX as usize) as u16, 0))
-            .render(body, surface);
+        self.text.render(body, surface, style, &mut self.scroll);
         for (row, help) in help.into_iter().take(footer_height as usize).enumerate() {
             surface.set_stringn(
                 inner.x,

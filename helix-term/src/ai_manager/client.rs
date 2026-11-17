@@ -32,13 +32,13 @@ struct Client {
 pub(crate) use crate::handlers::ai_completion::server::LocalServers;
 
 /// A registration, not the owner of the model process.
-#[cfg(not(feature = "integration"))]
+#[cfg(all(not(feature = "integration"), any(windows, target_os = "linux")))]
 pub(crate) struct LocalServers {
     client: Arc<Client>,
     worker: tokio::task::JoinHandle<()>,
 }
 
-#[cfg(not(feature = "integration"))]
+#[cfg(all(not(feature = "integration"), any(windows, target_os = "linux")))]
 impl LocalServers {
     pub(crate) fn new(providers: &[AiProviderConfig]) -> Self {
         let (providers, changes) = watch::channel(providers.to_vec());
@@ -86,7 +86,7 @@ impl LocalServers {
     }
 }
 
-#[cfg(not(feature = "integration"))]
+#[cfg(all(not(feature = "integration"), any(windows, target_os = "linux")))]
 impl Drop for LocalServers {
     fn drop(&mut self) {
         self.client.providers.send_replace(Vec::new());
@@ -206,7 +206,7 @@ async fn connect(root: &Path, request: Request, budget: Duration) -> Result<TcpS
     Ok(stream)
 }
 
-#[cfg(not(feature = "integration"))]
+#[cfg(all(not(feature = "integration"), any(windows, target_os = "linux")))]
 async fn registrar(client: Arc<Client>, mut changes: watch::Receiver<Vec<AiProviderConfig>>) {
     loop {
         let providers = changes.borrow_and_update().clone();
@@ -338,7 +338,7 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "integration"))]
+    #[cfg(all(not(feature = "integration"), any(windows, target_os = "linux")))]
     fn registration(root: &Path, providers: &[AiProviderConfig]) -> LocalServers {
         let (providers, changes) = watch::channel(providers.to_vec());
         let (ready, _) = watch::channel(None);
@@ -353,7 +353,7 @@ mod tests {
         pool
     }
 
-    #[cfg(not(feature = "integration"))]
+    #[cfg(all(not(feature = "integration"), any(windows, target_os = "linux")))]
     #[tokio::test]
     async fn shared_ai_production_registration_reuses_one_model_after_first_editor_stops() {
         let _messages = helix_event::status::setup();
@@ -381,7 +381,7 @@ mod tests {
         let _ = manager.await;
     }
 
-    #[cfg(not(feature = "integration"))]
+    #[cfg(all(not(feature = "integration"), any(windows, target_os = "linux")))]
     #[tokio::test]
     async fn shared_ai_configuration_reload_cancels_active_inference_and_releases_lease() {
         let _messages = helix_event::status::setup();
