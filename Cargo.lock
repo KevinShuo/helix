@@ -1838,6 +1838,7 @@ dependencies = [
  "parking_lot",
  "tempfile",
  "tokio",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

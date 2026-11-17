@@ -181,6 +181,30 @@ mod implementation {
     // race a surviving hook. Reconciliation is still readable for diagnostics.
     static QUARANTINED_OPERATIONS: OnceLock<parking_lot::Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
+    #[cfg(windows)]
+    struct CancellationGuard<'a> {
+        tree: &'a crate::process_tree::ProcessTree,
+        git_dir: &'a Path,
+        armed: bool,
+    }
+
+    #[cfg(windows)]
+    impl Drop for CancellationGuard<'_> {
+        fn drop(&mut self) {
+            if self.armed {
+                // Drop cannot await cleanup. Allow a short bounded kernel-exit
+                // barrier; never release a write guard with uncertain survivors.
+                if let Err(error) = self.tree.terminate_blocking(Duration::from_millis(100)) {
+                    QUARANTINED_OPERATIONS
+                        .get_or_init(Default::default)
+                        .lock()
+                        .insert(self.git_dir.to_owned());
+                    log::warn!("Cancelled Git process-tree cleanup is unconfirmed: {error}");
+                }
+            }
+        }
+    }
+
     pub(super) struct OperationGuard(PathBuf);
 
     impl Drop for OperationGuard {
@@ -280,23 +304,31 @@ mod implementation {
         Ok(bytes.as_bstr().to_path()?.to_path_buf())
     }
 
-    async fn terminate_git_tree(child: &mut tokio::process::Child, pid: u32) -> Result<()> {
+    async fn terminate_git_tree(
+        child: &mut tokio::process::Child,
+        _pid: u32,
+        _tree: &crate::process_tree::ProcessTree,
+    ) -> Result<()> {
         #[cfg(windows)]
-        let mut terminate = {
-            let mut command = Command::new("taskkill.exe");
-            command.args(["/PID", &pid.to_string(), "/T", "/F"]);
-            command.creation_flags(0x08000000);
-            command
-        };
+        {
+            _tree
+                .terminate()
+                .await
+                .context("Terminate Git process job")?;
+            tokio::time::timeout(Duration::from_secs(5), child.wait())
+                .await
+                .context("Timed out awaiting Git termination")??;
+            return Ok(());
+        }
         #[cfg(unix)]
         let mut terminate = {
             let mut command = Command::new("/bin/kill");
-            command.args(["-KILL", &format!("-{pid}")]);
+            command.args(["-KILL", &format!("-{_pid}")]);
             command
         };
         #[cfg(not(any(windows, unix)))]
         anyhow::bail!("This platform cannot terminate the Git process tree");
-        #[cfg(any(windows, unix))]
+        #[cfg(unix)]
         {
             terminate.stdin(Stdio::null()).kill_on_drop(true);
             // Terminate descendants while the parent is still alive: killing
@@ -384,13 +416,16 @@ mod implementation {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .kill_on_drop(true);
-            #[cfg(windows)]
-            command.creation_flags(0x08000000);
             #[cfg(unix)]
             command.process_group(0);
-            let mut child = command
-                .spawn()
+            let (mut child, _tree) = crate::process_tree::spawn(&mut command)
                 .context("Run Git (is git installed on PATH?)")?;
+            #[cfg(windows)]
+            let mut cancellation = CancellationGuard {
+                tree: &_tree,
+                git_dir: &self.git_dir,
+                armed: true,
+            };
             let pid = child.id().context("Git process ID unavailable")?;
             let mut stdout = child.stdout.take().context("Git stdout unavailable")?;
             let mut stderr = child.stderr.take().context("Git stderr unavailable")?;
@@ -408,18 +443,34 @@ mod implementation {
                         Ok(Err(error)) => error,
                         Ok(Ok(_)) => unreachable!(),
                     };
-                    if let Err(termination) = terminate_git_tree(&mut child, pid).await {
+                    if let Err(termination) = terminate_git_tree(&mut child, pid, &_tree).await {
                         QUARANTINED_OPERATIONS
                             .get_or_init(Default::default)
                             .lock()
                             .insert(self.git_dir.clone());
                         anyhow::bail!("{failure:#}; Git process-tree termination is unconfirmed: {termination:#}. Further writes are disabled for this repository in this Helix session; inspect surviving processes and repository state before restarting Helix");
                     }
+                    #[cfg(windows)]
+                    {
+                        cancellation.armed = false;
+                    }
                     anyhow::bail!(
                         "{failure:#}; Git and hook process tree terminated and Git exit awaited"
                     );
                 }
             };
+            #[cfg(windows)]
+            if let Err(error) = _tree.terminate().await {
+                QUARANTINED_OPERATIONS
+                    .get_or_init(Default::default)
+                    .lock()
+                    .insert(self.git_dir.clone());
+                anyhow::bail!("Git process-tree cleanup is unconfirmed: {error}; further writes are disabled for this repository in this Helix session");
+            }
+            #[cfg(windows)]
+            {
+                cancellation.armed = false;
+            }
             Ok(Output {
                 status,
                 stdout,

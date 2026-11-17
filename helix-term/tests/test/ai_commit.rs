@@ -11,6 +11,7 @@ use std::{
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
+    sync::oneshot,
 };
 
 fn git(root: &Path, args: &[&str]) -> String {
@@ -380,10 +381,59 @@ enum Reply {
     English,
 }
 
+struct PendingReply {
+    release: oneshot::Sender<()>,
+    sent: oneshot::Receiver<()>,
+}
+
+impl PendingReply {
+    async fn send(self) -> anyhow::Result<()> {
+        self.release
+            .send(())
+            .map_err(|_| anyhow::anyhow!("model server stopped before releasing reply"))?;
+        tokio::time::timeout(Duration::from_secs(3), self.sent).await??;
+        Ok(())
+    }
+}
+
+async fn gated_server(
+    replies: Vec<Reply>,
+) -> (
+    String,
+    tokio::sync::mpsc::UnboundedReceiver<Value>,
+    PendingReply,
+    tokio::task::JoinHandle<()>,
+) {
+    let (release, ready) = oneshot::channel();
+    let (sent, received) = oneshot::channel();
+    let (endpoint, requests, task) = server_with_gate(replies, 0, Some((ready, sent))).await;
+    (
+        endpoint,
+        requests,
+        PendingReply {
+            release,
+            sent: received,
+        },
+        task,
+    )
+}
+
 // Only the external HTTP service is doubled; commands, jobs, UI and Git remain real.
 async fn server(
     replies: Vec<Reply>,
     delay_ms: u64,
+) -> (
+    String,
+    tokio::sync::mpsc::UnboundedReceiver<Value>,
+    tokio::task::JoinHandle<()>,
+) {
+    server_with_gate(replies, delay_ms, None).await
+}
+
+async fn server_with_gate(
+    replies: Vec<Reply>,
+    delay_ms: u64,
+    mut first_reply_gate: Option<(oneshot::Receiver<()>, oneshot::Sender<()>)>,
 ) -> (
     String,
     tokio::sync::mpsc::UnboundedReceiver<Value>,
@@ -449,9 +499,22 @@ async fn server(
                 }
             };
             let _ = tx.send(request);
-            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            let sent = if let Some((ready, sent)) = first_reply_gate.take() {
+                if ready.await.is_err() {
+                    return;
+                }
+                Some(sent)
+            } else {
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                None
+            };
             let response = json!({"choices":[{"finish_reason":"stop","message":{"content":content.to_string()}}]}).to_string();
             let _ = socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await;
+            // Cancellation may close the client socket; still acknowledge that
+            // the provider attempted its late reply before checking the UI.
+            if let Some(sent) = sent {
+                let _ = sent.send(());
+            }
         }
     });
     (endpoint, rx, task)
@@ -501,9 +564,12 @@ async fn ai_commit_shows_batch_progress_and_ticks_while_provider_is_silent() -> 
 async fn ai_commit_config_change_cancels_old_analysis_immediately() -> anyhow::Result<()> {
     let repo = repository();
     fs::write(repo.path().join("a-choice.txt"), "pending change\n")?;
-    let (endpoint, mut requests, task) = server(vec![Reply::Summary, Reply::Recommend], 1000).await;
+    let before_head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let before_index = fs::read(repo.path().join(".git/index"))?;
+    let (endpoint, mut requests, reply, task) =
+        gated_server(vec![Reply::Summary, Reply::Recommend]).await;
     let mut app = open(repo.path(), Some(endpoint)).await?;
-    request(&mut requests).await?;
+    request_while_running(&mut app, &mut requests).await?;
     assert!(app.editor.ai_commit_running);
     let mut changed = (*app.editor.config()).clone();
     changed.ai_completion.model = "different-provider-model".into();
@@ -512,14 +578,43 @@ async fn ai_commit_config_change_cancels_old_analysis_immediately() -> anyhow::R
         !app.editor.ai_commit_running,
         "config changes must cancel an old multi-call analysis immediately"
     );
+    reply.send().await?;
+    keys(&mut app, "").await?;
     let next = tokio::time::timeout(Duration::from_millis(1300), requests.recv()).await;
     assert!(
         !matches!(next, Ok(Some(_))),
         "canceled analysis must not send another batch to the old provider"
     );
+    assert_eq!(git(repo.path(), &["rev-parse", "HEAD"]), before_head);
+    assert_eq!(fs::read(repo.path().join(".git/index"))?, before_index);
     close(app).await?;
     task.abort();
     Ok(())
+}
+
+async fn request_while_running(
+    app: &mut Application,
+    requests: &mut tokio::sync::mpsc::UnboundedReceiver<Value>,
+) -> anyhow::Result<Value> {
+    // Opening the panel finishes its first snapshot before AI validates another
+    // snapshot. Pump those jobs with the repository workflow budget; the server
+    // keeps its first reply gated until the test has canceled the analysis.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        match requests.try_recv() {
+            Ok(request) => return Ok(request),
+            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                anyhow::bail!("model server closed before request")
+            }
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
+        }
+        anyhow::ensure!(
+            Instant::now() < deadline,
+            "model request did not start:\n{}",
+            screen(app)
+        );
+        keys(app, "").await?;
+    }
 }
 
 async fn request(
@@ -842,15 +937,23 @@ async fn ai_commit_cancel_discards_delayed_model_result_without_git_writes() -> 
     fs::write(repo.path().join("a-choice.txt"), "candidate\n")?;
     let before_head = git(repo.path(), &["rev-parse", "HEAD"]);
     let before_index = fs::read(repo.path().join(".git/index"))?;
-    let (endpoint, mut requests, task) = server(vec![Reply::Summary, Reply::Recommend], 300).await;
+    let (endpoint, mut requests, reply, task) =
+        gated_server(vec![Reply::Summary, Reply::Recommend]).await;
     let mut app = open(repo.path(), Some(endpoint)).await?;
-    request(&mut requests).await?;
+    request_while_running(&mut app, &mut requests).await?;
+    assert!(app.editor.ai_commit_running);
     keys(&mut app, "<C-c>efix: keep manual draft<esc>l").await?;
-    tokio::time::sleep(Duration::from_millis(350)).await;
+    assert!(!app.editor.ai_commit_running);
+    reply.send().await?;
     keys(&mut app, "").await?;
     assert!(screen(&app).contains("fix: keep manual draft"));
     assert!(screen(&app).contains("English"));
     assert!(!app.editor.ai_commit_running);
+    let next = tokio::time::timeout(Duration::from_millis(1300), requests.recv()).await;
+    assert!(
+        !matches!(next, Ok(Some(_))),
+        "canceled analysis must not send another batch after its late reply"
+    );
     assert_eq!(git(repo.path(), &["rev-parse", "HEAD"]), before_head);
     assert_eq!(fs::read(repo.path().join(".git/index"))?, before_index);
     close(app).await?;

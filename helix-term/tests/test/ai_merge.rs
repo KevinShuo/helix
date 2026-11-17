@@ -1,10 +1,12 @@
 //! Real merge sessions and editor commands; only the external model is substituted.
 use super::*;
+use anyhow::Context as _;
 use helix_vcs::merge::BlockDecision;
 use serde_json::{json, Value};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
+    sync::{mpsc, oneshot},
 };
 
 fn reply(code: Option<&str>) -> Value {
@@ -84,28 +86,66 @@ async fn ai_merge_retry_uncertainty_cancel_and_empty_deletion() -> anyhow::Resul
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ai_merge_late_replies_after_edit_and_cancel_leave_draft_intact() -> anyhow::Result<()> {
     let repo = repository(true);
-    let (endpoint, mut requests, task) = server(vec![
-        (700, reply(Some("LATE\n"))),
-        (700, reply(Some("CANCELLED\n"))),
-    ])
-    .await;
-    let mut app = app(repo.path(), endpoint).await?;
-    keys(&mut app, ":ai-merge<ret>").await?;
-    received(&mut requests).await?;
-    keys(&mut app, "iuser <esc>").await?;
+    let (endpoint, mut requests, replies, task) =
+        gated_server(vec![reply(Some("LATE\n")), reply(Some("CANCELLED\n"))]).await;
+    let mut app = app(repo.path(), endpoint)
+        .await
+        .context("open merge draft")?;
+    let original = current_ref!(app.editor).1.text().to_string();
+    keys(&mut app, ":ai-merge<ret>")
+        .await
+        .context("start first merge request")?;
+    received(&mut requests)
+        .await
+        .with_context(|| format!("receive first merge request:\n{}", screen(&app)))?;
+    assert!(app.editor.ai_merge.as_ref().is_some_and(|op| !op.preview));
+    keys(&mut app, "iuser <esc>")
+        .await
+        .context("edit draft while first response is pending")?;
     let edited = current_ref!(app.editor).1.text().to_string();
-    tokio::time::sleep(Duration::from_millis(800)).await;
-    keys(&mut app, "").await?;
+    assert_ne!(
+        edited, original,
+        "the pending-request edit must reach the draft"
+    );
+    assert!(
+        app.editor.ai_merge.is_none(),
+        "editing must cancel the request"
+    );
+    replies
+        .send()
+        .await
+        .context("release reply after draft edit")?;
+    keys(&mut app, "")
+        .await
+        .context("poll late first response")?;
     assert_eq!(current_ref!(app.editor).1.text().to_string(), edited);
     assert!(!compact_screen(&app).contains("保留双方的校验逻辑"));
-    keys(&mut app, ":ai-merge<ret>").await?;
-    received(&mut requests).await?;
-    keys(&mut app, ":ai-merge-cancel<ret>").await?;
-    tokio::time::sleep(Duration::from_millis(800)).await;
-    keys(&mut app, "").await?;
+    keys(&mut app, ":ai-merge<ret>")
+        .await
+        .context("start second merge request")?;
+    received(&mut requests)
+        .await
+        .with_context(|| format!("receive second merge request:\n{}", screen(&app)))?;
+    assert!(app.editor.ai_merge.as_ref().is_some_and(|op| !op.preview));
+    keys(&mut app, ":ai-merge-cancel<ret>")
+        .await
+        .context("cancel pending second response")?;
+    assert!(
+        app.editor.ai_merge.is_none(),
+        "explicit cancellation must stop the request"
+    );
+    replies
+        .send()
+        .await
+        .context("release reply after explicit cancellation")?;
+    keys(&mut app, "")
+        .await
+        .context("poll late canceled response")?;
     assert_eq!(current_ref!(app.editor).1.text().to_string(), edited);
     assert!(!compact_screen(&app).contains("保留双方的校验逻辑"));
-    keys(&mut app, ":qa!<ret>").await?;
+    keys(&mut app, ":qa!<ret>")
+        .await
+        .context("close merge draft")?;
     app.close().await;
     task.abort();
     Ok(())
@@ -229,11 +269,54 @@ async fn ai_merge_preserves_bom_and_crlf_until_reviewed_apply() -> anyhow::Resul
     Ok(())
 }
 
+struct ReplyGate {
+    release: mpsc::UnboundedSender<oneshot::Sender<()>>,
+}
+
+impl ReplyGate {
+    async fn send(&self) -> anyhow::Result<()> {
+        let (sent, received) = oneshot::channel();
+        self.release
+            .send(sent)
+            .map_err(|_| anyhow::anyhow!("model server stopped before releasing reply"))?;
+        tokio::time::timeout(Duration::from_secs(3), received).await??;
+        Ok(())
+    }
+}
+
+async fn gated_server(
+    replies: Vec<Value>,
+) -> (
+    String,
+    mpsc::UnboundedReceiver<Value>,
+    ReplyGate,
+    tokio::task::JoinHandle<()>,
+) {
+    let (release, ready) = mpsc::unbounded_channel();
+    let (endpoint, requests, task) = server_with_gate(
+        replies.into_iter().map(|reply| (0, reply)).collect(),
+        Some(ready),
+    )
+    .await;
+    (endpoint, requests, ReplyGate { release }, task)
+}
+
 async fn server(
     replies: Vec<(u64, Value)>,
 ) -> (
     String,
     tokio::sync::mpsc::UnboundedReceiver<Value>,
+    tokio::task::JoinHandle<()>,
+) {
+    server_with_gate(replies, None).await
+}
+
+async fn server_with_gate(
+    replies: Vec<(u64, Value)>,
+    mut gates: Option<mpsc::UnboundedReceiver<oneshot::Sender<()>>>,
+) -> (
+    String,
+    mpsc::UnboundedReceiver<Value>,
     tokio::task::JoinHandle<()>,
 ) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -278,9 +361,22 @@ async fn server(
             {
                 return;
             }
-            tokio::time::sleep(Duration::from_millis(delay)).await;
+            let sent = if let Some(gates) = gates.as_mut() {
+                let Some(sent) = gates.recv().await else {
+                    return;
+                };
+                Some(sent)
+            } else {
+                tokio::time::sleep(Duration::from_millis(delay)).await;
+                None
+            };
             let response = reply.to_string();
             let _ = socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await;
+            // A canceled client can close the socket. Acknowledge the attempted
+            // late reply before the test checks that it cannot revive a preview.
+            if let Some(sent) = sent {
+                let _ = sent.send(());
+            }
         }
     });
     (endpoint, rx, task)

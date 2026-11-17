@@ -12,6 +12,9 @@ use std::{
 #[cfg(feature = "git")]
 mod git;
 
+#[cfg(feature = "git")]
+mod process_tree;
+
 mod diff;
 
 pub use diff::{DiffHandle, Hunk};

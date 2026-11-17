@@ -660,3 +660,120 @@ async fn commit_git_timeout_stops_hook_descendants_before_releasing_guard() {
         );
     }
 }
+
+#[cfg(windows)]
+#[tokio::test]
+async fn commit_git_cancellation_stops_hook_descendants_before_they_write() {
+    use std::time::Duration;
+    let r = Repo::new();
+    r.initial();
+    let head = r.git(&["rev-parse", "HEAD"]);
+    r.write("a", "next\n");
+    r.git(&["add", "a"]);
+    hook(
+        &r,
+        "pre-commit",
+        "printf started > hook-started; while ! test -f hook-release; do sleep 0.05; done; printf late > late-file; git add -- late-file",
+    );
+    let git = r.open().await;
+    let operation = git.begin_operation().unwrap();
+    let executing = git.clone();
+    let worker = tokio::spawn(async move {
+        let _operation = operation;
+        executing
+            .run(
+                &super::implementation::args(&["commit", "-m", "cancelled"]),
+                Duration::from_secs(30),
+            )
+            .await
+    });
+    let started = tokio::time::timeout(Duration::from_secs(10), async {
+        while !r.path().join("hook-started").exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    worker.abort();
+    assert!(worker.await.unwrap_err().is_cancelled());
+    // Release the fixture even on RED so surviving descendants finish instead
+    // of leaving pipe readers blocked during this test runtime's shutdown.
+    r.write("hook-release", "release\n");
+    started.expect("pre-commit hook did not start");
+    r.write("after-cancel", "safe next operation\n");
+    if let Ok(_operation) = git.begin_operation() {
+        git.run(
+            &super::implementation::args(&["add", "--", "after-cancel"]),
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        assert!(r.git(&["ls-files"]).contains("after-cancel"));
+    } else {
+        assert!(git
+            .begin_operation()
+            .err()
+            .expect("an unconfirmed cleanup must keep writes disabled")
+            .to_string()
+            .contains("could not be confirmed stopped"));
+    }
+    tokio::time::sleep(Duration::from_millis(1300)).await;
+    assert!(
+        !r.path().join("late-file").exists(),
+        "canceling Git left a hook descendant able to modify the repository"
+    );
+    assert_eq!(r.git(&["rev-parse", "HEAD"]), head);
+}
+
+#[cfg(windows)]
+#[test]
+fn commit_git_cancellation_does_not_block_runtime_shutdown_on_inherited_pipes() {
+    use std::{sync::mpsc, time::Duration};
+    let r = Repo::new();
+    r.initial();
+    r.write("a", "next\n");
+    r.git(&["add", "a"]);
+    hook(
+        &r,
+        "pre-commit",
+        "printf started > hook-started; while ! test -f hook-release; do sleep 0.05; done",
+    );
+    let root = r.path().to_path_buf();
+    let (cancelled, cancellation) = mpsc::channel();
+    let (stopped, shutdown) = mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let git = GitRepository::open(root.clone(), true).await.unwrap();
+            let worker = tokio::spawn(async move {
+                git.run(
+                    &super::implementation::args(&["commit", "-m", "cancelled"]),
+                    Duration::from_secs(30),
+                )
+                .await
+            });
+            let started = tokio::time::timeout(Duration::from_secs(10), async {
+                while !root.join("hook-started").exists() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await;
+            worker.abort();
+            assert!(worker.await.unwrap_err().is_cancelled());
+            started.expect("pre-commit hook did not start");
+            cancelled.send(()).unwrap();
+        });
+        drop(runtime);
+        stopped.send(()).unwrap();
+    });
+    let cancelled = cancellation.recv_timeout(Duration::from_secs(15));
+    let stopped = shutdown.recv_timeout(Duration::from_secs(5));
+    // Release blocked writers even if the shutdown assertion is RED. This
+    // keeps the regression itself bounded without weakening runtime Drop.
+    r.write("hook-release", "release\n");
+    thread.join().unwrap();
+    cancelled.expect("Git cancellation did not complete");
+    stopped.expect("Tokio runtime shutdown waited for an orphaned Git pipe writer");
+}

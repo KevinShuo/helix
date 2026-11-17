@@ -136,10 +136,15 @@ mod git {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .kill_on_drop(true);
+            let (child, _tree) = crate::process_tree::spawn(&mut command)?;
+            let output =
+                tokio::time::timeout(Duration::from_secs(5), child.wait_with_output()).await;
             #[cfg(windows)]
-            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
-            tokio::time::timeout(Duration::from_secs(5), command.output())
+            _tree
+                .terminate()
                 .await
+                .context("Stop Git author process tree")?;
+            output
                 .context("Git command timed out")?
                 .context("run Git for function author lookup")
         }

@@ -522,22 +522,28 @@ async fn source_mouse(
 }
 
 async fn wait_merge(app: &mut Application) -> anyhow::Result<()> {
-    for _ in 0..100 {
-        if app.editor.active_merge().is_some() {
-            return Ok(());
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    while app.editor.active_merge().is_none() {
+        anyhow::ensure!(
+            tokio::time::Instant::now() < deadline,
+            "merge workspace did not open: {}",
+            screen(app)
+        );
         keys(app, "").await?;
     }
-    anyhow::bail!("merge workspace did not open: {}", screen(app))
+    Ok(())
 }
 async fn open_ui(app: &mut Application) -> anyhow::Result<()> {
     keys(app, "<space>vr").await?;
-    for _ in 0..100 {
-        if screen(app).contains("Enter resolve") {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+    // Conflict discovery reads every file's sources with Git. Enter is ignored
+    // while the initial rows are empty, so never send it unless loading finished.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    while !screen(app).contains("Enter resolve") {
+        anyhow::ensure!(
+            tokio::time::Instant::now() < deadline,
+            "conflict list was not ready before Enter:\n{}",
+            screen(app)
+        );
         keys(app, "").await?;
     }
     keys(app, "<ret>").await?;
