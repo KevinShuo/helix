@@ -1,0 +1,199 @@
+# Requires this fork with ${env:NAME} language configuration expansion.
+# python 配置
+[[language]]
+name = "python"
+language-servers = ["ty"]
+formatter = {command = "ruff",args=["format","-"]}
+diagnostic-severity = "error"
+auto-format = true
+
+# go 配置
+[language-server.gopls.config]
+staticcheck = true
+gofumpt = true
+
+# C
+[[language]]
+name = "c"
+auto-format = true
+
+[language.formatter]
+command = "clang-format"
+args = ["--style=file"]
+
+# CPP
+[[language]]
+name = "cpp"
+auto-format = true
+
+[language.formatter]
+command = "clang-format"
+args = ["--style=file"]
+
+# Vue: Helix 25.07 uses the standalone server (Vue LSP 3.x needs tsserver forwarding).
+[[language]]
+name = "vue"
+language-servers = ["vuels", { name = "tailwindcss-ls", only-features = ["completion", "hover", "diagnostics", "code-action"] }, { name = "vscode-eslint-language-server", only-features = ["diagnostics", "code-action"] }]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+[language-server.vuels]
+command = "node"
+args = ["${env:LOCALAPPDATA}/helix/language-servers/vue-2.2.12/node_modules/@vue/language-server/bin/vue-language-server.js", "--stdio"]
+
+[language-server.vuels.config]
+typescript.tsdk = "${env:LOCALAPPDATA}/helix/language-servers/vue-2.2.12/node_modules/typescript/lib"
+vue.hybridMode = false
+
+# JS/TS: prefer the project's TypeScript, with an installed SDK as fallback.
+[language-server.typescript-language-server]
+command = "node"
+args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/typescript-language-server/lib/cli.mjs", "--stdio"]
+
+[language-server.typescript-language-server.config]
+hostInfo = "helix"
+tsserver.fallbackPath = '${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/typescript/lib/tsserver.js'
+# Full semantic service also resolves project aliases while Vue projects load.
+tsserver.useSyntaxServer = "never"
+plugins = [{ name = "@vue/typescript-plugin", location = "${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/@vue/typescript-plugin", languages = ["vue"] }]
+preferences.includeCompletionsForModuleExports = true
+preferences.includeCompletionsForImportStatements = true
+preferences.includeCompletionsWithSnippetText = true
+preferences.importModuleSpecifierPreference = "shortest"
+implicitProjectConfiguration.checkJs = true
+
+[language-server.typescript-language-server.config.typescript.inlayHints]
+includeInlayParameterNameHints = "literals"
+includeInlayParameterNameHintsWhenArgumentMatchesName = false
+includeInlayVariableTypeHints = true
+includeInlayVariableTypeHintsWhenTypeMatchesName = false
+includeInlayFunctionLikeReturnTypeHints = true
+
+[language-server.typescript-language-server.config.javascript.inlayHints]
+includeInlayParameterNameHints = "literals"
+includeInlayParameterNameHintsWhenArgumentMatchesName = false
+includeInlayVariableTypeHints = true
+includeInlayVariableTypeHintsWhenTypeMatchesName = false
+includeInlayFunctionLikeReturnTypeHints = true
+
+[language-server.vscode-html-language-server]
+command = "node"
+args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/vscode-langservers-extracted/bin/vscode-html-language-server", "--stdio"]
+config = { provideFormatter = false }
+
+[language-server.vscode-css-language-server]
+command = "node"
+args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/vscode-langservers-extracted/bin/vscode-css-language-server", "--stdio"]
+config = { provideFormatter = false, css = { validate = { enable = true }, lint = { unknownAtRules = "ignore" } }, scss = { validate = { enable = true }, lint = { unknownAtRules = "ignore" } } }
+
+[language-server.vscode-json-language-server]
+command = "node"
+args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/vscode-langservers-extracted/bin/vscode-json-language-server", "--stdio"]
+config = { provideFormatter = false, json = { validate = { enable = true } } }
+
+[language-server.vscode-eslint-language-server]
+command = "node"
+# 4.8 publishes diagnostics; 4.10 requires pull diagnostics absent in Helix 25.07.
+args = ["${env:LOCALAPPDATA}/helix/language-servers/eslint/node_modules/vscode-langservers-extracted/bin/vscode-eslint-language-server", "--stdio"]
+required-root-patterns = ["eslint.config.*", ".eslintrc", ".eslintrc.*"]
+
+[language-server.vscode-eslint-language-server.config]
+validate = "on"
+run = "onType"
+format = false
+silent = true
+experimental = { useFlatConfig = false }
+rulesCustomizations = []
+problems = { shortenToSingleLine = false }
+nodePath = ""
+codeAction = { disableRuleComment = { enable = true, location = "separateLine" }, showDocumentation = { enable = true } }
+workingDirectory = { mode = "auto" }
+
+[language-server.tailwindcss-ls]
+command = "node"
+# Keep utility prefixes across '-' in Helix 25.07 completion filtering.
+args = ["${env:APPDATA}/helix/tailwind-lsp.cjs", "${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/@tailwindcss/language-server/bin/tailwindcss-language-server", "--stdio"]
+
+[language-server.tailwindcss-ls.config]
+userLanguages = { vue = "html", javascript = "javascript", javascriptreact = "javascriptreact", typescript = "typescript", typescriptreact = "typescriptreact" }
+
+[language-server.tailwindcss-ls.config.tailwindCSS]
+validate = true
+hovers = true
+suggestions = true
+classAttributes = ["class", "className", "ngClass", ":class"]
+
+[[language]]
+name = "javascript"
+language-servers = ["typescript-language-server", { name = "vscode-eslint-language-server", only-features = ["diagnostics", "code-action"] }, { name = "tailwindcss-ls", only-features = ["completion", "hover", "diagnostics", "code-action"] }]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+[[language]]
+name = "typescript"
+language-servers = ["typescript-language-server", { name = "vscode-eslint-language-server", only-features = ["diagnostics", "code-action"] }, { name = "tailwindcss-ls", only-features = ["completion", "hover", "diagnostics", "code-action"] }]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+[[language]]
+name = "jsx"
+language-servers = ["typescript-language-server", { name = "vscode-eslint-language-server", only-features = ["diagnostics", "code-action"] }, { name = "tailwindcss-ls", only-features = ["completion", "hover", "diagnostics", "code-action"] }]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+[[language]]
+name = "tsx"
+language-servers = ["typescript-language-server", { name = "vscode-eslint-language-server", only-features = ["diagnostics", "code-action"] }, { name = "tailwindcss-ls", only-features = ["completion", "hover", "diagnostics", "code-action"] }]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+[[language]]
+name = "html"
+language-servers = ["vscode-html-language-server", { name = "tailwindcss-ls", only-features = ["completion", "hover", "diagnostics", "code-action"] }]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+[[language]]
+name = "css"
+language-servers = ["vscode-css-language-server", { name = "tailwindcss-ls", only-features = ["completion", "hover", "diagnostics", "code-action"] }]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+[[language]]
+name = "scss"
+language-servers = ["vscode-css-language-server"]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+[[language]]
+name = "json"
+language-servers = ["vscode-json-language-server"]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+[[language]]
+name = "jsonc"
+language-servers = ["vscode-json-language-server"]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+
+# CMake: neocmakelsp 0.10.2 locates Windows system modules through this prefix.
+# Resolve the current user on each computer; this example uses Scoop CMake.
+[language-server.neocmakelsp]
+command = "neocmakelsp"
+args = ["stdio"]
+environment = { MSYSTEM_PREFIX = "${env:USERPROFILE}/scoop/apps/cmake/current" }
+
+[[language]]
+name = "cmake"
+language-servers = ["neocmakelsp"]

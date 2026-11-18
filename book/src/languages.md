@@ -195,6 +195,36 @@ These are the available options for a language server.
 | `environment`              | Any environment variables that will be used when starting the language server `{ "KEY1" = "Value1", "KEY2" = "Value2" }`          |
 | `required-root-patterns`   | A list of `glob` patterns to look for in the working directory of the lsp. The language server is only started if at least one of them is found. |
 
+Language server string values (including `command`, `args`, `environment`, and
+nested `config` values) and formatter commands and arguments support explicit
+`${env:NAME}` references to the environment inherited by Helix. For example, a
+Windows configuration can avoid embedding a username:
+
+```toml
+[language-server.neocmakelsp]
+command = "neocmakelsp"
+args = ["stdio"]
+environment = { MSYSTEM_PREFIX = "${env:USERPROFILE}/scoop/apps/cmake/current" }
+
+[[language]]
+name = "javascript"
+formatter = { command = "node", args = ["${env:LOCALAPPDATA}/helix/language-servers/web/node_modules/prettier/bin/prettier.cjs", "--stdin-filepath", "%{buffer_name}"] }
+```
+
+References are expanded once when the language configuration is loaded, after
+TOML parsing and trusted workspace configuration merging. Missing variables or
+malformed references produce a configuration error. An `environment` entry cannot
+refer to a sibling entry; variables must already exist in Helix's process
+environment. Write `$${env:NAME}` to pass the literal `${env:NAME}`. Other syntax,
+such as `${INPUT}`, `$0`, and formatter `%{buffer_name}`, is left unchanged.
+Percent characters inside substituted formatter environment values are escaped
+for the formatter's later command-mode expansion, so paths in ordinary arguments
+remain literal data. Inserting a reference inside an explicitly written
+`%sh{...}` expression instead inserts shell text; use environment variables in
+the shell itself when constructing shell commands.
+This feature requires a build of this fork with language environment expansion;
+stock Helix does not expand these references in LSP settings.
+
 A `format` sub-table within `config` can be used to pass extra formatting options to
 [Document Formatting Requests](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_formatting).
 For example, with typescript:

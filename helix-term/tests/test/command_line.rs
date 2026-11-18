@@ -3,6 +3,32 @@ use super::*;
 use helix_core::diagnostic::Severity;
 
 #[tokio::test(flavor = "multi_thread")]
+async fn formatter_environment_percent_escaping_preserves_paths() -> anyhow::Result<()> {
+    use helix_core::command_line::Token;
+    use helix_view::expansion;
+
+    test_key_sequence(
+        &mut AppBuilder::new().build()?,
+        None,
+        Some(&|app| {
+            // The loader escapes percents only in substituted environment values;
+            // these are the arguments consumed by Document::format_with.
+            let argument = "C:/Users/100%%/%%{buffer_name}/%%sh{echo must-not-run}/format.js";
+            assert_eq!(
+                expansion::expand(&app.editor, Token::expand(argument)).unwrap(),
+                "C:/Users/100%/%{buffer_name}/%sh{echo must-not-run}/format.js"
+            );
+            assert_eq!(
+                expansion::expand(&app.editor, Token::expand("%{buffer_name}")).unwrap(),
+                helix_view::doc!(app.editor).display_name()
+            );
+        }),
+        false,
+    )
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn history_completion() -> anyhow::Result<()> {
     test_key_sequence(
         &mut AppBuilder::new().build()?,
