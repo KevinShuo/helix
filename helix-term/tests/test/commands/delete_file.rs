@@ -1,23 +1,7 @@
 use super::*;
 use helix_view::{doc, editor::Action};
 
-// Unlike test_key_sequence, this helper leaves the app open for the next phase.
-async fn keys(app: &mut Application, input: &str) -> anyhow::Result<()> {
-    for key in helix_view::input::parse_macro(input)? {
-        #[cfg(windows)]
-        let event = crossterm::event::Event::Key(crossterm::event::KeyEvent::from(key));
-        #[cfg(not(windows))]
-        let event = termina::event::Event::Key(termina::event::KeyEvent::from(key));
-        app.handle_terminal_events(Ok(event)).await;
-    }
-    app.editor.reset_idle_timer();
-    tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        run_event_loop_until_idle(app),
-    )
-    .await?;
-    Ok(())
-}
+use super::send_keys_and_wait as keys;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn confirmation_keeps_input_visible_for_long_paths() -> anyhow::Result<()> {
@@ -30,35 +14,31 @@ async fn confirmation_keeps_input_visible_for_long_paths() -> anyhow::Result<()>
     app.test_resize(80, 24).await?;
     keys(&mut app, ":delete-file!<ret>").await?;
     assert!(!app.editor.is_err());
-    let screen = app
-        .test_screen()
-        .content
-        .iter()
-        .map(|cell| cell.symbol.as_str())
-        .collect::<String>();
-    assert!(
-        screen.contains("Type yes"),
-        "confirmation instruction must stay visible: {screen}"
-    );
-    assert!(
-        screen.contains("target.txt"),
-        "target must stay visible: {screen}"
-    );
-    app.test_resize(40, 24).await?;
-    let screen = app
-        .test_screen()
-        .content
-        .iter()
-        .map(|cell| cell.symbol.as_str())
-        .collect::<String>();
-    assert!(
-        screen.contains("Type yes"),
-        "confirmation instruction must stay visible: {screen}"
-    );
-    assert!(
-        screen.contains("target.txt"),
-        "target must stay visible in a narrow terminal: {screen}"
-    );
+    for width in [80, 40] {
+        app.test_resize(width, 24).await?;
+        let buffer = app.test_screen();
+        let rows: Vec<String> = buffer
+            .content
+            .chunks(width as usize)
+            .map(|row| row.iter().map(|cell| cell.symbol.as_str()).collect())
+            .collect();
+        assert!(
+            rows.iter().any(|row| row.contains("Delete file? Type yes")),
+            "{rows:?}"
+        );
+        // The temporary directory length can make the basename wrap. Check
+        // the path actually displayed inside the bordered help text.
+        let help: String = rows
+            .iter()
+            .filter_map(|row| {
+                row.trim()
+                    .strip_prefix('│')?
+                    .strip_suffix('│')
+                    .map(str::trim)
+            })
+            .collect();
+        assert!(help.contains(source.to_str().unwrap()), "{rows:?}");
+    }
     assert!(source.exists());
     test_key_sequence(
         &mut app,

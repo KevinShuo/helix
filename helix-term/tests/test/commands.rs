@@ -3,6 +3,7 @@ use helix_term::application::Application;
 use super::*;
 
 mod delete_file;
+mod file_explorer;
 mod gitignore;
 mod insert;
 mod movement;

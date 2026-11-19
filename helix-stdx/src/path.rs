@@ -14,6 +14,57 @@ use std::{
 
 use crate::env::current_working_dir;
 
+/// Rename a directory entry without replacing a concurrently created destination.
+#[cfg(windows)]
+pub fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::MoveFileW;
+    // canonicalize the parent to obtain a long-path-capable absolute name
+    // without following the directory entry that is being moved.
+    fn wide(path: &Path) -> std::io::Result<Vec<u16>> {
+        let invalid = || std::io::Error::from(std::io::ErrorKind::InvalidInput);
+        let parent = std::fs::canonicalize(path.parent().ok_or_else(invalid)?)?;
+        let path = parent.join(path.file_name().ok_or_else(invalid)?);
+        let mut wide: Vec<_> = path.as_os_str().encode_wide().collect();
+        if wide.contains(&0) {
+            return Err(invalid());
+        }
+        wide.push(0);
+        Ok(wide)
+    }
+    let (from, to) = (wide(from)?, wide(to)?);
+    // SAFETY: both paths are NUL-terminated and live for the duration of the call.
+    if unsafe { MoveFileW(from.as_ptr(), to.as_ptr()) } == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_vendor = "apple",
+    target_os = "redox"
+))]
+pub fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
+    use rustix::fs::{renameat_with, RenameFlags, CWD};
+    Ok(renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE)?)
+}
+
+#[cfg(not(any(
+    windows,
+    target_os = "linux",
+    target_os = "android",
+    target_vendor = "apple",
+    target_os = "redox"
+)))]
+pub fn rename_noreplace(_: &Path, _: &Path) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "Exclusive rename is unavailable on this platform",
+    ))
+}
+
 /// Replaces users home directory from `path` with tilde `~` if the directory
 /// is available, otherwise returns the path unchanged.
 pub fn fold_home_dir<'a, P>(path: P) -> Cow<'a, Path>

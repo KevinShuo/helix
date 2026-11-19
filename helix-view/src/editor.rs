@@ -1705,7 +1705,27 @@ impl Editor {
     /// moves/renames a path, invoking any event handlers (currently only lsp)
     /// and calling `set_doc_path` if the file is open in the editor
     pub fn move_path(&mut self, old_path: &Path, new_path: &Path) -> io::Result<()> {
-        let new_path = canonicalize(new_path);
+        self.move_path_impl(old_path, new_path, false)
+    }
+
+    /// Move an existing filesystem entry, refusing to overwrite a destination.
+    pub fn move_path_noreplace(&mut self, old_path: &Path, new_path: &Path) -> io::Result<()> {
+        self.move_path_impl(old_path, new_path, true)
+    }
+
+    fn move_path_impl(
+        &mut self,
+        old_path: &Path,
+        new_path: &Path,
+        exclusive: bool,
+    ) -> io::Result<()> {
+        // Preserve the requested leaf spelling for a case-only rename on Windows.
+        let new_path = if exclusive {
+            let name = new_path.file_name().ok_or(io::ErrorKind::InvalidInput)?;
+            canonicalize(new_path.parent().ok_or(io::ErrorKind::InvalidInput)?).join(name)
+        } else {
+            canonicalize(new_path)
+        };
         // sanity check
         if old_path == new_path {
             return Ok(());
@@ -1733,11 +1753,24 @@ impl Editor {
             }
         }
 
-        if old_path.exists() {
+        if exclusive {
+            helix_stdx::path::rename_noreplace(old_path, &new_path)?;
+        } else if old_path.exists() {
             fs::rename(old_path, &new_path)?;
         }
 
-        if let Some(doc) = self.document_by_path(old_path) {
+        if is_dir {
+            let moved: Vec<_> = self
+                .documents()
+                .filter_map(|doc| {
+                    let suffix = doc.path()?.strip_prefix(old_path).ok()?;
+                    Some((doc.id(), new_path.join(suffix)))
+                })
+                .collect();
+            for (id, path) in moved {
+                self.set_doc_path(id, &path);
+            }
+        } else if let Some(doc) = self.document_by_path(old_path) {
             self.set_doc_path(doc.id(), &new_path);
         }
         let is_dir = new_path.is_dir();
@@ -1759,6 +1792,14 @@ impl Editor {
     }
 
     pub fn create_path(&mut self, path: &Path, is_dir: bool) -> io::Result<()> {
+        self.create_path_impl(path, is_dir, false)
+    }
+
+    pub fn create_new_path(&mut self, path: &Path, is_dir: bool) -> io::Result<()> {
+        self.create_path_impl(path, is_dir, true)
+    }
+
+    fn create_path_impl(&mut self, path: &Path, is_dir: bool, exclusive: bool) -> io::Result<()> {
         let path = canonicalize(path);
         let language_servers: Vec<_> = self
             .language_servers
@@ -1782,13 +1823,17 @@ impl Editor {
             }
         }
 
-        if let Some(dir) = path.parent() {
-            if !dir.is_dir() {
-                fs::create_dir_all(dir)?;
+        if !exclusive {
+            if let Some(dir) = path.parent() {
+                if !dir.is_dir() {
+                    fs::create_dir_all(dir)?;
+                }
             }
         }
         if is_dir {
             fs::create_dir(&path)?;
+        } else if exclusive {
+            fs::File::create_new(&path)?;
         } else {
             fs::write(&path, [])?;
         }
@@ -1804,7 +1849,19 @@ impl Editor {
     }
 
     pub fn delete_path(&mut self, path: &Path, recursive: bool) -> io::Result<()> {
+        self.delete_path_checked(path, recursive, |_, _| Ok(()))
+    }
+
+    /// Validate both before notifying servers and immediately before unlinking.
+    /// A willDeleteFiles workspace edit can open or modify a buffer.
+    pub fn delete_path_checked(
+        &mut self,
+        path: &Path,
+        recursive: bool,
+        validate: impl Fn(&Self, &Path) -> io::Result<()>,
+    ) -> io::Result<()> {
         let path = canonicalize(path);
+        validate(self, &path)?;
         let is_dir = path.is_dir();
         let language_servers: Vec<_> = self
             .language_servers
@@ -1828,8 +1885,16 @@ impl Editor {
             }
         }
 
-        if is_dir {
-            if recursive {
+        validate(self, &path)?;
+        // Unlink the entry itself. A symlink to a directory uses unlink on
+        // Unix and RemoveDirectory on Windows (even if its target is gone).
+        let file_type = fs::symlink_metadata(&path)?.file_type();
+        #[cfg(windows)]
+        let directory_link = std::os::windows::fs::FileTypeExt::is_symlink_dir(&file_type);
+        #[cfg(not(windows))]
+        let directory_link = false;
+        if file_type.is_dir() || directory_link {
+            if recursive && !directory_link {
                 fs::remove_dir_all(&path)?;
             } else {
                 fs::remove_dir(&path)?;

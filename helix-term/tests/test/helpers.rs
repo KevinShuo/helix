@@ -441,6 +441,17 @@ pub async fn run_event_loop_until_idle(app: &mut Application) {
     app.event_loop_until_idle(&mut rx_stream).await;
 }
 
+/// Send terminal keys and settle pending UI events without closing the app.
+pub async fn send_keys_and_wait(app: &mut Application, input: &str) -> anyhow::Result<()> {
+    for key in parse_macro(input)? {
+        app.handle_terminal_events(Ok(Event::Key(KeyEvent::from(key))))
+            .await;
+    }
+    app.editor.reset_idle_timer();
+    tokio::time::timeout(Duration::from_secs(5), run_event_loop_until_idle(app)).await?;
+    Ok(())
+}
+
 /// Build a std-only subprocess fixture into the test's own temporary directory.
 pub fn compile_fixture(name: &str, directory: &std::path::Path) -> anyhow::Result<PathBuf> {
     let executable = directory.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));

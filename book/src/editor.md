@@ -466,6 +466,21 @@ Example:
 
 In addition to the options for the file picker and global search, a similar set of options is presented to configure the file explorer separately. However, unlike the file picker, the defaults are set to avoid ignoring most files.
 
+Inside the explorer, press `F4` to open **File actions**.
+
+| Key | Action |
+| --- | --- |
+| `n` | Create an empty file in the displayed directory |
+| `m` | Create a directory in the displayed directory |
+| `r` | Rename the selected entry. Typing replaces the selected file stem. |
+| `d` | Permanently delete the selected file or empty directory |
+
+Press `Enter` to submit a name. The explorer selects the new entry so you can
+press `Enter` again to open it. Deletion requires an explicit `y`. Pressing `Enter` or
+`Esc` cancels. Save or discard pending edits before deleting an open file.
+Exclusive rename is supported on Windows, Linux, Android, Apple platforms, and Redox
+when the filesystem supports it.
+
 Note that the ignore files consulted by the file explorer when `ignore` is set to true are the same ones used by the file picker, including the aforementioned Helix-specific ignore files.
 
 

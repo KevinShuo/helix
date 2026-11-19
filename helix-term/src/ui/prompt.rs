@@ -32,6 +32,7 @@ pub struct Prompt {
     prompt: Cow<'static, str>,
     line: String,
     cursor: usize,
+    selected_prefix: usize,
     // Fields used for Component callbacks and rendering:
     line_area: Rect,
     anchor: usize,
@@ -90,6 +91,7 @@ impl Prompt {
             prompt,
             line: String::new(),
             cursor: 0,
+            selected_prefix: 0,
             line_area: Rect::default(),
             anchor: 0,
             truncate_start: false,
@@ -118,10 +120,23 @@ impl Prompt {
     }
 
     pub fn set_line(&mut self, line: String, editor: &Editor) {
+        self.selected_prefix = 0;
         let cursor = line.len();
         self.line = line;
         self.cursor = cursor;
         self.recalculate_completion(editor);
+    }
+
+    pub(super) fn select_prefix(&mut self, end: usize) {
+        self.selected_prefix = end;
+        self.cursor = end;
+    }
+
+    fn remove_selected_prefix(&mut self) {
+        self.line.drain(..self.selected_prefix);
+        self.selected_prefix = 0;
+        self.cursor = 0;
+        self.anchor = 0;
     }
 
     pub fn with_language(
@@ -596,7 +611,13 @@ impl Prompt {
                 self.truncate_end,
                 &self.line.as_str()[self.anchor..],
                 line_width,
-                |_| prompt_color,
+                |offset| {
+                    if self.anchor + offset < self.selected_prefix {
+                        selected_color
+                    } else {
+                        prompt_color
+                    }
+                },
             );
         }
     }
@@ -606,6 +627,9 @@ impl Component for Prompt {
     fn handle_event(&mut self, event: &Event, cx: &mut Context) -> EventResult {
         let event = match event {
             Event::Paste(data) => {
+                if self.selected_prefix > 0 {
+                    self.remove_selected_prefix();
+                }
                 self.insert_str(data, cx.editor);
                 self.recalculate_completion(cx.editor);
                 return EventResult::Consumed(None);
@@ -618,6 +642,33 @@ impl Component for Prompt {
             _ => return EventResult::Ignored(None),
         };
 
+        if self.selected_prefix > 0 {
+            match event {
+                key!(Backspace) | key!(Delete) | ctrl!('h') | ctrl!('d') => {
+                    self.remove_selected_prefix();
+                    self.recalculate_completion(cx.editor);
+                    return EventResult::Consumed(None);
+                }
+                key!(Left) => {
+                    self.selected_prefix = 0;
+                    self.move_start();
+                    return EventResult::Consumed(None);
+                }
+                key!(Right) => {
+                    self.selected_prefix = 0;
+                    return EventResult::Consumed(None);
+                }
+                KeyEvent {
+                    code: KeyCode::Char(_),
+                    modifiers,
+                } if modifiers.is_empty()
+                    || modifiers == helix_view::keyboard::KeyModifiers::SHIFT =>
+                {
+                    self.remove_selected_prefix()
+                }
+                _ => self.selected_prefix = 0,
+            }
+        }
         let old_mode = cx.editor.mode();
         let close_fn =
             EventResult::Consumed(Some(Box::new(move |compositor: &mut Compositor, cx| {

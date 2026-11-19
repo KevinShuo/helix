@@ -1,3 +1,4 @@
+mod file_actions;
 mod handlers;
 mod query;
 
@@ -151,12 +152,12 @@ fn inject_nucleo_item<T, D>(
     columns: &[Column<T, D>],
     item: T,
     editor_data: &D,
-) {
+) -> u32 {
     injector.push(item, |item, dst| {
         for (column, text) in columns.iter().filter(|column| column.filter).zip(dst) {
             *text = column.format_text(item, editor_data).into()
         }
-    });
+    })
 }
 
 pub struct Injector<T, D> {
@@ -266,6 +267,8 @@ pub struct Picker<T: 'static + Send + Sync, D: 'static> {
     completion_height: u16,
 
     cursor: u32,
+    action_menu: Option<fn(&Self) -> EventResult>,
+    pending_focus: Option<Focus>,
     prompt: Prompt,
     query: PickerQuery,
 
@@ -286,6 +289,11 @@ pub struct Picker<T: 'static + Send + Sync, D: 'static> {
     /// An event handler for syntax highlighting the currently previewed file.
     preview_highlight_handler: Sender<Arc<Path>>,
     dynamic_query_handler: Option<Sender<DynamicQueryChange>>,
+}
+
+enum Focus {
+    Entry(u32),
+    Row(u32),
 }
 
 impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
@@ -398,6 +406,8 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
             editor_data,
             version,
             cursor: 0,
+            action_menu: None,
+            pending_focus: None,
             prompt,
             query,
             truncate_start: true,
@@ -516,10 +526,12 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
     }
 
     pub fn selection(&self) -> Option<&T> {
-        self.matcher
-            .snapshot()
-            .get_matched_item(self.cursor)
-            .map(|item| item.data)
+        let snapshot = self.matcher.snapshot();
+        // A second Enter can arrive before the matcher has ranked the new file.
+        if let Some(Focus::Entry(index)) = self.pending_focus {
+            return snapshot.get_item(index).map(|item| item.data);
+        }
+        snapshot.get_matched_item(self.cursor).map(|item| item.data)
     }
 
     fn primary_query(&self) -> Arc<str> {
@@ -555,6 +567,7 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
         if self.query == old_query {
             return;
         }
+        self.pending_focus = None;
         // If the query has meaningfully changed, reset the cursor to the top of the results.
         self.cursor = 0;
         // Have nucleo reparse each changed column.
@@ -705,6 +718,24 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
                 .cursor
                 .min(snapshot.matched_item_count().saturating_sub(1))
         }
+        if !status.running {
+            match self.pending_focus.take() {
+                Some(Focus::Row(row)) => {
+                    self.cursor = row.min(snapshot.matched_item_count().saturating_sub(1))
+                }
+                Some(Focus::Entry(index)) => {
+                    if let Some(entry) = snapshot.get_item(index) {
+                        if let Some(row) = snapshot
+                            .matched_items(..)
+                            .position(|item| std::ptr::eq(item.data, entry.data))
+                        {
+                            self.cursor = row as u32;
+                        }
+                    }
+                }
+                None => (),
+            }
+        }
 
         let text_style = cx.editor.theme.get("ui.text");
         let selected = cx.editor.theme.get("ui.text.focus");
@@ -760,7 +791,17 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
 
         // -- Render the contents:
         // subtract area of prompt from top
-        let inner = inner.clip_top(2);
+        let mut inner = inner.clip_top(2);
+        if self.action_menu.is_some() && inner.height > 0 {
+            surface.set_stringn(
+                inner.x + 1,
+                inner.bottom() - 1,
+                "F4 File actions",
+                inner.width.saturating_sub(1) as usize,
+                text_style,
+            );
+            inner = inner.clip_bottom(1);
+        }
         let rows = inner.height.saturating_sub(self.header_height()) as u32;
         let offset = self.cursor - (self.cursor % std::cmp::max(1, rows));
         let cursor = self.cursor.saturating_sub(offset);
@@ -1104,6 +1145,14 @@ impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I,
         };
 
         match key_event {
+            helix_view::input::KeyEvent {
+                code: helix_view::keyboard::KeyCode::F(4),
+                modifiers,
+            } if modifiers.is_empty() => {
+                if let Some(open) = self.action_menu {
+                    return open(self);
+                }
+            }
             shift!(Tab) | key!(Up) | ctrl!('p') => {
                 self.move_by(1, Direction::Backward);
             }
@@ -1206,7 +1255,8 @@ impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I,
     }
 
     fn required_size(&mut self, (width, height): (u16, u16)) -> Option<(u16, u16)> {
-        self.completion_height = height.saturating_sub(4 + self.header_height());
+        self.completion_height =
+            height.saturating_sub(4 + self.header_height() + u16::from(self.action_menu.is_some()));
         Some((width, height))
     }
 
