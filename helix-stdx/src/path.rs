@@ -225,22 +225,33 @@ pub fn canonicalize(path: impl AsRef<Path>) -> PathBuf {
 /// Unlike filesystem canonicalization, this also works for missing paths.
 #[cfg(windows)]
 pub fn eq_ignore_case(left: &Path, right: &Path) -> bool {
+    cmp_ignore_case(left, right).is_eq()
+}
+
+#[cfg(windows)]
+pub fn cmp_ignore_case(left: &Path, right: &Path) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Globalization::{CompareStringOrdinal, CSTR_EQUAL};
+    use windows_sys::Win32::Globalization::{
+        CompareStringOrdinal, CSTR_EQUAL, CSTR_GREATER_THAN, CSTR_LESS_THAN,
+    };
 
     if left == right {
-        return true;
+        return Ordering::Equal;
     }
     let left: Vec<u16> = left.as_os_str().encode_wide().collect();
     let right: Vec<u16> = right.as_os_str().encode_wide().collect();
     let (Ok(left_len), Ok(right_len)) = (i32::try_from(left.len()), i32::try_from(right.len()))
     else {
-        return false;
+        return left.cmp(&right);
     };
     // SAFETY: both UTF-16 buffers remain alive for the call, and the explicit
     // lengths describe their initialized contents. TRUE must be exactly 1.
-    unsafe {
-        CompareStringOrdinal(left.as_ptr(), left_len, right.as_ptr(), right_len, 1) == CSTR_EQUAL
+    match unsafe { CompareStringOrdinal(left.as_ptr(), left_len, right.as_ptr(), right_len, 1) } {
+        CSTR_EQUAL => Ordering::Equal,
+        CSTR_LESS_THAN => Ordering::Less,
+        CSTR_GREATER_THAN => Ordering::Greater,
+        _ => left.cmp(&right),
     }
 }
 

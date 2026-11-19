@@ -101,6 +101,10 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 signal-hook-tokio = { version = "0.4", features = ["futures-v0_3"] }
 libc = "0.2.186"
 
+[target.'cfg(target_vendor = "apple")'.dependencies]
+unicode-normalization = "0.1"
+unicase = "2.7"
+
 [build-dependencies]
 helix-loader = { path = "../helix-loader" }
 

@@ -475,6 +475,12 @@ Inside the explorer, press `F4` to open **File actions**.
 | `r` | Rename the selected entry. Typing replaces the selected file stem. |
 | `d` | Permanently delete the selected file or empty directory |
 | `v` | Move the selected file or directory, keeping its name |
+| `c` | Clear all marks in this directory |
+
+Use `Ctrl-x` to mark or unmark the current file or directory. The footer shows
+the total, including marks hidden by the current filter. With marks present,
+`F4` then `v` moves all marked entries. Clear the marks to rename or delete
+the current row. Opening another directory starts a fresh selection.
 
 After pressing `v`, type to filter directories. Press `Enter` to browse the
 highlighted directory or choose `../` to go up. The footer shows the
@@ -483,6 +489,12 @@ destination path. Press `F4` to move into the directory you are browsing, or
 explorer selects the moved entry in its new directory and shows its preview.
 Open buffers keep their unsaved edits. Moves require the same filesystem and
 an unused destination name.
+
+A batch is checked for conflicts before the first move. If a file becomes
+unavailable during the move, the explorer reports how many entries moved and
+keeps the remaining entries marked for retry. Canceling the destination picker
+preserves the marks. On success the explorer clears the marks and focuses the
+first moved entry in path order.
 
 Press `Enter` to submit a name. The explorer selects the new entry so you can
 press `Enter` again to open it. Deletion requires an explicit `y`. Pressing `Enter` or

@@ -66,6 +66,11 @@ use arc_swap::{
 pub const DIR_STACK_CAP: usize = 10;
 pub const DEFAULT_AUTO_SAVE_DELAY: u64 = 3000;
 
+struct BatchBufferMoves<'a> {
+    known: &'a mut HashSet<DocumentId>,
+    assigned: Vec<(DocumentId, PathBuf)>,
+}
+
 fn deserialize_duration_millis<'de, D>(deserializer: D) -> Result<Duration, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -1705,12 +1710,91 @@ impl Editor {
     /// moves/renames a path, invoking any event handlers (currently only lsp)
     /// and calling `set_doc_path` if the file is open in the editor
     pub fn move_path(&mut self, old_path: &Path, new_path: &Path) -> io::Result<()> {
-        self.move_path_impl(old_path, new_path, false)
+        self.move_path_impl(old_path, new_path, false, None)
     }
 
     /// Move an existing filesystem entry, refusing to overwrite a destination.
     pub fn move_path_noreplace(&mut self, old_path: &Path, new_path: &Path) -> io::Result<()> {
-        self.move_path_impl(old_path, new_path, true)
+        self.move_path_impl(old_path, new_path, true, None)
+    }
+
+    /// Capture buffer ownership before the first rename can change a relative link.
+    /// On failure, the count is the number of completed filesystem moves.
+    pub fn move_paths_noreplace(
+        &mut self,
+        moves: &[(PathBuf, PathBuf)],
+    ) -> Result<(), (usize, io::Error)> {
+        let mut known = self.documents().map(Document::id).collect();
+        let mut assigned_ids = HashSet::new();
+        let mut plans = Vec::with_capacity(moves.len());
+        for (source, target) in moves {
+            let assigned =
+                Self::moved_buffers(self.documents(), source, target, true, source.is_dir())
+                    .map_err(|err| (0, err))?;
+            if assigned.iter().any(|(id, _)| !assigned_ids.insert(*id)) {
+                return Err((
+                    0,
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "An open buffer belongs to multiple marked entries, including {}",
+                            source.display()
+                        ),
+                    ),
+                ));
+            }
+            plans.push(assigned);
+        }
+        for (index, ((source, target), assigned)) in moves.iter().zip(plans).enumerate() {
+            let buffers = BatchBufferMoves {
+                known: &mut known,
+                assigned,
+            };
+            self.move_path_impl(source, target, true, Some(buffers))
+                .map_err(|err| (index, err))?;
+        }
+        Ok(())
+    }
+
+    fn moved_buffers<'a>(
+        documents: impl Iterator<Item = &'a Document>,
+        old_path: &Path,
+        new_path: &Path,
+        exclusive: bool,
+        is_dir: bool,
+    ) -> io::Result<Vec<(DocumentId, PathBuf)>> {
+        // A successful rename can break the alias used to open a document.
+        // Capture all affected buffers while their original paths still resolve.
+        let resolved_entry = if exclusive {
+            let parent = fs::canonicalize(old_path.parent().ok_or(io::ErrorKind::InvalidInput)?)?;
+            Some(parent.join(old_path.file_name().ok_or(io::ErrorKind::InvalidInput)?))
+        } else {
+            None
+        };
+        let mut moved = Vec::new();
+        let mut destinations = HashSet::new();
+        for doc in documents {
+            let Some(path) = doc.path() else { continue };
+            let suffix = if let Some(entry) = &resolved_entry {
+                helix_stdx::path::moved_suffix(path, old_path, entry)
+            } else if is_dir || path == old_path {
+                path.strip_prefix(old_path).ok().map(Path::to_owned)
+            } else {
+                None
+            };
+            if let Some(suffix) = suffix {
+                let mut target = new_path.to_owned();
+                target.extend(suffix.components());
+                if exclusive && !destinations.insert(target.clone()) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Multiple open buffers would use {}", target.display()),
+                    ));
+                }
+                moved.push((doc.id(), target));
+            }
+        }
+        Ok(moved)
     }
 
     fn move_path_impl(
@@ -1718,6 +1802,7 @@ impl Editor {
         old_path: &Path,
         new_path: &Path,
         exclusive: bool,
+        batch_buffers: Option<BatchBufferMoves<'_>>,
     ) -> io::Result<()> {
         // Preserve the requested leaf spelling for a case-only rename on Windows.
         let new_path = if exclusive {
@@ -1753,37 +1838,30 @@ impl Editor {
             }
         }
 
-        // A successful rename can break the alias used to open a document.
-        // Capture all affected buffers while their original paths still resolve.
-        let resolved_entry = if exclusive {
-            let parent = fs::canonicalize(old_path.parent().ok_or(io::ErrorKind::InvalidInput)?)?;
-            Some(parent.join(old_path.file_name().ok_or(io::ErrorKind::InvalidInput)?))
-        } else {
-            None
-        };
-        let mut moved = Vec::new();
-        let mut destinations = HashSet::new();
-        for doc in self.documents() {
-            let Some(path) = doc.path() else { continue };
-            let suffix = if let Some(entry) = &resolved_entry {
-                helix_stdx::path::moved_suffix(path, old_path, entry)
-            } else if is_dir || path == old_path {
-                path.strip_prefix(old_path).ok().map(Path::to_owned)
-            } else {
-                None
-            };
-            if let Some(suffix) = suffix {
-                let mut target = new_path.clone();
-                target.extend(suffix.components());
-                if exclusive && !destinations.insert(target.clone()) {
+        let moved = if let Some(mut batch) = batch_buffers {
+            // willRenameFiles can load additional documents during execution.
+            let new_docs = self
+                .documents()
+                .filter(|doc| !batch.known.contains(&doc.id()));
+            let additional = Self::moved_buffers(new_docs, old_path, &new_path, true, is_dir)?;
+            for (_, target) in &additional {
+                if batch
+                    .assigned
+                    .iter()
+                    .any(|(id, assigned)| self.documents.contains_key(id) && assigned == target)
+                {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!("Multiple open buffers would use {}", target.display()),
                     ));
                 }
-                moved.push((doc.id(), target));
             }
-        }
+            batch.known.extend(additional.iter().map(|(id, _)| id));
+            batch.assigned.extend(additional);
+            batch.assigned
+        } else {
+            Self::moved_buffers(self.documents(), old_path, &new_path, exclusive, is_dir)?
+        };
         if exclusive {
             helix_stdx::path::rename_noreplace(old_path, &new_path)?;
         } else if old_path.exists() {
@@ -1791,7 +1869,9 @@ impl Editor {
         }
 
         for (id, path) in moved {
-            self.set_doc_path(id, &path);
+            if self.documents.contains_key(&id) {
+                self.set_doc_path(id, &path);
+            }
         }
         let is_dir = new_path.is_dir();
         for ls in self.language_servers.iter_clients() {

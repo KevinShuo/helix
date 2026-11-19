@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     ffi::OsStr,
     fs, io,
     path::{Path, PathBuf},
@@ -29,6 +30,12 @@ use crate::{
 
 mod move_to;
 
+pub(super) struct ExplorerActions<T: 'static + Send + Sync, D: 'static> {
+    pub(super) path: fn(&T) -> Option<&Path>,
+    pub(super) open: fn(&super::Picker<T, D>, &BTreeSet<PathBuf>) -> EventResult,
+    pub(super) marked: BTreeSet<PathBuf>,
+}
+
 impl FileExplorer {
     fn matches_entry(&self, entry: &(PathBuf, bool), matcher: &mut nucleo::Matcher) -> bool {
         let text = self.columns[0].format_text(entry, &self.editor_data);
@@ -39,21 +46,27 @@ impl FileExplorer {
     }
 
     pub(in crate::ui) fn with_file_actions(mut self) -> Self {
-        self.action_menu = Some(|picker| {
-            let root = picker.editor_data.0.clone();
-            // The synthetic parent entry has no file name.
-            let selected = picker
-                .selection()
-                .filter(|(path, _)| path.file_name().is_some())
-                .cloned();
-            EventResult::Consumed(Some(Box::new(move |compositor, _| {
-                compositor.push(Box::new(overlaid(FileActions {
-                    root,
-                    selected,
-                    state: State::Menu,
-                })));
-            })))
-        });
+        self.action_menu = Some(Box::new(ExplorerActions {
+            path: |(path, _)| path.file_name().map(|_| path.as_path()),
+            marked: BTreeSet::new(),
+            open: |picker, marked| {
+                let root = picker.editor_data.0.clone();
+                // The synthetic parent entry has no file name.
+                let selected = picker
+                    .selection()
+                    .filter(|(path, _)| path.file_name().is_some())
+                    .cloned();
+                let marked = marked.iter().cloned().collect();
+                EventResult::Consumed(Some(Box::new(move |compositor, _| {
+                    compositor.push(Box::new(overlaid(FileActions {
+                        root,
+                        selected,
+                        marked,
+                        state: State::Menu,
+                    })));
+                })))
+            },
+        }));
         self
     }
 
@@ -127,6 +140,7 @@ enum State {
 struct FileActions {
     root: PathBuf,
     selected: Option<(PathBuf, bool)>,
+    marked: Vec<PathBuf>,
     state: State,
 }
 
@@ -287,7 +301,7 @@ impl FileActions {
 
     fn area(&self, area: Rect) -> Rect {
         let height = if matches!(self.state, State::Menu) {
-            8
+            8 + u16::from(!self.marked.is_empty())
         } else {
             5
         };
@@ -311,14 +325,21 @@ impl Component for FileActions {
             (State::Menu, Event::Key(key!('m'))) => {
                 self.start_name(Operation::NewDirectory, cx.editor)
             }
-            (State::Menu, Event::Key(key!('r'))) if self.selected.is_some() => {
+            (State::Menu, Event::Key(key!('r')))
+                if self.selected.is_some() && self.marked.is_empty() =>
+            {
                 self.start_name(Operation::Rename, cx.editor)
             }
             (State::Menu, Event::Key(key!('v'))) => {
-                let Some((source, _)) = &self.selected else {
-                    return EventResult::Consumed(None);
+                let sources = if self.marked.is_empty() {
+                    let Some((source, _)) = &self.selected else {
+                        return EventResult::Consumed(None);
+                    };
+                    vec![source.clone()]
+                } else {
+                    self.marked.clone()
                 };
-                match move_to::MoveTo::new(source, &self.root, cx.editor) {
+                match move_to::MoveTo::new(sources.into(), &self.root, cx.editor) {
                     Ok(picker) => {
                         return EventResult::Consumed(Some(Box::new(move |compositor, _| {
                             compositor.pop();
@@ -328,7 +349,23 @@ impl Component for FileActions {
                     Err(err) => Err(err.into()),
                 }
             }
-            (State::Menu, Event::Key(key!('d'))) if self.selected.is_some() => {
+            (State::Menu, Event::Key(key!('c'))) if !self.marked.is_empty() => {
+                return EventResult::Consumed(Some(Box::new(|compositor, _| {
+                    compositor.pop();
+                    if let Some(explorer) = compositor.top_mut::<Overlay<FileExplorer>>() {
+                        explorer
+                            .content
+                            .action_menu
+                            .as_mut()
+                            .unwrap()
+                            .marked
+                            .clear();
+                    }
+                })));
+            }
+            (State::Menu, Event::Key(key!('d')))
+                if self.selected.is_some() && self.marked.is_empty() =>
+            {
                 self.state = State::Delete;
                 Ok(())
             }
@@ -382,9 +419,19 @@ impl Component for FileActions {
                 line(0, "File actions", false);
                 line(1, "n  New file", false);
                 line(2, "m  New directory", false);
-                line(3, "r  Rename", self.selected.is_none());
-                line(4, "d  Delete", self.selected.is_none());
-                line(5, "v  Move to...", self.selected.is_none());
+                let single = self.selected.is_some() && self.marked.is_empty();
+                line(3, "r  Rename", !single);
+                line(4, "d  Delete", !single);
+                if self.marked.is_empty() {
+                    line(5, "v  Move to...", !single);
+                } else {
+                    line(
+                        5,
+                        &format!("v  Move {} marked to...", self.marked.len()),
+                        false,
+                    );
+                    line(6, "c  Clear marks", false);
+                }
             }
             State::Name(op, prompt) => {
                 line(0, op.label(), false);

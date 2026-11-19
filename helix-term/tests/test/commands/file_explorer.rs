@@ -68,6 +68,194 @@ fn screen(app: &Application) -> String {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn batch_move_keeps_marks_across_filters_cancel_and_conflict() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let project = dir.path().join("project");
+    let archive = dir.path().join("archive");
+    fs::create_dir(&project)?;
+    fs::create_dir(&archive)?;
+    let file = project.join("work.txt");
+    fs::write(&file, "saved")?;
+    fs::write(dir.path().join("note.txt"), "note")?;
+    fs::write(dir.path().join("other.txt"), "other")?;
+    fs::write(archive.join("project"), "occupied")?;
+    let mut app = AppBuilder::new().with_file(&file, None).build()?;
+    app.test_resize(120, 24).await?;
+    keys(&mut app, "idraft<esc><space>.").await?;
+    keys(&mut app, "<ret>").await?;
+    keys(&mut app, "<C-x>").await?;
+    keys(&mut app, "project").await?;
+    keys(&mut app, "<C-x><C-w>note").await?;
+    keys(&mut app, "<C-x>").await?;
+    let original = screen(&app);
+    assert!(
+        original.contains("2 marked") && original.contains("[x] note.txt"),
+        "{original}"
+    );
+    keys(&mut app, "<F4>varchive").await?;
+    assert!(screen(&app).contains("Move 2 items"));
+    keys(&mut app, "<ret><F4>").await?;
+    assert!(screen(&app).contains("Already exists"));
+    assert!(dir.path().join("note.txt").exists());
+    assert!(file.exists());
+    keys(&mut app, "<esc>").await?;
+    assert_eq!(screen(&app), original);
+    fs::remove_file(archive.join("project"))?;
+    keys(&mut app, "<C-w>other").await?;
+    keys(&mut app, "<F4>varchive").await?;
+    keys(&mut app, "<ret><F4>").await?;
+    assert_eq!(fs::read(archive.join("note.txt"))?, b"note");
+    assert!(dir.path().join("other.txt").exists());
+    let moved = archive.join("project/work.txt");
+    assert_eq!(doc!(app.editor).path(), Some(moved.as_path()));
+    assert!(doc!(app.editor).is_modified());
+    assert!(!screen(&app).contains("2 marked"));
+    keys(&mut app, "<ret>").await?;
+    assert_eq!(
+        doc!(app.editor).path(),
+        Some(archive.join("note.txt").as_path())
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn batch_marks_can_be_toggled_and_cleared_when_filtered_out() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let file = dir.path().join("note.txt");
+    fs::write(&file, "note")?;
+    let mut app = AppBuilder::new().with_file(&file, None).build()?;
+    app.test_resize(120, 24).await?;
+    keys(&mut app, "<space>.note").await?;
+    keys(&mut app, "<C-x>").await?;
+    assert!(screen(&app).contains("[x] note.txt"));
+    keys(&mut app, "<C-x>").await?;
+    assert!(!screen(&app).contains("[x] note.txt"));
+    keys(&mut app, "<C-x><C-w>nomatches").await?;
+    assert!(screen(&app).contains("1 marked"));
+    keys(&mut app, "<F4>c").await?;
+    assert!(!screen(&app).contains("1 marked"));
+    keys(&mut app, "<C-w>note").await?;
+    assert!(!screen(&app).contains("[x] note.txt"));
+    Ok(())
+}
+
+#[cfg(windows)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn batch_move_retries_only_remaining_items_after_sharing_violation() -> anyhow::Result<()> {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = tempfile::tempdir()?;
+    let first = dir.path().join("alpha.txt");
+    let second = dir.path().join("beta.txt");
+    fs::write(&first, "alpha")?;
+    fs::write(&second, "beta")?;
+    let dest = dir.path().join("archive");
+    fs::create_dir(&dest)?;
+    // Allow reads and writes while holding back delete/rename sharing.
+    let locked = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(3)
+        .open(&second)?;
+    let mut app = AppBuilder::new().with_file(&first, None).build()?;
+    app.test_resize(120, 24).await?;
+    keys(&mut app, "<space>.alpha").await?;
+    keys(&mut app, "<C-x><C-w>beta").await?;
+    keys(&mut app, "<C-x><F4>varchive").await?;
+    keys(&mut app, "<ret><F4>").await?;
+    assert!(dest.join("alpha.txt").is_file());
+    assert!(second.is_file());
+    assert!(screen(&app).contains("[x] beta.txt"));
+    assert!(app.editor.get_status().unwrap().0.contains("Moved 1 of 2"));
+    drop(locked);
+    keys(&mut app, "<F4>varchive").await?;
+    keys(&mut app, "<ret><F4>").await?;
+    assert_eq!(fs::read(dest.join("beta.txt"))?, b"beta");
+    assert!(!second.exists());
+    Ok(())
+}
+
+#[cfg(any(unix, windows))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn batch_move_uses_source_parents_resolved_before_moving_a_link_chain() -> anyhow::Result<()>
+{
+    let dir = tempfile::tempdir()?;
+    let outside = tempfile::tempdir()?;
+    let folder = dir.path().join("alpha");
+    fs::create_dir(&folder)?;
+    fs::write(folder.join("keep"), "keep")?;
+    link_directory(outside.path(), &folder.join("out"))?;
+    link_directory(&folder.join("out"), &dir.path().join("shortcut"))?;
+    fs::create_dir(outside.path().join("leaf"))?;
+    let dest = dir.path().join("archive");
+    fs::create_dir(&dest)?;
+    let mut app = AppBuilder::new()
+        .with_file(&dir.path().join("anchor"), None)
+        .build()?;
+    keys(&mut app, "<space>.alpha").await?;
+    keys(&mut app, "<C-x><C-w>shortcut").await?;
+    keys(&mut app, "<C-x><F4>varchive").await?;
+    keys(&mut app, "<ret><F4>").await?;
+    assert!(dest.join("alpha/keep").is_file());
+    assert!(dest.join("leaf").is_dir());
+    assert!(!outside.path().join("leaf").exists());
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn batch_move_rejects_duplicate_names_in_flattened_rows() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let dest = dir.path().join("archive");
+    fs::create_dir(&dest)?;
+    // Apple filesystems can treat composed and decomposed spellings as the
+    // same entry. Windows normally compares names without regard to case.
+    let (left_name, right_name) = if cfg!(target_vendor = "apple") {
+        ("café", "cafe\u{301}")
+    } else if cfg!(windows) {
+        ("leaf", "LEAF")
+    } else {
+        ("leaf", "leaf")
+    };
+    let left = dir.path().join("left").join(left_name);
+    let right = dir.path().join("right").join(right_name);
+    fs::create_dir_all(&left)?;
+    fs::create_dir_all(&right)?;
+    let mut app = AppBuilder::new()
+        .with_file(&dir.path().join("anchor"), None)
+        .build()?;
+    app.test_resize(120, 24).await?;
+    keys(&mut app, "<space>.left").await?;
+    keys(&mut app, "<C-x><C-w>right").await?;
+    keys(&mut app, "<C-x><F4>varchive").await?;
+    keys(&mut app, "<ret><F4>").await?;
+    assert!(screen(&app).contains("Multiple selected entries"));
+    assert!(left.is_dir());
+    assert!(right.is_dir());
+    assert!(fs::read_dir(dest)?.next().is_none());
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn batch_move_cannot_reassign_a_dirty_buffer_to_an_unrelated_file() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let src = dir.path().join("src");
+    let dest = src.join("archive");
+    fs::create_dir_all(&dest)?;
+    fs::write(dir.path().join("z.txt"), "original")?;
+    fs::write(src.join("z.txt"), "unrelated")?;
+    let alias = src.join("a.txt");
+    std::os::unix::fs::symlink("../z.txt", &alias)?;
+    let mut app = AppBuilder::new().with_file(&alias, None).build()?;
+    keys(&mut app, "idraft<esc><space>.a.txt").await?;
+    keys(&mut app, "<C-x><C-w><C-w><C-w>z.txt").await?;
+    keys(&mut app, "<C-x><F4>varchive").await?;
+    keys(&mut app, "<ret><F4>").await?;
+    assert_eq!(fs::read(dest.join("z.txt"))?, b"unrelated");
+    assert_eq!(doc!(app.editor).path(), Some(dest.join("a.txt").as_path()));
+    assert!(doc!(app.editor).is_modified());
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn move_file_follows_destination_and_previews_selected_file() -> anyhow::Result<()> {
     let dir = tempfile::tempdir()?;
     let project = dir.path().join("project");

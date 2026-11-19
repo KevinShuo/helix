@@ -267,7 +267,7 @@ pub struct Picker<T: 'static + Send + Sync, D: 'static> {
     completion_height: u16,
 
     cursor: u32,
-    action_menu: Option<fn(&Self) -> EventResult>,
+    action_menu: Option<Box<file_actions::ExplorerActions<T, D>>>,
     pending_focus: Option<Focus>,
     prompt: Prompt,
     query: PickerQuery,
@@ -793,11 +793,19 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
         // -- Render the contents:
         // subtract area of prompt from top
         let mut inner = inner.clip_top(2);
-        if self.action_menu.is_some() && inner.height > 0 {
+        if let Some(menu) = self.action_menu.as_ref().filter(|_| inner.height > 0) {
+            let footer = if menu.marked.is_empty() {
+                Cow::Borrowed("F4 File actions   Ctrl-x Mark")
+            } else {
+                Cow::Owned(format!(
+                    "{} marked   F4 File actions   Ctrl-x Mark",
+                    menu.marked.len()
+                ))
+            };
             surface.set_stringn(
                 inner.x + 1,
                 inner.bottom() - 1,
-                "F4 File actions",
+                &footer,
                 inner.width.saturating_sub(1) as usize,
                 text_style,
             );
@@ -829,7 +837,7 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
                     unreachable!();
                 };
                 let mut cell = column.format(item.data, &self.editor_data);
-                let width = if column.filter {
+                let mut width = if column.filter {
                     snapshot.pattern().column_pattern(matcher_index).indices(
                         item.matcher_columns[matcher_index].slice(..),
                         &mut matcher,
@@ -885,6 +893,21 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
                         .unwrap_or_default()
                 };
 
+                if let Some(menu) = &self.action_menu {
+                    let mark = (menu.path)(item.data)
+                        .map(|path| {
+                            if menu.marked.contains(path) {
+                                "[x] "
+                            } else {
+                                "[ ] "
+                            }
+                        })
+                        .unwrap_or("    ");
+                    if let Some(line) = cell.content.lines.first_mut() {
+                        line.0.insert(0, Span::raw(mark));
+                        width += mark.len();
+                    }
+                }
                 if width as u16 > *max_width {
                     *max_width = width as u16;
                 }
@@ -1150,8 +1173,17 @@ impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I,
                 code: helix_view::keyboard::KeyCode::F(4),
                 modifiers,
             } if modifiers.is_empty() => {
-                if let Some(open) = self.action_menu {
-                    return open(self);
+                if let Some(menu) = &self.action_menu {
+                    return (menu.open)(self, &menu.marked);
+                }
+            }
+            ctrl!('x') if self.action_menu.is_some() => {
+                let menu = self.action_menu.as_ref().unwrap();
+                if let Some(path) = self.selection().and_then(menu.path).map(Path::to_owned) {
+                    let marks = &mut self.action_menu.as_mut().unwrap().marked;
+                    if !marks.remove(&path) {
+                        marks.insert(path);
+                    }
                 }
             }
             shift!(Tab) | key!(Up) | ctrl!('p') => {
