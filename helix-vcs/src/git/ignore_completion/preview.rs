@@ -12,8 +12,8 @@ use super::explain::{Directory, Evaluation, Matcher};
 
 const SCAN_LIMIT: usize = 16_384;
 const DEPTH_LIMIT: usize = 64;
-const CHANGED_SAMPLES: usize = 100;
-const UNCHANGED_SAMPLES: usize = 50;
+pub const CHANGED_SAMPLES: usize = 100;
+pub const UNCHANGED_SAMPLES: usize = 50;
 
 #[derive(Debug)]
 pub struct Entry {
@@ -45,7 +45,35 @@ pub fn scan(
     trust_full: bool,
     cancelled: impl Fn() -> bool,
 ) -> Result<Report> {
-    scan_with_limit(base, text, line, trust_full, cancelled, SCAN_LIMIT)
+    scan_with_limit(
+        base,
+        text,
+        line,
+        trust_full,
+        cancelled,
+        SCAN_LIMIT,
+        (CHANGED_SAMPLES, UNCHANGED_SAMPLES),
+    )
+}
+
+/// Keep every match within the same bounded walk so an interactive preview
+/// can apply its display limits after filtering, without rescanning the tree.
+pub fn scan_all(
+    base: &Path,
+    text: &str,
+    line: usize,
+    trust_full: bool,
+    cancelled: impl Fn() -> bool,
+) -> Result<Report> {
+    scan_with_limit(
+        base,
+        text,
+        line,
+        trust_full,
+        cancelled,
+        SCAN_LIMIT,
+        (SCAN_LIMIT, SCAN_LIMIT),
+    )
 }
 
 fn scan_with_limit(
@@ -55,6 +83,7 @@ fn scan_with_limit(
     trust_full: bool,
     cancelled: impl Fn() -> bool,
     limit: usize,
+    sample_limits: (usize, usize),
 ) -> Result<Report> {
     ensure!(!cancelled(), "ignore preview cancelled");
     ensure!(
@@ -78,6 +107,7 @@ fn scan_with_limit(
         matcher,
         unchanged: Vec::new(),
         remaining: limit,
+        sample_limits,
         cancelled,
     };
     walk.visit(base, &directory, 0)?;
@@ -90,6 +120,7 @@ struct Walk<F> {
     report: Report,
     unchanged: Vec<Entry>,
     remaining: usize,
+    sample_limits: (usize, usize),
     cancelled: F,
 }
 
@@ -192,10 +223,10 @@ impl<F: Fn() -> bool> Walk<F> {
         let after_ignored = evaluation.after.as_ref().is_some_and(|d| d.ignored);
         let (examples, limit) = if before_ignored != after_ignored {
             self.report.changed += 1;
-            (&mut self.report.entries, CHANGED_SAMPLES)
+            (&mut self.report.entries, self.sample_limits.0)
         } else if evaluation.selected {
             self.report.unchanged += 1;
-            (&mut self.unchanged, UNCHANGED_SAMPLES)
+            (&mut self.unchanged, self.sample_limits.1)
         } else {
             return Ok(());
         };
@@ -333,6 +364,10 @@ mod tests {
         );
         assert_eq!(report.entries.len(), 1 + UNCHANGED_SAMPLES);
         assert_eq!(report.entries[0].path, Path::new("z.log"));
+        let all = scan_all(root, "*.log\na*.log\n", 0, true, || false)?;
+        assert_eq!(all.entries.len(), all.changed + all.unchanged);
+        assert_eq!(all.entries[all.changed].path, Path::new("a000.log"));
+        assert_eq!(all.entries.last().unwrap().path, Path::new("a051.log"));
         Ok(())
     }
 
@@ -344,10 +379,10 @@ mod tests {
         for file in ["1", "2", "3", "4", "5"] {
             fs::write(base.join(file), "")?;
         }
-        let report = scan_with_limit(&base, "*", 0, true, || false, 3)?;
+        let report = scan_with_limit(&base, "*", 0, true, || false, 3, (3, 3))?;
         assert!(report.partial);
         assert_eq!(report.changed, 3);
-        let report = scan_with_limit(&base, "*", 0, true, || false, 5)?;
+        let report = scan_with_limit(&base, "*", 0, true, || false, 5, (5, 5))?;
         assert!(!report.partial);
         let count = Cell::new(0);
         assert!(scan(&base, "*", 0, true, || {

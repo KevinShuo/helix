@@ -23,6 +23,10 @@ fn repository() -> anyhow::Result<tempfile::TempDir> {
 
 async fn preview(app: &mut Application, ready_text: &str) -> anyhow::Result<String> {
     keys(app, PREVIEW).await?;
+    wait_for_preview(app, ready_text).await
+}
+
+async fn wait_for_preview(app: &mut Application, ready_text: &str) -> anyhow::Result<String> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let output = screen(app);
@@ -48,6 +52,79 @@ fn assert_result(output: &str, path: &str, state: &str, source: &str, pattern: &
         rule.contains(source) && rule.contains(pattern),
         "Expected {source} and {pattern} for {path}:\n{output}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn path_filter_jumps_to_the_selected_visible_files_rule() -> anyhow::Result<()> {
+    let repo = repository()?;
+    let root = repo.path();
+    let rules = root.join(".gitignore");
+    fs::write(&rules, "*.log\n")?;
+    fs::write(root.join("elsewhere.log"), "")?;
+    let folder = root.join("项目 Key");
+    fs::create_dir_all(folder.join("nested"))?;
+    let winner = folder.join("nested/.gitignore");
+    fs::write(&winner, "# child\n!keep.log\n")?;
+    fs::write(folder.join("also.log"), "")?;
+    fs::write(folder.join("nested/keep.log"), "")?;
+    let mut app = AppBuilder::new().with_file(&rules, None).build()?;
+    app.test_resize(110, 26).await?;
+    // Submit the query in the same input burst as the command, before scan callbacks run.
+    keys(&mut app, &format!("{PREVIEW}/项目 key/")).await?;
+    let filtered = wait_for_preview(&mut app, "Path filter matches 2 of 3 files").await?;
+    assert!(!filtered.contains("elsewhere.log"), "{filtered}");
+    assert!(
+        filtered
+            .lines()
+            .any(|row| row.contains("> Now ignored") && row.contains("Key/also.log")),
+        "{filtered}"
+    );
+    // Narrow and broaden the query after moving the selection.
+    keys(&mut app, "<down>n<backspace>").await?;
+    assert!(screen(&app)
+        .lines()
+        .any(|row| row.contains("> Still included") && row.contains("Key/nested/keep.log")));
+    keys(&mut app, "<ret>").await?;
+    let (view, doc) = helix_view::current_ref!(app.editor);
+    assert_eq!(doc.path().unwrap(), winner);
+    let cursor = doc
+        .selection(view.id)
+        .primary()
+        .cursor(doc.text().slice(..));
+    assert_eq!(doc.text().slice(cursor..).to_string(), "!keep.log\n");
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn path_filter_recovers_from_no_matches_and_searches_beyond_the_sample() -> anyhow::Result<()>
+{
+    let repo = repository()?;
+    let root = repo.path();
+    let rules = root.join(".gitignore");
+    fs::write(&rules, "*.log\n")?;
+    for n in 0..104 {
+        fs::write(root.join(format!("file-{n:03}.log")), "")?;
+    }
+    let mut app = AppBuilder::new().with_file(&rules, None).build()?;
+    app.test_resize(100, 20).await?;
+    preview(&mut app, "Showing 100 of 104").await?;
+    // Filtering uses the original snapshot even when the working tree changes.
+    fs::remove_file(root.join("file-103.log"))?;
+    keys(&mut app, "/gitignore<ret>").await?;
+    assert!(
+        screen(&app).contains("No files match the path filter"),
+        "{}",
+        screen(&app)
+    );
+    assert!(screen(&app).contains(TITLE));
+    keys(&mut app, "<C-u>103x<backspace>").await?;
+    assert!(screen(&app).contains("> Now ignored  file-103.log"));
+    keys(&mut app, "<esc>").await?;
+    assert!(screen(&app).contains("Showing 100 of 104"));
+    keys(&mut app, "<esc>").await?;
+    assert!(!screen(&app).contains(TITLE));
+    assert!(!doc!(app.editor).is_modified());
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

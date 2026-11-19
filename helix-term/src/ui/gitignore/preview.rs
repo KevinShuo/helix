@@ -6,11 +6,17 @@ use std::{
 };
 
 use anyhow::{ensure, Context as _, Result};
-use helix_core::Selection;
+use helix_core::{Position, Selection};
 use helix_event::TaskController;
-use helix_vcs::ignore_completion::preview::{scan, Origin, Report};
+use helix_vcs::ignore_completion::preview::{
+    scan_all, Origin, Report, CHANGED_SAMPLES, UNCHANGED_SAMPLES,
+};
 use helix_view::{
-    align_view, editor::Action, graphics::Rect, input::KeyEvent, Align, DocumentId, Editor, ViewId,
+    align_view,
+    editor::Action,
+    graphics::{CursorKind, Rect},
+    input::KeyEvent,
+    Align, DocumentId, Editor, ViewId,
 };
 use tui::{
     buffer::Buffer,
@@ -21,7 +27,10 @@ use super::{display_text, existing_buffer};
 use crate::{
     compositor::{Component, Context, Event, EventResult},
     ctrl, job, key,
-    ui::ai_preview_text::{scroll_key, PreviewText},
+    ui::{
+        ai_preview_text::{scroll_key, PreviewText},
+        Prompt,
+    },
 };
 
 const ID: &str = "gitignore-rule-preview";
@@ -86,6 +95,8 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
                     _task: task,
                     results: None,
                     viewport: Rect::default(),
+                    filter: None,
+                    filter_area: Rect::default(),
                 },
             );
         }));
@@ -105,7 +116,7 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
             let trusted = trust
                 .query(&workspace, helix_loader::workspace_trust::TrustQuery::Git)
                 .is_trusted();
-            let report = scan(&base, &text, line, trusted, || worker.is_canceled())?;
+            let report = scan_all(&base, &text, line, trusted, || worker.is_canceled())?;
             Ok(format_report(&path, line, rule, report))
         })
         .await
@@ -123,7 +134,12 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
                 return;
             }
             match result {
-                Ok(results) => preview.results = Some(results),
+                Ok(mut results) => {
+                    if let Some(filter) = &preview.filter {
+                        results.filter(filter.line());
+                    }
+                    preview.results = Some(results);
+                }
                 Err(error) => {
                     compositor.remove(ID);
                     editor.set_error(format!("{error:#}"));
@@ -163,10 +179,21 @@ fn display_rule(rule: &str) -> String {
 
 struct FileRow {
     bytes: Range<usize>,
+    match_index: usize,
+}
+
+struct FileMatch {
+    path: String,
+    search_path: String,
+    state: &'static str,
     winner: Option<Arc<Origin>>,
 }
 
 struct Results {
+    heading: String,
+    matches: Vec<FileMatch>,
+    // The scan orders changed files before those whose final status is unchanged.
+    changed_end: usize,
     text: PreviewText,
     files: Vec<FileRow>,
     root: PathBuf,
@@ -176,7 +203,7 @@ struct Results {
 
 fn format_report(path: &Path, line: usize, rule: &str, report: Report) -> Results {
     let origin = path.strip_prefix(&report.root).unwrap_or(path);
-    let mut text = format!(
+    let mut heading = format!(
         "Rule {}:{}  {}\n{} changed, {} unchanged\n",
         display_path(origin),
         line + 1,
@@ -185,55 +212,39 @@ fn format_report(path: &Path, line: usize, rule: &str, report: Report) -> Result
         report.unchanged
     );
     if report.partial {
-        text.push_str("Partial scan. Counts cover the paths examined.\n");
+        heading.push_str("Partial scan. Counts cover the paths examined.\n");
     }
-    let total = report.changed + report.unchanged;
-    if report.entries.len() < total {
-        writeln!(
-            text,
-            "Showing {} of {total} matching files.",
-            report.entries.len()
-        )
-        .unwrap();
-    }
-    if report.entries.is_empty() {
-        text.push_str("\nNo matching untracked files found.");
-    }
-    let mut files = Vec::with_capacity(report.entries.len());
-    for entry in report.entries {
-        let state = match (entry.before_ignored, entry.after_ignored) {
-            (false, true) => "Now ignored",
-            (true, false) => "Now included",
-            (true, true) => "Still ignored",
-            (false, false) => "Still included",
-        };
-        text.push('\n');
-        let offset = text.len();
-        writeln!(text, "{state}  {}", display_path(&entry.path)).unwrap();
-        if let Some(winner) = &entry.winner {
-            writeln!(
-                text,
-                "  {}:{}  {}",
-                display_path(&winner.source),
-                winner.line,
-                display_rule(&winner.pattern)
-            )
-            .unwrap();
-        } else {
-            text.push_str("  Included by default\n");
-        }
-        files.push(FileRow {
-            bytes: offset..text.len(),
-            winner: entry.winner,
-        });
-    }
-    Results {
-        text: PreviewText::new(text),
-        files,
+    let matches = report
+        .entries
+        .into_iter()
+        .map(|entry| {
+            let state = match (entry.before_ignored, entry.after_ignored) {
+                (false, true) => "Now ignored",
+                (true, false) => "Now included",
+                (true, true) => "Still ignored",
+                (false, false) => "Still included",
+            };
+            let path = display_path(&entry.path);
+            FileMatch {
+                search_path: path.to_lowercase(),
+                path,
+                state,
+                winner: entry.winner,
+            }
+        })
+        .collect();
+    let mut results = Results {
+        heading,
+        matches,
+        changed_end: report.changed,
+        text: PreviewText::new(String::new()),
+        files: Vec::new(),
         root: report.root,
         selected: 0,
         scroll: 0,
-    }
+    };
+    results.filter("");
+    results
 }
 
 struct Preview {
@@ -242,9 +253,84 @@ struct Preview {
     _task: TaskController,
     results: Option<Results>,
     viewport: Rect,
+    filter: Option<Prompt>,
+    filter_area: Rect,
 }
 
 impl Results {
+    fn filter(&mut self, query: &str) {
+        let query = query.to_lowercase();
+        #[cfg(windows)]
+        let query = query.replace('\\', "/");
+        let previous = self.files.get(self.selected).map(|file| file.match_index);
+        let mut visible = Vec::new();
+        let mut changed = 0;
+        let mut unchanged = 0;
+        for (index, file) in self.matches.iter().enumerate() {
+            if !file.search_path.contains(&query) {
+                continue;
+            }
+            let (count, limit) = if index < self.changed_end {
+                (&mut changed, CHANGED_SAMPLES)
+            } else {
+                (&mut unchanged, UNCHANGED_SAMPLES)
+            };
+            *count += 1;
+            if *count <= limit {
+                visible.push(index);
+            }
+        }
+        let total = changed + unchanged;
+        let mut text = self.heading.clone();
+        if !query.is_empty() && total > 0 {
+            writeln!(
+                text,
+                "Path filter matches {total} of {} files.",
+                self.matches.len()
+            )
+            .unwrap();
+        }
+        if visible.len() < total {
+            writeln!(text, "Showing {} of {total} matching files.", visible.len()).unwrap();
+        }
+        if total == 0 {
+            text.push_str(if query.is_empty() {
+                "\nNo matching untracked files found."
+            } else {
+                "\nNo files match the path filter."
+            });
+        }
+        self.files.clear();
+        self.selected = 0;
+        for index in visible {
+            let file = &self.matches[index];
+            if Some(index) == previous {
+                self.selected = self.files.len();
+            }
+            text.push('\n');
+            let offset = text.len();
+            writeln!(text, "{}  {}", file.state, file.path).unwrap();
+            if let Some(winner) = &file.winner {
+                writeln!(
+                    text,
+                    "  {}:{}  {}",
+                    display_path(&winner.source),
+                    winner.line,
+                    display_rule(&winner.pattern)
+                )
+                .unwrap();
+            } else {
+                text.push_str("  Included by default\n");
+            }
+            self.files.push(FileRow {
+                bytes: offset..text.len(),
+                match_index: index,
+            });
+        }
+        self.text = PreviewText::new(text);
+        self.scroll = 0;
+    }
+
     fn selected_rows(&mut self, width: u16) -> Option<Range<usize>> {
         let bytes = &self.files.get(self.selected)?.bytes;
         Some(self.text.row_at_byte(width, bytes.start)..self.text.row_at_byte(width, bytes.end))
@@ -372,8 +458,47 @@ impl Component for Preview {
                 compositor.remove(ID);
             })))
         };
-        if !self.target.current(cx.editor) || matches!(event, Event::Key(key!(Esc) | ctrl!('c'))) {
+        if !self.target.current(cx.editor) || matches!(event, Event::Key(ctrl!('c'))) {
             return close();
+        }
+        match event {
+            Event::Key(key!(Esc)) => {
+                if self.filter.take().is_none() {
+                    return close();
+                }
+                if let Some(results) = &mut self.results {
+                    results.filter("");
+                    results.reveal(self.viewport);
+                }
+                return EventResult::Consumed(None);
+            }
+            Event::Key(key!('/')) if self.filter.is_none() => {
+                self.filter = Some(Prompt::new(
+                    "Path: ".into(),
+                    None,
+                    |_, _| Vec::new(),
+                    |_, _, _| {},
+                ));
+                return EventResult::Consumed(None);
+            }
+            Event::Key(key!(Enter) | key!(Down) | key!(Up) | key!(PageUp) | key!(PageDown)) => (),
+            _ => {
+                if let Some(prompt) = &mut self.filter {
+                    let previous = prompt.line().clone();
+                    if let Event::Paste(data) = event {
+                        prompt.insert_str(&display_text(data), cx.editor);
+                    } else {
+                        prompt.handle_event(event, cx);
+                    }
+                    if *prompt.line() != previous {
+                        if let Some(results) = &mut self.results {
+                            results.filter(prompt.line());
+                            results.reveal(self.viewport);
+                        }
+                    }
+                    return EventResult::Consumed(None);
+                }
+            }
         }
         let (Event::Key(key), Some(results)) = (event, &mut self.results) else {
             return EventResult::Consumed(None);
@@ -381,7 +506,7 @@ impl Component for Preview {
         if *key != key!(Enter) {
             results.navigate(*key, self.viewport);
         } else if let Some(file) = results.files.get(results.selected) {
-            let Some(origin) = &file.winner else {
+            let Some(origin) = &results.matches[file.match_index].winner else {
                 cx.editor
                     .set_status("Included by default. There is no rule to jump to.");
                 return EventResult::Consumed(None);
@@ -395,6 +520,7 @@ impl Component for Preview {
     }
 
     fn render(&mut self, area: Rect, surface: &mut Buffer, cx: &mut Context) {
+        self.filter_area = Rect::default();
         if area.area() == 0 {
             return;
         }
@@ -408,8 +534,11 @@ impl Component for Preview {
         );
         let style = cx.editor.theme.get("ui.popup");
         surface.clear_with(area, style);
-        let block = Block::bordered()
-            .title(" Gitignore rule preview | ↑↓ select · Enter go to rule · Esc close ");
+        let block = Block::bordered().title(if self.filter.is_some() {
+            " Gitignore rule preview | ↑↓ select · Enter jump · Esc clear filter "
+        } else {
+            " Gitignore rule preview | / filter · ↑↓ select · Enter jump · Esc close "
+        });
         let body = block.inner(area);
         block.render(area, surface);
         if !self.target.current(cx.editor) {
@@ -425,6 +554,21 @@ impl Component for Preview {
             return;
         }
         if body.area() == 0 {
+            return;
+        }
+        let body = if let Some(prompt) = &mut self.filter {
+            let field = body.clip_top(body.height - 1);
+            if field.width >= 10 {
+                self.filter_area = field;
+                prompt.render(field, surface, cx);
+            } else {
+                surface.set_stringn(field.x, field.y, "Path: ", field.width as usize, style);
+            }
+            body.clip_bottom(1)
+        } else {
+            body
+        };
+        if body.height == 0 {
             return;
         }
         let Some(results) = &mut self.results else {
@@ -467,6 +611,13 @@ impl Component for Preview {
 
     fn id(&self) -> Option<&'static str> {
         Some(ID)
+    }
+
+    fn cursor(&self, _area: Rect, editor: &Editor) -> (Option<Position>, CursorKind) {
+        match &self.filter {
+            Some(prompt) if self.filter_area.area() > 0 => prompt.cursor(self.filter_area, editor),
+            _ => (None, CursorKind::Hidden),
+        }
     }
 }
 

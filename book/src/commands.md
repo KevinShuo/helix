@@ -59,8 +59,12 @@ appear first. Each file shows its final state and the
 source file, line number and text of the deciding rule, including a rule that
 excluded a parent directory. Files included by default are marked accordingly.
 The preview shows a sample for large result sets and flags a partial scan when
-the counts cover only part of the tree. Select a file with the arrow keys or
-`j` and `k`, then press Enter to jump to its deciding rule. Helix reuses open
+the counts cover only part of the tree. Press `/` and type part of a
+repository-relative path to filter all scanned matches, including files beyond
+the initial sample. The filter ignores case and updates as you type.
+Select a file with the arrow keys and press Enter to jump to its deciding rule.
+Escape clears the filter and returns to the full list, where `j` and `k` also
+move the selection. Helix reuses open
 buffers, including unsaved edits. Press `Ctrl-o` to return to the previous
 position, or Escape to close the preview without jumping.
 
