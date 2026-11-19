@@ -96,6 +96,7 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
                     results: None,
                     viewport: Rect::default(),
                     filter: None,
+                    changed_only: false,
                     filter_area: Rect::default(),
                 },
             );
@@ -134,11 +135,11 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
                 return;
             }
             match result {
-                Ok(mut results) => {
-                    if let Some(filter) = &preview.filter {
-                        results.filter(filter.line());
-                    }
+                Ok(results) => {
                     preview.results = Some(results);
+                    if preview.changed_only || preview.filter.is_some() {
+                        preview.apply_filters();
+                    }
                 }
                 Err(error) => {
                     compositor.remove(ID);
@@ -243,7 +244,7 @@ fn format_report(path: &Path, line: usize, rule: &str, report: Report) -> Result
         selected: 0,
         scroll: 0,
     };
-    results.filter("");
+    results.filter("", false);
     results
 }
 
@@ -254,11 +255,25 @@ struct Preview {
     results: Option<Results>,
     viewport: Rect,
     filter: Option<Prompt>,
+    changed_only: bool,
     filter_area: Rect,
 }
 
+impl Preview {
+    fn apply_filters(&mut self) {
+        if let Some(results) = &mut self.results {
+            let query = self
+                .filter
+                .as_ref()
+                .map_or("", |prompt| prompt.line().as_str());
+            results.filter(query, self.changed_only);
+            results.reveal(self.viewport);
+        }
+    }
+}
+
 impl Results {
-    fn filter(&mut self, query: &str) {
+    fn filter(&mut self, query: &str, changed_only: bool) {
         let query = query.to_lowercase();
         #[cfg(windows)]
         let query = query.replace('\\', "/");
@@ -266,7 +281,12 @@ impl Results {
         let mut visible = Vec::new();
         let mut changed = 0;
         let mut unchanged = 0;
-        for (index, file) in self.matches.iter().enumerate() {
+        let candidates = if changed_only {
+            &self.matches[..self.changed_end]
+        } else {
+            &self.matches[..]
+        };
+        for (index, file) in candidates.iter().enumerate() {
             if !file.search_path.contains(&query) {
                 continue;
             }
@@ -285,8 +305,13 @@ impl Results {
         if !query.is_empty() && total > 0 {
             writeln!(
                 text,
-                "Path filter matches {total} of {} files.",
-                self.matches.len()
+                "Path filter matches {total} of {} {}.",
+                candidates.len(),
+                if changed_only {
+                    "changed files"
+                } else {
+                    "files"
+                }
             )
             .unwrap();
         }
@@ -294,10 +319,11 @@ impl Results {
             writeln!(text, "Showing {} of {total} matching files.", visible.len()).unwrap();
         }
         if total == 0 {
-            text.push_str(if query.is_empty() {
-                "\nNo matching untracked files found."
-            } else {
-                "\nNo files match the path filter."
+            text.push_str(match (changed_only, query.is_empty()) {
+                (true, true) => "\nNo files changed ignore status.",
+                (true, false) => "\nNo changed files match the path filter.",
+                (false, true) => "\nNo matching untracked files found.",
+                (false, false) => "\nNo files match the path filter.",
             });
         }
         self.files.clear();
@@ -466,10 +492,12 @@ impl Component for Preview {
                 if self.filter.take().is_none() {
                     return close();
                 }
-                if let Some(results) = &mut self.results {
-                    results.filter("");
-                    results.reveal(self.viewport);
-                }
+                self.apply_filters();
+                return EventResult::Consumed(None);
+            }
+            Event::Key(key!(Tab)) => {
+                self.changed_only = !self.changed_only;
+                self.apply_filters();
                 return EventResult::Consumed(None);
             }
             Event::Key(key!('/')) if self.filter.is_none() => {
@@ -491,10 +519,7 @@ impl Component for Preview {
                         prompt.handle_event(event, cx);
                     }
                     if *prompt.line() != previous {
-                        if let Some(results) = &mut self.results {
-                            results.filter(prompt.line());
-                            results.reveal(self.viewport);
-                        }
+                        self.apply_filters();
                     }
                     return EventResult::Consumed(None);
                 }
@@ -534,11 +559,15 @@ impl Component for Preview {
         );
         let style = cx.editor.theme.get("ui.popup");
         surface.clear_with(area, style);
-        let block = Block::bordered().title(if self.filter.is_some() {
-            " Gitignore rule preview | ↑↓ select · Enter jump · Esc clear filter "
+        let checked = if self.changed_only { 'x' } else { ' ' };
+        let controls = if self.filter.is_some() {
+            "↑↓ select · Enter jump · Esc clear path"
         } else {
-            " Gitignore rule preview | / filter · ↑↓ select · Enter jump · Esc close "
-        });
+            "/ path · ↑↓ select · Enter jump · Esc close"
+        };
+        let block = Block::bordered().title(format!(
+            " Gitignore rule preview | Tab [{checked}] changed only · {controls} "
+        ));
         let body = block.inner(area);
         block.render(area, surface);
         if !self.target.current(cx.editor) {

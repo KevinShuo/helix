@@ -55,6 +55,93 @@ fn assert_result(output: &str, path: &str, state: &str, source: &str, pattern: &
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn changed_only_combines_with_path_and_jumps_to_the_reincluded_files_rule(
+) -> anyhow::Result<()> {
+    let repo = repository()?;
+    let root = repo.path();
+    let rules = root.join(".gitignore");
+    let nested = root.join("build/scope/.gitignore");
+    fs::create_dir_all(root.join("build/scope"))?;
+    fs::write(&rules, "build/\n!build/\n")?;
+    fs::write(&nested, "# local rules\n*.log\n!keep.log\n")?;
+    git(root, &["add", "-f", "--", "build/scope/.gitignore"])?;
+    for file in [
+        "build/other.txt",
+        "build/scope/keep.log",
+        "build/scope/stay.log",
+    ] {
+        fs::write(root.join(file), "")?;
+    }
+    let mut app = AppBuilder::new().with_file(&rules, None).build()?;
+    app.test_resize(110, 24).await?;
+    keys(&mut app, &format!("j{PREVIEW}<tab>")).await?;
+    let output = wait_for_preview(&mut app, "2 changed, 1 unchanged").await?;
+    assert!(
+        output.contains("other.txt") && output.contains("keep.log") && !output.contains("stay.log"),
+        "{output}"
+    );
+    keys(&mut app, "/scope/").await?;
+    let output = screen(&app);
+    assert!(
+        output.contains("Path filter matches 1 of 2 changed files."),
+        "{output}"
+    );
+    assert!(
+        output.contains("> Now included  build/scope/keep.log")
+            && !output.contains("other.txt")
+            && !output.contains("stay.log"),
+        "{output}"
+    );
+    keys(&mut app, "<tab><down>").await?;
+    assert!(screen(&app).contains("> Still ignored  build/scope/stay.log"));
+    keys(&mut app, "<tab><ret>").await?;
+    let (view, doc) = helix_view::current_ref!(app.editor);
+    assert_eq!(doc.path().unwrap(), nested);
+    let cursor = doc
+        .selection(view.id)
+        .primary()
+        .cursor(doc.text().slice(..));
+    assert_eq!(doc.text().slice(cursor..).to_string(), "!keep.log\n");
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn changed_only_keeps_newly_ignored_files_when_the_path_filter_is_cleared(
+) -> anyhow::Result<()> {
+    let repo = repository()?;
+    let root = repo.path();
+    let rules = root.join(".gitignore");
+    fs::write(&rules, "*.log\n!skip.log\nalways.log\n")?;
+    for file in ["new.log", "skip.log", "always.log"] {
+        fs::write(root.join(file), "")?;
+    }
+    let mut app = AppBuilder::new().with_file(&rules, None).build()?;
+    app.test_resize(110, 24).await?;
+    preview(&mut app, "1 changed, 2 unchanged").await?;
+    keys(&mut app, "/skip<tab><ret>").await?;
+    let output = screen(&app);
+    assert!(
+        output.contains(TITLE) && output.contains("No changed files match the path filter"),
+        "{output}"
+    );
+    keys(&mut app, "<esc>").await?;
+    let output = screen(&app);
+    assert!(
+        output.contains("> Now ignored  new.log")
+            && !output.contains("skip.log")
+            && !output.contains("always.log"),
+        "{output}"
+    );
+    keys(&mut app, "<tab>").await?;
+    let output = screen(&app);
+    assert!(
+        output.contains("Still included  skip.log") && output.contains("Still ignored  always.log"),
+        "{output}"
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn path_filter_jumps_to_the_selected_visible_files_rule() -> anyhow::Result<()> {
     let repo = repository()?;
     let root = repo.path();
@@ -221,7 +308,9 @@ async fn enter_uses_later_rule_in_the_unsaved_buffer() -> anyhow::Result<()> {
     let mut app = AppBuilder::new().with_file(&path, None).build()?;
     keys(&mut app, "i*.log<ret>!keep.log<esc>gg").await?;
     preview(&mut app, "0 changed, 1 unchanged").await?;
-    keys(&mut app, "<ret>").await?;
+    keys(&mut app, "<tab><ret>").await?;
+    assert!(screen(&app).contains("No files changed ignore status."));
+    keys(&mut app, "<tab><ret>").await?;
     assert!(!screen(&app).contains(TITLE));
     let (view, doc) = helix_view::current_ref!(app.editor);
     let cursor = doc
