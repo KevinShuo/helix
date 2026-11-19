@@ -97,6 +97,100 @@ async fn completed_exception_can_be_filtered_and_opened_before_saving() -> anyho
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn directional_filter_newly_ignored_combines_with_path_before_scan_finishes(
+) -> anyhow::Result<()> {
+    let repo = repository()?;
+    let root = repo.path();
+    let rules = root.join(".gitignore");
+    fs::create_dir(root.join("out"))?;
+    fs::write(&rules, "# logs\n*.log\nalways.log\n!keep.log\n")?;
+    for file in ["other.log", "out/new.log", "out/always.log", "out/keep.log"] {
+        fs::write(root.join(file), "")?;
+    }
+    let mut app = AppBuilder::new().with_file(&rules, None).build()?;
+    app.test_resize(110, 24).await?;
+    keys(&mut app, &format!("jl{PREVIEW}<A-i>/out/")).await?;
+    let output = wait_for_preview(&mut app, "2 changed, 2 unchanged").await?;
+    assert!(output.contains("1 of 2 newly ignored files"), "{output}");
+    assert!(output.contains("> Now ignored  out/new.log"), "{output}");
+    assert!(
+        !output.contains("out/always.log")
+            && !output.contains("out/keep.log")
+            && !output.contains("other.log"),
+        "{output}"
+    );
+    keys(&mut app, "<A-r><ret>").await?;
+    let output = screen(&app);
+    assert!(
+        output.contains("No re-included files match the path filter"),
+        "{output}"
+    );
+    keys(&mut app, "<A-i><ret>").await?;
+    let (view, doc) = helix_view::current_ref!(app.editor);
+    let cursor = doc
+        .selection(view.id)
+        .primary()
+        .cursor(doc.text().slice(..));
+    assert!(!screen(&app).contains(TITLE));
+    assert_eq!(doc.path().unwrap(), rules);
+    assert_eq!(cursor, doc.text().line_to_char(1));
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn directional_filter_reincluded_keeps_selection_and_jumps_to_nested_rule(
+) -> anyhow::Result<()> {
+    let repo = repository()?;
+    let root = repo.path();
+    let rules = root.join(".gitignore");
+    let nested = root.join("build/sub/.gitignore");
+    fs::create_dir_all(root.join("build/sub"))?;
+    fs::write(&rules, "build/\n!build/\n")?;
+    fs::write(&nested, "*.log\n!pick.log\n")?;
+    git(root, &["add", "-f", "--", "build/sub/.gitignore"])?;
+    for file in [
+        "build/outside",
+        "build/sub/a.txt",
+        "build/sub/pick.log",
+        "build/sub/stay.log",
+    ] {
+        fs::write(root.join(file), "")?;
+    }
+    let mut app = AppBuilder::new().with_file(&rules, None).build()?;
+    app.test_resize(110, 26).await?;
+    keys(&mut app, &format!("j{PREVIEW}/sub/")).await?;
+    wait_for_preview(&mut app, "3 changed, 1 unchanged").await?;
+    keys(&mut app, "<down><A-r>").await?;
+    let output = screen(&app);
+    assert!(output.contains("2 of 3 re-included files"), "{output}");
+    assert!(
+        output.contains("> Now included  build/sub/pick.log"),
+        "{output}"
+    );
+    assert!(
+        !output.contains("stay.log") && !output.contains("outside"),
+        "{output}"
+    );
+    keys(&mut app, "<esc>").await?;
+    let output = screen(&app);
+    assert!(
+        output.contains("outside") && !output.contains("stay.log"),
+        "{output}"
+    );
+    keys(&mut app, "<A-r>").await?;
+    assert!(screen(&app).contains("Still ignored  build/sub/stay.log"));
+    keys(&mut app, "/sub/<A-r><ret>").await?;
+    let (view, doc) = helix_view::current_ref!(app.editor);
+    let cursor = doc
+        .selection(view.id)
+        .primary()
+        .cursor(doc.text().slice(..));
+    assert_eq!(doc.path().unwrap(), nested);
+    assert_eq!(doc.text().slice(cursor..).to_string(), "!pick.log\n");
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn changed_only_combines_with_path_and_jumps_to_the_reincluded_files_rule(
 ) -> anyhow::Result<()> {
     let repo = repository()?;

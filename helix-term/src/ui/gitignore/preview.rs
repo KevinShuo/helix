@@ -25,6 +25,7 @@ use tui::{
 
 use super::{display_text, existing_buffer};
 use crate::{
+    alt,
     compositor::{Component, Context, Event, EventResult},
     ctrl, job, key,
     ui::{
@@ -96,7 +97,7 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
                     results: None,
                     viewport: Rect::default(),
                     filter: None,
-                    changed_only: false,
+                    status: StatusFilter::All,
                     filter_area: Rect::default(),
                 },
             );
@@ -137,7 +138,7 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
             match result {
                 Ok(results) => {
                     preview.results = Some(results);
-                    if preview.changed_only || preview.filter.is_some() {
+                    if preview.status != StatusFilter::All || preview.filter.is_some() {
                         preview.apply_filters();
                     }
                 }
@@ -186,15 +187,57 @@ struct FileRow {
 struct FileMatch {
     path: String,
     search_path: String,
-    state: &'static str,
+    before_ignored: bool,
+    after_ignored: bool,
     winner: Option<Arc<Origin>>,
+}
+
+impl FileMatch {
+    fn changed(&self) -> bool {
+        self.before_ignored != self.after_ignored
+    }
+
+    fn state(&self) -> &'static str {
+        match (self.before_ignored, self.after_ignored) {
+            (false, true) => "Now ignored",
+            (true, false) => "Now included",
+            (true, true) => "Still ignored",
+            (false, false) => "Still included",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StatusFilter {
+    All,
+    Changed,
+    NewlyIgnored,
+    Reincluded,
+}
+
+impl StatusFilter {
+    fn matches(self, file: &FileMatch) -> bool {
+        match self {
+            Self::All => true,
+            Self::Changed => file.changed(),
+            Self::NewlyIgnored => !file.before_ignored && file.after_ignored,
+            Self::Reincluded => file.before_ignored && !file.after_ignored,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "all files",
+            Self::Changed => "changed files",
+            Self::NewlyIgnored => "newly ignored files",
+            Self::Reincluded => "re-included files",
+        }
+    }
 }
 
 struct Results {
     heading: String,
     matches: Vec<FileMatch>,
-    // The scan orders changed files before those whose final status is unchanged.
-    changed_end: usize,
     text: PreviewText,
     files: Vec<FileRow>,
     root: PathBuf,
@@ -219,17 +262,12 @@ fn format_report(path: &Path, line: usize, rule: &str, report: Report) -> Result
         .entries
         .into_iter()
         .map(|entry| {
-            let state = match (entry.before_ignored, entry.after_ignored) {
-                (false, true) => "Now ignored",
-                (true, false) => "Now included",
-                (true, true) => "Still ignored",
-                (false, false) => "Still included",
-            };
             let path = display_path(&entry.path);
             FileMatch {
                 search_path: path.to_lowercase(),
                 path,
-                state,
+                before_ignored: entry.before_ignored,
+                after_ignored: entry.after_ignored,
                 winner: entry.winner,
             }
         })
@@ -237,14 +275,13 @@ fn format_report(path: &Path, line: usize, rule: &str, report: Report) -> Result
     let mut results = Results {
         heading,
         matches,
-        changed_end: report.changed,
         text: PreviewText::new(String::new()),
         files: Vec::new(),
         root: report.root,
         selected: 0,
         scroll: 0,
     };
-    results.filter("", false);
+    results.filter("", StatusFilter::All);
     results
 }
 
@@ -255,7 +292,7 @@ struct Preview {
     results: Option<Results>,
     viewport: Rect,
     filter: Option<Prompt>,
-    changed_only: bool,
+    status: StatusFilter,
     filter_area: Rect,
 }
 
@@ -266,14 +303,14 @@ impl Preview {
                 .filter
                 .as_ref()
                 .map_or("", |prompt| prompt.line().as_str());
-            results.filter(query, self.changed_only);
+            results.filter(query, self.status);
             results.reveal(self.viewport);
         }
     }
 }
 
 impl Results {
-    fn filter(&mut self, query: &str, changed_only: bool) {
+    fn filter(&mut self, query: &str, status: StatusFilter) {
         let query = query.to_lowercase();
         #[cfg(windows)]
         let query = query.replace('\\', "/");
@@ -281,16 +318,16 @@ impl Results {
         let mut visible = Vec::new();
         let mut changed = 0;
         let mut unchanged = 0;
-        let candidates = if changed_only {
-            &self.matches[..self.changed_end]
-        } else {
-            &self.matches[..]
-        };
-        for (index, file) in candidates.iter().enumerate() {
+        let mut candidates = 0;
+        for (index, file) in self.matches.iter().enumerate() {
+            if !status.matches(file) {
+                continue;
+            }
+            candidates += 1;
             if !file.search_path.contains(&query) {
                 continue;
             }
-            let (count, limit) = if index < self.changed_end {
+            let (count, limit) = if file.changed() {
                 (&mut changed, CHANGED_SAMPLES)
             } else {
                 (&mut unchanged, UNCHANGED_SAMPLES)
@@ -302,29 +339,28 @@ impl Results {
         }
         let total = changed + unchanged;
         let mut text = self.heading.clone();
+        let files = if status == StatusFilter::All {
+            "files"
+        } else {
+            status.label()
+        };
         if !query.is_empty() && total > 0 {
-            writeln!(
-                text,
-                "Path filter matches {total} of {} {}.",
-                candidates.len(),
-                if changed_only {
-                    "changed files"
-                } else {
-                    "files"
-                }
-            )
-            .unwrap();
+            writeln!(text, "Path filter matches {total} of {candidates} {files}.").unwrap();
         }
         if visible.len() < total {
             writeln!(text, "Showing {} of {total} matching files.", visible.len()).unwrap();
         }
         if total == 0 {
-            text.push_str(match (changed_only, query.is_empty()) {
-                (true, true) => "\nNo files changed ignore status.",
-                (true, false) => "\nNo changed files match the path filter.",
-                (false, true) => "\nNo matching untracked files found.",
-                (false, false) => "\nNo files match the path filter.",
-            });
+            if query.is_empty() {
+                text.push_str(match status {
+                    StatusFilter::All => "\nNo matching untracked files found.",
+                    StatusFilter::Changed => "\nNo files changed ignore status.",
+                    StatusFilter::NewlyIgnored => "\nNo files were newly ignored.",
+                    StatusFilter::Reincluded => "\nNo files were re-included.",
+                });
+            } else {
+                write!(text, "\nNo {files} match the path filter.").unwrap();
+            }
         }
         self.files.clear();
         self.selected = 0;
@@ -335,7 +371,7 @@ impl Results {
             }
             text.push('\n');
             let offset = text.len();
-            writeln!(text, "{}  {}", file.state, file.path).unwrap();
+            writeln!(text, "{}  {}", file.state(), file.path).unwrap();
             if let Some(winner) = &file.winner {
                 writeln!(
                     text,
@@ -495,8 +531,17 @@ impl Component for Preview {
                 self.apply_filters();
                 return EventResult::Consumed(None);
             }
-            Event::Key(key!(Tab)) => {
-                self.changed_only = !self.changed_only;
+            Event::Key(key @ (key!(Tab) | alt!('i') | alt!('r'))) => {
+                let requested = match *key {
+                    alt!('i') => StatusFilter::NewlyIgnored,
+                    alt!('r') => StatusFilter::Reincluded,
+                    _ => StatusFilter::Changed,
+                };
+                self.status = if requested == self.status {
+                    StatusFilter::All
+                } else {
+                    requested
+                };
                 self.apply_filters();
                 return EventResult::Consumed(None);
             }
@@ -559,17 +604,20 @@ impl Component for Preview {
         );
         let style = cx.editor.theme.get("ui.popup");
         surface.clear_with(area, style);
-        let checked = if self.changed_only { 'x' } else { ' ' };
         let controls = if self.filter.is_some() {
-            "↑↓ select · Enter jump · Esc clear path"
+            " ↑↓ select · Enter jump · Esc clear path "
         } else {
-            "/ path · ↑↓ select · Enter jump · Esc close"
+            " / path · ↑↓ select · Enter jump · Esc close "
         };
         let block = Block::bordered().title(format!(
-            " Gitignore rule preview | Tab [{checked}] changed only · {controls} "
+            " Gitignore rule preview | {} · Tab changed · Alt-i ignored · Alt-r re-included ",
+            self.status.label()
         ));
         let body = block.inner(area);
         block.render(area, surface);
+        if body.area() > 0 {
+            surface.set_stringn(body.x, body.bottom(), controls, body.width as usize, style);
+        }
         if !self.target.current(cx.editor) {
             if body.area() > 0 {
                 surface.set_stringn(

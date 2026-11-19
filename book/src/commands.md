@@ -59,13 +59,15 @@ appear first. Each file shows its final state and the
 source file, line number and text of the deciding rule, including a rule that
 excluded a parent directory. Files included by default are marked accordingly.
 The preview shows a sample for large result sets and flags a partial scan when
-the counts cover only part of the tree. Press Tab to show only files that
-become ignored or included because of the current rule. Press Tab again to
-show both changed and unchanged matches.
+the counts cover only part of the tree. Press Tab to show all files whose
+ignore status changes because of the current rule. Use `Alt-i` to show only
+newly ignored files or `Alt-r` to show only re-included files. Press the
+active filter's shortcut again to show all matches.
 
 Press `/` and type part of a repository-relative path to filter scanned matches,
 including files beyond the initial sample. The path filter ignores case and
-updates as you type. Tab also works inside the path prompt and preserves the query.
+updates as you type. All three status shortcuts work inside the path prompt
+and preserve the query.
 Select a file with the arrow keys and press Enter to jump to its deciding rule.
 Escape clears the path filter and keeps the current status filter. Outside
 the path prompt, `j` and `k` also move the selection. Helix reuses open
