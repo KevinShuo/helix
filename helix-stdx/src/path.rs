@@ -14,11 +14,38 @@ use std::{
 
 use crate::env::current_working_dir;
 
+/// Find the suffix that travels with a renamed entry. Resolve ancestors before
+/// the rename, while aliases still work, including for a not-yet-saved child.
+/// `resolved_entry` resolves only the parent so moving a symlink does not also
+/// move documents opened directly on its referent.
+pub fn moved_suffix(path: &Path, entry: &Path, resolved_entry: &Path) -> Option<PathBuf> {
+    if let Ok(suffix) = path.strip_prefix(entry) {
+        return Some(suffix.into());
+    }
+    for ancestor in path.ancestors() {
+        let name = ancestor.file_name()?;
+        let resolved_parent = std::fs::canonicalize(ancestor.parent()?).ok();
+        let physical_entry = resolved_parent.map(|parent| parent.join(name));
+        let prefix = physical_entry
+            .as_deref()
+            .and_then(|p| p.strip_prefix(resolved_entry).ok().map(Path::to_owned))
+            .or_else(|| {
+                let resolved = std::fs::canonicalize(ancestor).ok()?;
+                Some(resolved.strip_prefix(resolved_entry).ok()?.to_owned())
+            });
+        if let Some(mut suffix) = prefix {
+            suffix.extend(path.strip_prefix(ancestor).ok()?.components());
+            return Some(suffix);
+        }
+    }
+    None
+}
+
 /// Rename a directory entry without replacing a concurrently created destination.
 #[cfg(windows)]
 pub fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::MoveFileW;
+    use windows_sys::Win32::Storage::FileSystem::MoveFileExW;
     // canonicalize the parent to obtain a long-path-capable absolute name
     // without following the directory entry that is being moved.
     fn wide(path: &Path) -> std::io::Result<Vec<u16>> {
@@ -34,7 +61,8 @@ pub fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
     }
     let (from, to) = (wide(from)?, wide(to)?);
     // SAFETY: both paths are NUL-terminated and live for the duration of the call.
-    if unsafe { MoveFileW(from.as_ptr(), to.as_ptr()) } == 0 {
+    // Zero flags prohibit both replacement and cross-volume copy/delete.
+    if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } == 0 {
         return Err(std::io::Error::last_os_error());
     }
     Ok(())

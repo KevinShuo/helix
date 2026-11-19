@@ -372,6 +372,14 @@ pub fn file_explorer(root: PathBuf, editor: &Editor) -> Result<FileExplorer, std
 }
 
 fn directory_content(root: &Path, editor: &Editor) -> Result<Vec<(PathBuf, bool)>, std::io::Error> {
+    directory_entries(root, editor, editor.config().file_explorer.flatten_dirs)
+}
+
+fn directory_entries(
+    root: &Path,
+    editor: &Editor,
+    flatten_dirs: bool,
+) -> Result<Vec<(PathBuf, bool)>, std::io::Error> {
     use ignore::WalkBuilder;
 
     let config = editor.config();
@@ -397,7 +405,7 @@ fn directory_content(root: &Path, editor: &Editor) -> Result<Vec<(PathBuf, bool)
                     let path = entry.path();
                     let is_dir = path.is_dir();
                     let mut path = path.to_path_buf();
-                    if is_dir && path != root && config.file_explorer.flatten_dirs {
+                    if is_dir && path != root && flatten_dirs {
                         while let Some(single_child_directory) = get_child_if_single_dir(&path) {
                             path = single_child_directory;
                         }

@@ -1805,6 +1805,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "toml",
+ "winapi-util",
  "windows-sys 0.61.2",
 ]
 

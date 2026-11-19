@@ -27,6 +27,8 @@ use crate::{
     },
 };
 
+mod move_to;
+
 impl FileExplorer {
     fn matches_entry(&self, entry: &(PathBuf, bool), matcher: &mut nucleo::Matcher) -> bool {
         let text = self.columns[0].format_text(entry, &self.editor_data);
@@ -285,7 +287,7 @@ impl FileActions {
 
     fn area(&self, area: Rect) -> Rect {
         let height = if matches!(self.state, State::Menu) {
-            7
+            8
         } else {
             5
         };
@@ -311,6 +313,20 @@ impl Component for FileActions {
             }
             (State::Menu, Event::Key(key!('r'))) if self.selected.is_some() => {
                 self.start_name(Operation::Rename, cx.editor)
+            }
+            (State::Menu, Event::Key(key!('v'))) => {
+                let Some((source, _)) = &self.selected else {
+                    return EventResult::Consumed(None);
+                };
+                match move_to::MoveTo::new(source, &self.root, cx.editor) {
+                    Ok(picker) => {
+                        return EventResult::Consumed(Some(Box::new(move |compositor, _| {
+                            compositor.pop();
+                            compositor.push(Box::new(overlaid(picker)));
+                        })))
+                    }
+                    Err(err) => Err(err.into()),
+                }
             }
             (State::Menu, Event::Key(key!('d'))) if self.selected.is_some() => {
                 self.state = State::Delete;
@@ -368,6 +384,7 @@ impl Component for FileActions {
                 line(2, "m  New directory", false);
                 line(3, "r  Rename", self.selected.is_none());
                 line(4, "d  Delete", self.selected.is_none());
+                line(5, "v  Move to...", self.selected.is_none());
             }
             State::Name(op, prompt) => {
                 line(0, op.label(), false);

@@ -474,6 +474,15 @@ Inside the explorer, press `F4` to open **File actions**.
 | `m` | Create a directory in the displayed directory |
 | `r` | Rename the selected entry. Typing replaces the selected file stem. |
 | `d` | Permanently delete the selected file or empty directory |
+| `v` | Move the selected file or directory, keeping its name |
+
+After pressing `v`, type to filter directories. Press `Enter` to browse the
+highlighted directory or choose `../` to go up. The footer shows the
+destination path. Press `F4` to move into the directory you are browsing, or
+`Esc` to return to your original selection and filter. After a move, the
+explorer selects the moved entry in its new directory and shows its preview.
+Open buffers keep their unsaved edits. Moves require the same filesystem and
+an unused destination name.
 
 Press `Enter` to submit a name. The explorer selects the new entry so you can
 press `Enter` again to open it. Deletion requires an explicit `y`. Pressing `Enter` or

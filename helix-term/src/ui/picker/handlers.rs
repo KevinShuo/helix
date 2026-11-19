@@ -54,15 +54,7 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> AsyncHook
         };
 
         job::dispatch_blocking(move |editor, compositor| {
-            let Some(Overlay {
-                content: picker, ..
-            }) = compositor.find::<Overlay<Picker<T, D>>>()
-            else {
-                return;
-            };
-
-            let Some(CachedPreview::Document(ref mut doc)) = picker.preview_cache.get_mut(&path)
-            else {
+            let Some(doc) = cached_document::<T, D>(compositor, &path) else {
                 return;
             };
 
@@ -87,16 +79,7 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> AsyncHook
                 };
 
                 job::dispatch_blocking(move |editor, compositor| {
-                    let Some(Overlay {
-                        content: picker, ..
-                    }) = compositor.find::<Overlay<Picker<T, D>>>()
-                    else {
-                        log::info!("picker closed before syntax highlighting finished");
-                        return;
-                    };
-                    let Some(CachedPreview::Document(ref mut doc)) =
-                        picker.preview_cache.get_mut(&path)
-                    else {
+                    let Some(doc) = cached_document::<T, D>(compositor, &path) else {
                         return;
                     };
                     let diagnostics = helix_view::Editor::doc_diagnostics(
@@ -110,6 +93,26 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> AsyncHook
             });
         });
     }
+}
+
+// Alt+Enter can leave multiple pickers of the same type on the compositor.
+// Only the cache that issued this highlight request should receive its result.
+fn cached_document<'a, T: 'static + Send + Sync, D: 'static + Send + Sync>(
+    compositor: &'a mut crate::compositor::Compositor,
+    path: &Arc<Path>,
+) -> Option<&'a mut helix_view::Document> {
+    for layer in compositor.layers_of_type::<Overlay<Picker<T, D>>>() {
+        let cache = &mut layer.content.preview_cache;
+        if cache
+            .get_key_value(path)
+            .is_some_and(|(key, _)| Arc::ptr_eq(key, path))
+        {
+            if let Some(CachedPreview::Document(doc)) = cache.get_mut(path) {
+                return Some(doc);
+            }
+        }
+    }
+    None
 }
 
 pub(super) struct DynamicQueryChange {

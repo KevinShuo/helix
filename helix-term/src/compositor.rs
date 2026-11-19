@@ -234,6 +234,16 @@ impl Compositor {
             .and_then(|component| component.as_any_mut().downcast_mut())
     }
 
+    pub(crate) fn top_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.layers.last_mut()?.as_any_mut().downcast_mut()
+    }
+
+    pub(crate) fn layers_of_type<T: 'static>(&mut self) -> impl Iterator<Item = &mut T> {
+        self.layers
+            .iter_mut()
+            .filter_map(|layer| layer.as_any_mut().downcast_mut())
+    }
+
     pub fn find_id<T: 'static>(&mut self, id: &'static str) -> Option<&mut T> {
         self.layers
             .iter_mut()

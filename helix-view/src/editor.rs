@@ -1753,25 +1753,45 @@ impl Editor {
             }
         }
 
+        // A successful rename can break the alias used to open a document.
+        // Capture all affected buffers while their original paths still resolve.
+        let resolved_entry = if exclusive {
+            let parent = fs::canonicalize(old_path.parent().ok_or(io::ErrorKind::InvalidInput)?)?;
+            Some(parent.join(old_path.file_name().ok_or(io::ErrorKind::InvalidInput)?))
+        } else {
+            None
+        };
+        let mut moved = Vec::new();
+        let mut destinations = HashSet::new();
+        for doc in self.documents() {
+            let Some(path) = doc.path() else { continue };
+            let suffix = if let Some(entry) = &resolved_entry {
+                helix_stdx::path::moved_suffix(path, old_path, entry)
+            } else if is_dir || path == old_path {
+                path.strip_prefix(old_path).ok().map(Path::to_owned)
+            } else {
+                None
+            };
+            if let Some(suffix) = suffix {
+                let mut target = new_path.clone();
+                target.extend(suffix.components());
+                if exclusive && !destinations.insert(target.clone()) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Multiple open buffers would use {}", target.display()),
+                    ));
+                }
+                moved.push((doc.id(), target));
+            }
+        }
         if exclusive {
             helix_stdx::path::rename_noreplace(old_path, &new_path)?;
         } else if old_path.exists() {
             fs::rename(old_path, &new_path)?;
         }
 
-        if is_dir {
-            let moved: Vec<_> = self
-                .documents()
-                .filter_map(|doc| {
-                    let suffix = doc.path()?.strip_prefix(old_path).ok()?;
-                    Some((doc.id(), new_path.join(suffix)))
-                })
-                .collect();
-            for (id, path) in moved {
-                self.set_doc_path(id, &path);
-            }
-        } else if let Some(doc) = self.document_by_path(old_path) {
-            self.set_doc_path(doc.id(), &new_path);
+        for (id, path) in moved {
+            self.set_doc_path(id, &path);
         }
         let is_dir = new_path.is_dir();
         for ls in self.language_servers.iter_clients() {
