@@ -135,6 +135,15 @@ impl PreviewText {
             }
         }
     }
+
+    /// Locate a byte in the display text after wrapping at the given width.
+    #[cfg(feature = "git")]
+    pub(super) fn row_at_byte(&mut self, width: u16, offset: usize) -> usize {
+        self.layout(width);
+        self.rows
+            .partition_point(|&start| start as usize <= offset)
+            .saturating_sub(1)
+    }
 }
 
 #[cfg(test)]

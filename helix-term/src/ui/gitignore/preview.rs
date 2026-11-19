@@ -1,18 +1,23 @@
 use std::{
     fmt::Write,
+    ops::Range,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::{ensure, Context as _, Result};
+use helix_core::Selection;
 use helix_event::TaskController;
-use helix_vcs::ignore_completion::preview::{scan, Report};
-use helix_view::{graphics::Rect, DocumentId, Editor, ViewId};
+use helix_vcs::ignore_completion::preview::{scan, Origin, Report};
+use helix_view::{
+    align_view, editor::Action, graphics::Rect, input::KeyEvent, Align, DocumentId, Editor, ViewId,
+};
 use tui::{
     buffer::Buffer,
     widgets::{Block, Widget},
 };
 
-use super::display_text;
+use super::{display_text, existing_buffer};
 use crate::{
     compositor::{Component, Context, Event, EventResult},
     ctrl, job, key,
@@ -79,14 +84,14 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
                 Preview {
                     target,
                     _task: task,
-                    scroll: 0,
-                    text: PreviewText::new("Scanning untracked files…".into()),
+                    results: None,
+                    viewport: Rect::default(),
                 },
             );
         }));
     tokio::spawn(async move {
         let worker = handle.clone();
-        let result = tokio::task::spawn_blocking(move || -> Result<PreviewText> {
+        let result = tokio::task::spawn_blocking(move || -> Result<Results> {
             let text = text.to_string();
             // Git uses LF-delimited patterns, including when the editor recognizes
             // other Unicode line separators. Work from the captured byte offset.
@@ -101,7 +106,7 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
                 .query(&workspace, helix_loader::workspace_trust::TrustQuery::Git)
                 .is_trusted();
             let report = scan(&base, &text, line, trusted, || worker.is_canceled())?;
-            Ok(format_report(&path, line, rule, &report))
+            Ok(format_report(&path, line, rule, report))
         })
         .await
         .map_err(anyhow::Error::from)
@@ -118,7 +123,7 @@ pub(crate) fn open(cx: &mut Context) -> Result<()> {
                 return;
             }
             match result {
-                Ok(text) => preview.text = text,
+                Ok(results) => preview.results = Some(results),
                 Err(error) => {
                     compositor.remove(ID);
                     editor.set_error(format!("{error:#}"));
@@ -156,7 +161,20 @@ fn display_rule(rule: &str) -> String {
     }
 }
 
-fn format_report(path: &Path, line: usize, rule: &str, report: &Report) -> PreviewText {
+struct FileRow {
+    bytes: Range<usize>,
+    winner: Option<Arc<Origin>>,
+}
+
+struct Results {
+    text: PreviewText,
+    files: Vec<FileRow>,
+    root: PathBuf,
+    selected: usize,
+    scroll: usize,
+}
+
+fn format_report(path: &Path, line: usize, rule: &str, report: Report) -> Results {
     let origin = path.strip_prefix(&report.root).unwrap_or(path);
     let mut text = format!(
         "Rule {}:{}  {}\n{} changed, {} unchanged\n",
@@ -181,14 +199,17 @@ fn format_report(path: &Path, line: usize, rule: &str, report: &Report) -> Previ
     if report.entries.is_empty() {
         text.push_str("\nNo matching untracked files found.");
     }
-    for entry in &report.entries {
+    let mut files = Vec::with_capacity(report.entries.len());
+    for entry in report.entries {
         let state = match (entry.before_ignored, entry.after_ignored) {
             (false, true) => "Now ignored",
             (true, false) => "Now included",
             (true, true) => "Still ignored",
             (false, false) => "Still included",
         };
-        writeln!(text, "\n{state}  {}", display_path(&entry.path)).unwrap();
+        text.push('\n');
+        let offset = text.len();
+        writeln!(text, "{state}  {}", display_path(&entry.path)).unwrap();
         if let Some(winner) = &entry.winner {
             writeln!(
                 text,
@@ -201,27 +222,174 @@ fn format_report(path: &Path, line: usize, rule: &str, report: &Report) -> Previ
         } else {
             text.push_str("  Included by default\n");
         }
+        files.push(FileRow {
+            bytes: offset..text.len(),
+            winner: entry.winner,
+        });
     }
-    PreviewText::new(text)
+    Results {
+        text: PreviewText::new(text),
+        files,
+        root: report.root,
+        selected: 0,
+        scroll: 0,
+    }
 }
 
 struct Preview {
     target: Target,
     // Dropping the panel cancels its walk and invalidates queued callbacks.
     _task: TaskController,
-    text: PreviewText,
-    scroll: usize,
+    results: Option<Results>,
+    viewport: Rect,
+}
+
+impl Results {
+    fn selected_rows(&mut self, width: u16) -> Option<Range<usize>> {
+        let bytes = &self.files.get(self.selected)?.bytes;
+        Some(self.text.row_at_byte(width, bytes.start)..self.text.row_at_byte(width, bytes.end))
+    }
+
+    fn reveal(&mut self, area: Rect) {
+        let height = usize::from(area.height);
+        if let Some(rows) = self.selected_rows(area.width) {
+            if self.selected == 0 && rows.end <= height {
+                self.scroll = 0;
+            } else {
+                // Keep the whole item in view if it fits, otherwise show its first row.
+                self.scroll = self
+                    .scroll
+                    .max(rows.end.saturating_sub(height))
+                    .min(rows.start);
+            }
+        }
+    }
+
+    fn navigate(&mut self, key: KeyEvent, area: Rect) {
+        let Some(last) = self.files.len().checked_sub(1) else {
+            scroll_key(key, &mut self.scroll);
+            return;
+        };
+        self.selected = match key {
+            key!(Down) | key!('j') => (self.selected + 1).min(last),
+            key!(Up) | key!('k') => self.selected.saturating_sub(1),
+            key!(Home) | ctrl!(Home) => 0,
+            key!(End) | ctrl!(End) => last,
+            key!(PageDown) | ctrl!('d') | key!(PageUp) | ctrl!('u') => {
+                let height = usize::from(area.height.max(1));
+                let down = matches!(key, key!(PageDown) | ctrl!('d'));
+                let bottom = self
+                    .text
+                    .row_at_byte(area.width, usize::MAX)
+                    .saturating_sub(height - 1);
+                self.scroll = if down {
+                    self.scroll.saturating_add(height).min(bottom)
+                } else {
+                    self.scroll.saturating_sub(height)
+                };
+                self.selected = if self.scroll == bottom && down {
+                    last
+                } else if self.scroll == 0 {
+                    0
+                } else {
+                    self.files
+                        .partition_point(|file| {
+                            self.text.row_at_byte(area.width, file.bytes.end) <= self.scroll
+                        })
+                        .min(last)
+                };
+                return;
+            }
+            _ => return,
+        };
+        self.reveal(area);
+    }
+}
+
+fn jump_to_rule(
+    editor: &mut Editor,
+    root: &Path,
+    origin: &Origin,
+    source: DocumentId,
+) -> Result<()> {
+    let path = root.join(&origin.source);
+    let id = if let Some(id) = existing_buffer(editor, &path) {
+        id
+    } else {
+        ensure!(
+            path.is_file(),
+            "Rule source is unavailable: {}",
+            display_path(&path)
+        );
+        editor.open(&path, Action::Load)?
+    };
+    let doc = editor.document(id).context("Rule source is unavailable")?;
+    // Git counts LF-delimited lines even when Helix recognizes other line endings.
+    let text = doc.text();
+    let position = if origin.line == 1 {
+        0
+    } else {
+        let (byte, _) = text
+            .bytes()
+            .enumerate()
+            .filter(|(_, b)| *b == b'\n')
+            .nth(origin.line - 2)
+            .context("Rule source changed. Reopen the preview.")?;
+        text.byte_to_char(byte + 1)
+    };
+    let line: String = text.chars_at(position).take_while(|&c| c != '\n').collect();
+    let line = line.strip_suffix('\r').unwrap_or(&line);
+    let line = if position == 0 {
+        line.strip_prefix('\u{feff}').unwrap_or(line)
+    } else {
+        line
+    };
+    let matches = if source == id {
+        origin.matches_source_line(line.as_bytes())
+    } else {
+        let (bytes, _, lossy) = doc.encoding().encode(line);
+        !lossy && origin.matches_source_line(&bytes)
+    };
+    ensure!(
+        matches,
+        "The previewed rule no longer matches {}:{} in the editor.",
+        display_path(&origin.source),
+        origin.line
+    );
+    editor.switch(id, Action::Replace);
+    let (view, doc) = helix_view::current!(editor);
+    ensure!(doc.id() == id, "Could not switch to the rule source");
+    doc.set_selection(view.id, Selection::point(position));
+    align_view(doc, view, Align::Center);
+    editor.clear_status();
+    Ok(())
 }
 
 impl Component for Preview {
     fn handle_event(&mut self, event: &Event, cx: &mut Context) -> EventResult {
-        if !self.target.current(cx.editor) || matches!(event, Event::Key(key!(Esc) | ctrl!('c'))) {
-            return EventResult::Consumed(Some(Box::new(|compositor, _| {
+        let close = || {
+            EventResult::Consumed(Some(Box::new(|compositor, _| {
                 compositor.remove(ID);
-            })));
+            })))
+        };
+        if !self.target.current(cx.editor) || matches!(event, Event::Key(key!(Esc) | ctrl!('c'))) {
+            return close();
         }
-        if let Event::Key(key) = event {
-            scroll_key(*key, &mut self.scroll);
+        let (Event::Key(key), Some(results)) = (event, &mut self.results) else {
+            return EventResult::Consumed(None);
+        };
+        if *key != key!(Enter) {
+            results.navigate(*key, self.viewport);
+        } else if let Some(file) = results.files.get(results.selected) {
+            let Some(origin) = &file.winner else {
+                cx.editor
+                    .set_status("Included by default. There is no rule to jump to.");
+                return EventResult::Consumed(None);
+            };
+            match jump_to_rule(cx.editor, &results.root, origin, self.target.document) {
+                Ok(()) => return close(),
+                Err(err) => cx.editor.set_error(err.to_string()),
+            }
         }
         EventResult::Consumed(None)
     }
@@ -240,7 +408,8 @@ impl Component for Preview {
         );
         let style = cx.editor.theme.get("ui.popup");
         surface.clear_with(area, style);
-        let block = Block::bordered().title(" Gitignore rule preview | ↑↓ scroll · Esc close ");
+        let block = Block::bordered()
+            .title(" Gitignore rule preview | ↑↓ select · Enter go to rule · Esc close ");
         let body = block.inner(area);
         block.render(area, surface);
         if !self.target.current(cx.editor) {
@@ -255,7 +424,45 @@ impl Component for Preview {
             }
             return;
         }
-        self.text.render(body, surface, style, &mut self.scroll);
+        if body.area() == 0 {
+            return;
+        }
+        let Some(results) = &mut self.results else {
+            surface.set_stringn(
+                body.x,
+                body.y,
+                "Scanning untracked files…",
+                body.width as usize,
+                style,
+            );
+            return;
+        };
+        let list = body.clip_left(2);
+        if list.area() == 0 {
+            return;
+        }
+        if list != self.viewport {
+            results.reveal(list);
+            self.viewport = list;
+        }
+        results
+            .text
+            .render(list, surface, style, &mut results.scroll);
+        if let Some(rows) = results.selected_rows(list.width) {
+            let first = rows.start.saturating_sub(results.scroll);
+            let last = rows
+                .end
+                .saturating_sub(results.scroll)
+                .min(usize::from(body.height));
+            if first < last {
+                let area = body
+                    .clip_top(first as u16)
+                    .with_height((last - first) as u16);
+                let selected = cx.editor.theme.get("ui.menu.selected");
+                surface.set_style(area, selected);
+                surface.set_stringn(area.x, area.y, ">", 1, selected);
+            }
+        }
     }
 
     fn id(&self) -> Option<&'static str> {

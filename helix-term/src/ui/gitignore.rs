@@ -142,24 +142,24 @@ impl Generator {
 }
 
 /// Reuse the document before inspecting disk; never reload somebody's unsaved edits.
-fn open_existing(editor: &mut Editor, target: &Path) -> Result<bool> {
+fn existing_buffer(editor: &Editor, target: &Path) -> Option<helix_view::DocumentId> {
     let normalized = helix_stdx::path::canonicalize(target);
-    let existing = editor
-        .documents()
-        .find(|doc| {
-            doc.path().is_some_and(|path| {
-                #[cfg(windows)]
-                {
-                    helix_stdx::path::eq_ignore_case(path, &normalized)
-                }
-                #[cfg(not(windows))]
-                {
-                    path == normalized
-                }
+    let exact = editor.document_id_by_path(&normalized);
+    #[cfg(windows)]
+    let exact = exact.or_else(|| {
+        editor
+            .documents()
+            .find(|doc| {
+                doc.path()
+                    .is_some_and(|path| helix_stdx::path::eq_ignore_case(path, &normalized))
             })
-        })
-        .map(|doc| doc.id());
-    if let Some(id) = existing {
+            .map(|doc| doc.id())
+    });
+    exact
+}
+
+fn open_existing(editor: &mut Editor, target: &Path) -> Result<bool> {
+    if let Some(id) = existing_buffer(editor, target) {
         editor.switch(id, Action::Replace);
         editor.set_status("Existing .gitignore buffer; content preserved");
         return Ok(true);

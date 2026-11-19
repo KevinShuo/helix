@@ -26,6 +26,20 @@ pub struct Decision {
     pub ignored: bool,
 }
 
+impl Decision {
+    /// Compare an editor line with the original Git pattern, including non-UTF-8 patterns.
+    pub fn matches_source_line(&self, bytes: &[u8]) -> bool {
+        pattern_text(bytes) == self.pattern
+    }
+}
+
+fn pattern_text(bytes: &[u8]) -> Cow<'_, str> {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => Cow::Borrowed(text),
+        Err(_) => Cow::Owned(format!("{:?}", bytes.as_bstr())),
+    }
+}
+
 #[derive(Clone, Default)]
 pub(super) struct Evaluation {
     /// The selected pattern matched this entry or one of its ancestors,
@@ -92,13 +106,7 @@ impl Layer {
         let list = List::from_bytes(&normalized, file.to_owned(), base, Ignore::default());
         let source = Source {
             display_path: file.strip_prefix(root).unwrap_or(file).to_owned(),
-            lines: raw
-                .lines()
-                .map(|s| match std::str::from_utf8(s) {
-                    Ok(text) => Box::from(text),
-                    Err(_) => format!("{:?}", s.as_bstr()).into_boxed_str(),
-                })
-                .collect(),
+            lines: raw.lines().map(|s| Box::from(pattern_text(s))).collect(),
         };
         let decisions = vec![OnceLock::new(); list.patterns.len()];
         Self {
