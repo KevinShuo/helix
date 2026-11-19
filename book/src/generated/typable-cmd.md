@@ -44,6 +44,7 @@
 | `:new`, `:n` | Create a new scratch buffer. |
 | `:new-file` | Open a new named buffer in the current file's directory (working directory for scratch buffers). The file is created on save. Existing paths and buffers are rejected. |
 | `:gitignore` | Generate an editable .gitignore draft from built-in templates. Existing files and buffers are opened unchanged; save with :w. |
+| `:gitignore-preview` | Preview which untracked files the current .gitignore rule affects and show the deciding rule for each file. |
 | `:delete-file` | Permanently delete the current file and close its buffer after typing yes to confirm. Refuses unsaved changes. |
 | `:delete-file!` | Permanently delete the current file and close its buffer, discarding unsaved changes, after typing yes to confirm. |
 | `:format`, `:fmt` | Format the file using an external formatter or language server. |

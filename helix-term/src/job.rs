@@ -48,6 +48,8 @@ pub struct Job {
 }
 
 pub struct Jobs {
+    /// UI changes to apply after the current event's layer callbacks (e.g. prompt close).
+    pub(crate) after_event: Vec<EditorCompositorCallback>,
     /// jobs that need to complete before we exit.
     pub wait_futures: FuturesUnordered<JobFuture>,
     pub callbacks: Receiver<Callback>,
@@ -84,6 +86,7 @@ impl Jobs {
         let _ = JOB_QUEUE.set(tx);
         let status_messages = helix_event::status::setup();
         Self {
+            after_event: Vec::new(),
             wait_futures: FuturesUnordered::new(),
             callbacks: rx,
             status_messages,

@@ -1,4 +1,6 @@
 //! Offline template selection. A session owns its fixed target and discards late detection.
+#[cfg(feature = "git")]
+pub(crate) mod preview;
 mod selection;
 use selection::TemplateSelection;
 

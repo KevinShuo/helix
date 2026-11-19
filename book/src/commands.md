@@ -51,6 +51,17 @@ Paths are relative to the current `.gitignore`, including in subdirectories.
 The language's `path-completion` setting controls local path and extension
 suggestions. Project template rules remain available when it is disabled.
 
+In a Git worktree, place the cursor on a rule and run `:gitignore-preview` to
+see its effect on untracked files under this `.gitignore`. Helix compares the
+current buffer with the same buffer minus that one rule, so you can preview
+edits before saving. Other ignore files are read from disk. Changed files
+appear first. Each file shows its final state and the
+source file, line number and text of the deciding rule, including a rule that
+excluded a parent directory. Files included by default are marked accordingly.
+The preview shows a sample for large result sets and flags a partial scan when
+the counts cover only part of the tree. Scroll with the arrow keys and press
+Escape to close the preview or cancel a running scan.
+
 Use `:delete-file` to permanently delete the current file from disk and close
 its buffer. The confirmation prompt shows the path: type `yes` and press Enter
 to delete, or press Escape to cancel. Any other answer also cancels. Files with

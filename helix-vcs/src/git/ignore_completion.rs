@@ -13,6 +13,9 @@ use gix::{
     ignore::{glob::pattern::Case, Search},
 };
 
+mod explain;
+pub mod preview;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Effect {
     Changed,
@@ -70,31 +73,9 @@ impl Sources {
 impl RepositorySources {
     fn load(base: &Path, directory: &Path, trust_full: bool) -> anyhow::Result<Self> {
         let repo = super::open_repo(base, trust_full)?.to_thread_local();
-        let worktree = repo
-            .workdir()
-            .ok_or_else(|| anyhow::anyhow!("bare repository"))?;
-        // Keep the caller's path spelling for later strip_prefix calls. Windows
-        // canonicalization can add a verbatim prefix absent from editor paths.
-        let physical_worktree = worktree.canonicalize()?;
-        let physical_base = base.canonicalize()?;
-        let depth = physical_base
-            .strip_prefix(physical_worktree)?
-            .components()
-            .count();
-        let root = base
-            .ancestors()
-            .nth(depth)
-            .ok_or_else(|| anyhow::anyhow!("invalid worktree root"))?;
+        let root = worktree_root(&repo, base)?;
         directory.strip_prefix(base)?;
-        let case = if repo
-            .config_snapshot()
-            .boolean("core.ignorecase")
-            .unwrap_or(false)
-        {
-            Case::Fold
-        } else {
-            Case::Sensitive
-        };
+        let case = ignore_case(&repo);
         let tracked = tracked_names(&repo, directory.strip_prefix(root)?, case);
         let layers = Self::layers(&repo, root, base, directory).ok();
         Ok(Self {
@@ -115,22 +96,7 @@ impl RepositorySources {
     ) -> anyhow::Result<(Search, Search)> {
         let mut lower = Search::default();
         let mut higher = Search::default();
-        let config = repo.config_snapshot();
-        let global = if config
-            .string("core.excludesFile")
-            .is_some_and(|value| value.is_empty())
-        {
-            None
-        } else if config.string("core.excludesFile").is_some() {
-            // A path from disallowed config can't be resolved with certainty.
-            let trusted = config
-                .trusted_path("core.excludesFile")
-                .ok_or_else(|| anyhow::anyhow!("untrusted excludes file"))??;
-            (!trusted.as_os_str().is_empty()).then(|| root.join(trusted))
-        } else {
-            gix::path::env::xdg_config("ignore", &mut gix::path::env::var)
-        };
-        if let Some(global) = global {
+        if let Some(global) = global_excludes(repo, root)? {
             add_file(&mut lower, &global, None)?;
         }
         add_file(&mut lower, &repo.common_dir().join("info/exclude"), None)?;
@@ -154,14 +120,70 @@ impl RepositorySources {
     }
 }
 
-fn tracked_names(repo: &gix::Repository, directory: &Path, case: Case) -> Option<HashSet<Vec<u8>>> {
-    match fs::metadata(repo.index_path()) {
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Some(HashSet::new()),
-        // gix reads the trailing checksum before decoding the header.
-        Ok(m) if m.is_file() && m.len() >= 12 + repo.object_hash().len_in_bytes() as u64 => (),
-        _ => return None,
+fn worktree_root<'a>(repo: &gix::Repository, base: &'a Path) -> anyhow::Result<&'a Path> {
+    let worktree = repo
+        .workdir()
+        .ok_or_else(|| anyhow::anyhow!("bare repository"))?;
+    // Preserve the editor's path spelling. On Windows canonicalize adds a verbatim prefix.
+    let physical_base = base.canonicalize()?;
+    let physical_root = worktree.canonicalize()?;
+    let depth = physical_base
+        .strip_prefix(&physical_root)?
+        .components()
+        .count();
+    let root = base
+        .ancestors()
+        .nth(depth)
+        .ok_or_else(|| anyhow::anyhow!("invalid worktree root"))?;
+    anyhow::ensure!(
+        root.canonicalize()? == physical_root,
+        "path crosses a linked worktree directory"
+    );
+    Ok(root)
+}
+
+fn ignore_case(repo: &gix::Repository) -> Case {
+    if repo
+        .config_snapshot()
+        .boolean("core.ignorecase")
+        .unwrap_or(false)
+    {
+        Case::Fold
+    } else {
+        Case::Sensitive
     }
-    let index = repo.index().ok()?;
+}
+
+fn global_excludes(repo: &gix::Repository, root: &Path) -> anyhow::Result<Option<PathBuf>> {
+    let config = repo.config_snapshot();
+    Ok(match config.string("core.excludesFile") {
+        Some(value) if value.is_empty() => None,
+        Some(_) => {
+            let trusted = config
+                .trusted_path("core.excludesFile")
+                .ok_or_else(|| anyhow::anyhow!("untrusted excludes file"))??;
+            (!trusted.as_os_str().is_empty()).then(|| root.join(trusted))
+        }
+        None => gix::path::env::xdg_config("ignore", &mut gix::path::env::var),
+    })
+}
+
+fn open_index(repo: &gix::Repository) -> anyhow::Result<Option<gix::worktree::Index>> {
+    match fs::metadata(repo.index_path()) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
+        // gix reads the trailing checksum before decoding the header.
+        Ok(m) if m.is_file() && m.len() >= 12 + repo.object_hash().len_in_bytes() as u64 => {
+            Ok(Some(repo.index()?))
+        }
+        Ok(_) => anyhow::bail!("invalid Git index"),
+    }
+}
+
+fn tracked_names(repo: &gix::Repository, directory: &Path, case: Case) -> Option<HashSet<Vec<u8>>> {
+    let Some(index) = open_index(repo).ok()? else {
+        return Some(HashSet::new());
+    };
     let prefix = git_path(directory)?;
     let mut names = HashSet::new();
     for entry in index.entries() {
@@ -182,15 +204,22 @@ fn tracked_names(repo: &gix::Repository, directory: &Path, case: Case) -> Option
 }
 
 fn add_file(search: &mut Search, file: &Path, root: Option<&Path>) -> io::Result<()> {
-    let metadata = if root.is_some() {
+    if let Some(bytes) = read_ignore_file(file, root.is_some())? {
+        search.add_patterns_buffer(&bytes, file, root, Default::default());
+    }
+    Ok(())
+}
+
+fn read_ignore_file(file: &Path, in_worktree: bool) -> io::Result<Option<Vec<u8>>> {
+    let metadata = if in_worktree {
         fs::symlink_metadata(file)
     } else {
         fs::metadata(file)
     };
     match metadata {
         Ok(m) if m.is_file() => (),
-        Ok(_) => return Ok(()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Ok(_) => return Ok(None),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e),
     }
     // A speculative completion must not allocate arbitrarily for an external ignore file.
@@ -202,8 +231,7 @@ fn add_file(search: &mut Search, file: &Path, root: Option<&Path>) -> io::Result
     if bytes.len() as u64 > LIMIT {
         return Err(io::Error::other("ignore file exceeds suggestion budget"));
     }
-    search.add_patterns_buffer(&bytes, file, root, Default::default());
-    Ok(())
+    Ok(Some(bytes))
 }
 
 pub struct Rules<'a> {

@@ -6,6 +6,22 @@ use std::{
 };
 
 mod completion;
+#[cfg(feature = "git")]
+mod preview;
+
+#[cfg(not(feature = "git"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn gitignore_preview_reports_missing_git_support() -> anyhow::Result<()> {
+    let root = tempfile::tempdir()?;
+    let file = root.path().join(".gitignore");
+    fs::write(&file, "*.hxpreview\n")?;
+    let mut app = AppBuilder::new().with_file(&file, None).build()?;
+    keys(&mut app, ":gitignore-preview<ret>").await?;
+    assert!(app.editor.is_err());
+    assert!(app.editor.get_status().unwrap().0.contains("Git support"));
+    assert!(!doc!(app.editor).is_modified());
+    Ok(())
+}
 
 fn screen(app: &Application) -> String {
     let buffer = app.test_screen();

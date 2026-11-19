@@ -192,6 +192,9 @@ impl Compositor {
         for callback in callbacks {
             callback(self, cx)
         }
+        for callback in cx.jobs.after_event.drain(..) {
+            callback(cx.editor, self);
+        }
 
         consumed
     }

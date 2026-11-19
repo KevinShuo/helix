@@ -761,6 +761,23 @@ fn generate_gitignore(
     Ok(())
 }
 
+fn preview_gitignore_rule(
+    cx: &mut compositor::Context,
+    _args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        #[cfg(feature = "git")]
+        ui::gitignore::preview::open(cx)?;
+        #[cfg(not(feature = "git"))]
+        {
+            let _ = cx;
+            anyhow::bail!("Gitignore rule preview requires a Helix build with Git support");
+        }
+    }
+    Ok(())
+}
+
 fn format(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
     if event != PromptEvent::Validate {
         return Ok(());
@@ -3560,6 +3577,17 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
         aliases: &[],
         doc: "Generate an editable .gitignore draft from built-in templates. Existing files and buffers are opened unchanged; save with :w.",
         fun: generate_gitignore,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, Some(0)),
+            ..Signature::DEFAULT
+        },
+    },
+    TypableCommand {
+        name: "gitignore-preview",
+        aliases: &[],
+        doc: "Preview which untracked files the current .gitignore rule affects and show the deciding rule for each file.",
+        fun: preview_gitignore_rule,
         completer: CommandCompleter::none(),
         signature: Signature {
             positionals: (0, Some(0)),
