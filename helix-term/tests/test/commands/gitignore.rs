@@ -5,6 +5,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod completion;
+
 fn screen(app: &Application) -> String {
     let buffer = app.test_screen();
     buffer

@@ -50,6 +50,7 @@ pub struct EditorView {
 #[derive(Debug, Clone)]
 pub enum InsertEvent {
     Key(KeyEvent),
+    IgnoreRule(String),
     CompletionApply {
         trigger_offset: usize,
         changes: Vec<Change>,
@@ -1143,6 +1144,12 @@ impl EditorView {
                     for key in self.last_insert.1.clone() {
                         match key {
                             InsertEvent::Key(key) => self.insert_mode(cxt, key),
+                            InsertEvent::IgnoreRule(replacement) => {
+                                crate::handlers::completion::gitignore::repeat(
+                                    cxt.editor,
+                                    &replacement,
+                                );
+                            }
                             InsertEvent::Literal(text) => {
                                 last_savepoint = None;
                                 last_request_savepoint = None;
@@ -1241,6 +1248,11 @@ impl EditorView {
         if let Some(last_completion) = editor.last_completion.take() {
             match last_completion {
                 CompleteAction::Triggered => (),
+                CompleteAction::AppliedIgnoreRule(replacement) => {
+                    self.last_insert
+                        .1
+                        .push(InsertEvent::IgnoreRule(replacement));
+                }
                 CompleteAction::Applied {
                     trigger_offset,
                     changes,

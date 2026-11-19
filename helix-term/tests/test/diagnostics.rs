@@ -149,30 +149,9 @@ async fn exit_of_already_removed_server_clears_its_diagnostics() -> anyhow::Resu
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn restart_immediately_clears_retired_server_diagnostics() -> anyhow::Result<()> {
-    use std::{path::Path, process::Command, time::Duration};
+    use std::time::Duration;
     let dir = tempfile::tempdir()?;
-    let exe = dir.path().join(if cfg!(windows) {
-        "diagnostics-lsp.exe"
-    } else {
-        "diagnostics-lsp"
-    });
-    let mut compiler = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()));
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        compiler.creation_flags(0x08000000);
-    }
-    let output = compiler
-        .arg("--edition=2021")
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/diagnostics_lsp.rs"))
-        .arg("-o")
-        .arg(&exe)
-        .output()?;
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let exe = compile_fixture("diagnostics_lsp", dir.path())?;
     let file = dir.path().join("example.py");
     std::fs::write(&file, "namespace ws {};\r\n")?;
     let log = dir.path().join("requests.jsonl");

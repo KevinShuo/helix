@@ -39,22 +39,29 @@ pub(crate) fn detect(start: &Path) -> Result<Project> {
         "Project directory does not exist: {}",
         start.display()
     );
-    let mut root = None;
+    let root = git_root(&start)?;
+    let is_git = root.is_some();
+    let root = root.unwrap_or_else(|| helix_loader::find_workspace_in(&start).0);
+    detect_directory(&root, is_git)
+}
+
+pub(super) fn git_root(start: &Path) -> Result<Option<PathBuf>> {
     for ancestor in start.ancestors() {
         match fs::symlink_metadata(ancestor.join(".git")) {
             Ok(metadata) if metadata.is_dir() || metadata.is_file() => {
-                root = Some(ancestor.to_owned());
-                break;
+                return Ok(Some(ancestor.to_owned()));
             }
             Ok(_) => (),
             Err(error) if error.kind() == io::ErrorKind::NotFound => (),
             Err(error) => return Err(error).context("Cannot locate Git directory"),
         }
     }
-    let is_git = root.is_some();
-    let root = root.unwrap_or_else(|| helix_loader::find_workspace_in(&start).0);
+    Ok(None)
+}
+
+pub(super) fn detect_directory(root: &Path, is_git: bool) -> Result<Project> {
     let mut entries =
-        fs::read_dir(&root).with_context(|| format!("Cannot read {}", root.display()))?;
+        fs::read_dir(root).with_context(|| format!("Cannot read {}", root.display()))?;
     let mut project = Project {
         target: root.join(".gitignore"),
         is_git,

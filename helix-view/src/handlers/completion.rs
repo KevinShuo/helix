@@ -38,6 +38,13 @@ pub struct ResponseContext {
 }
 
 pub enum CompletionEvent {
+    /// Rule candidates depend on the current buffer revision, even within a word.
+    RuleInput {
+        cursor: usize,
+        doc: DocumentId,
+        view: ViewId,
+        can_start: bool,
+    },
     /// Auto completion was triggered by typing a word char
     AutoTrigger {
         cursor: usize,

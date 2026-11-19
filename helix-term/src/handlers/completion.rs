@@ -26,6 +26,7 @@ pub use item::{CompletionItem, CompletionItems, CompletionResponse, LspCompletio
 pub use request::CompletionHandler;
 pub use resolve::ResolveHandler;
 
+pub(crate) mod gitignore;
 mod item;
 mod path;
 mod request;
@@ -49,10 +50,18 @@ async fn replace_completions(
     handle: TaskHandle,
     mut requests: JoinSet<CompletionResponse>,
     is_incomplete: bool,
+    snapshot: Option<gitignore::Snapshot>,
 ) {
     while let Some(mut response) = handle_response(&mut requests, is_incomplete).await {
         let handle = handle.clone();
+        let snapshot = snapshot.clone();
         dispatch(move |editor, compositor| {
+            if response.provider == CompletionProvider::Gitignore {
+                let (view, doc) = current_ref!(editor);
+                if editor.mode != Mode::Insert || !snapshot.is_some_and(|s| s.valid(doc, view.id)) {
+                    return;
+                }
+            }
             let editor_view = compositor.find::<ui::EditorView>().unwrap();
             let Some(completion) = &mut editor_view.completion else {
                 return;
@@ -86,6 +95,7 @@ fn show_completion(
     mut items: Vec<CompletionItem>,
     context: HashMap<CompletionProvider, ResponseContext>,
     trigger: Trigger,
+    snapshot: Option<gitignore::Snapshot>,
 ) {
     let (view, doc) = current_ref!(editor);
     // check if the completion request is stale.
@@ -95,6 +105,9 @@ fn show_completion(
     // completion should be discarded
     if editor.mode != Mode::Insert || view.id != trigger.view || doc.id() != trigger.doc {
         return;
+    }
+    if snapshot.is_some_and(|s| !s.valid(doc, view.id)) {
+        items.retain(|item| item.provider() != CompletionProvider::Gitignore);
     }
 
     let size = compositor.size();
@@ -117,12 +130,25 @@ fn show_completion(
 
 pub fn trigger_auto_completion(editor: &Editor, trigger_char_only: bool) {
     let config = editor.config.load();
-    if !config.auto_completion {
-        return;
-    }
     let (view, doc): (&helix_view::View, &helix_view::Document) = current_ref!(editor);
     let mut text = doc.text().slice(..);
     let cursor = doc.selection(view.id).primary().cursor(text);
+    let ignore_file = gitignore::enabled(doc);
+    if !config.auto_completion {
+        // A manually opened list may still be computing when the user narrows it.
+        if ignore_file && !trigger_char_only && !gitignore::comment(text, cursor) {
+            editor
+                .handlers
+                .completions
+                .event(CompletionEvent::RuleInput {
+                    cursor,
+                    doc: doc.id(),
+                    view: view.id,
+                    can_start: false,
+                });
+        }
+        return;
+    }
     text = doc.text().slice(..cursor);
 
     let is_trigger_char = doc
@@ -144,7 +170,13 @@ pub fn trigger_auto_completion(editor: &Editor, trigger_char_only: bool) {
     let is_path_completion_trigger = matches!(cursor_char, Some(b'/'));
 
     let handler = &editor.handlers.completions;
-    if is_trigger_char || (is_path_completion_trigger && doc.path_completion_enabled()) {
+    let rule_prefix = (ignore_file && !gitignore::comment(doc.text().slice(..), cursor))
+        .then(|| text.line(text.char_to_line(cursor)));
+    let rule_trigger = rule_prefix.is_some_and(gitignore::trigger_char);
+    if is_trigger_char
+        || rule_trigger
+        || (!ignore_file && is_path_completion_trigger && doc.path_completion_enabled())
+    {
         handler.event(CompletionEvent::TriggerChar {
             cursor,
             doc: doc.id(),
@@ -161,7 +193,16 @@ pub fn trigger_auto_completion(editor: &Editor, trigger_char_only: bool) {
             .take(config.completion_trigger_len as usize)
             .all(char_is_word);
 
-    if is_auto_trigger {
+    if let Some(prefix) = rule_prefix.filter(|_| !trigger_char_only) {
+        handler.event(CompletionEvent::RuleInput {
+            cursor,
+            doc: doc.id(),
+            view: view.id,
+            can_start: prefix.len_chars() > 0
+                && prefix.len_chars() >= config.completion_trigger_len as usize
+                && is_auto_trigger,
+        });
+    } else if is_auto_trigger {
         handler.event(CompletionEvent::AutoTrigger {
             cursor,
             doc: doc.id(),
@@ -176,7 +217,26 @@ fn update_completion_filter(cx: &mut commands::Context, c: Option<char>) {
         if let Some(completion) = &mut editor_view.completion {
             completion.update_filter(c);
             if completion.is_empty() || c.is_some_and(|c| !char_is_word(c)) {
+                let was_rule = completion.has_rule_context();
                 editor_view.clear_completion(cx.editor);
+                if was_rule {
+                    let (view, doc) = current_ref!(cx.editor);
+                    let text = doc.text().slice(..);
+                    let cursor = doc.selection(view.id).primary().cursor(text);
+                    if cursor > text.line_to_char(text.char_to_line(cursor))
+                        && !gitignore::comment(text, cursor)
+                    {
+                        cx.editor
+                            .handlers
+                            .completions
+                            .event(CompletionEvent::TriggerChar {
+                                cursor,
+                                doc: doc.id(),
+                                view: view.id,
+                            });
+                        return;
+                    }
+                }
                 // clearing completions might mean we want to immediately rerequest them (usually
                 // this occurs if typing a trigger char)
                 if c.is_some() {
@@ -203,6 +263,10 @@ fn completion_post_command_hook(
     if cx.editor.mode == Mode::Insert {
         if cx.editor.last_completion.is_some() {
             match command {
+                MappableCommand::Static {
+                    name: "delete_word_forward" | "delete_char_forward",
+                    ..
+                } if gitignore::enabled(doc!(cx.editor)) => clear_completions(cx),
                 MappableCommand::Static {
                     name: "delete_word_forward" | "delete_char_forward" | "completion",
                     ..

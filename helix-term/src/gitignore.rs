@@ -1,5 +1,7 @@
 mod catalog;
 mod detect;
+mod rules;
+pub(crate) mod suggest;
 
 pub(crate) use catalog::{Template, TEMPLATES};
 pub(crate) use detect::{detect, Project};

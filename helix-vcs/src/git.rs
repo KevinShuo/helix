@@ -19,6 +19,8 @@ use gix::{Commit, ObjectId, Repository, ThreadSafeRepository};
 
 use crate::FileChange;
 
+pub mod ignore_completion;
+
 #[cfg(test)]
 mod test;
 

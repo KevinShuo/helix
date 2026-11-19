@@ -13,6 +13,9 @@ use std::{
 mod git;
 
 #[cfg(feature = "git")]
+pub use git::ignore_completion;
+
+#[cfg(feature = "git")]
 mod process_tree;
 
 mod diff;

@@ -31,7 +31,7 @@ use tui::{
 const ID: &str = "gitignore-generator";
 static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
 
-fn display_text(text: &str) -> String {
+pub(crate) fn display_text(text: &str) -> String {
     text.chars()
         .map(|c| {
             if c == '\t' {

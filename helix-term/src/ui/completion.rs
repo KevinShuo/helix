@@ -122,6 +122,7 @@ pub struct Completion {
     #[allow(dead_code)]
     trigger_offset: usize,
     filter: String,
+    rule_filter: Option<String>,
     // TODO: move to helix-view/central handler struct in the future
     resolve_handler: ResolveHandler,
 }
@@ -208,10 +209,21 @@ impl Completion {
 
                     let item = item.unwrap();
                     let context = &editor.handlers.completions.active_completions[&item.provider()];
+                    let rule = match item {
+                        CompletionItem::Other(item) => item.ignore_rule.as_ref(),
+                        _ => None,
+                    };
+                    // The displayed candidate may predate letters typed to narrow the menu.
+                    // Undo should restore the user's full input at the time of acceptance.
+                    if rule.is_some() {
+                        doc.append_changes_to_history(view);
+                    }
                     // if more text was entered, remove it
                     doc.restore(view, &context.savepoint, true);
                     // save an undo checkpoint before the completion
-                    doc.append_changes_to_history(view);
+                    if rule.is_none() {
+                        doc.append_changes_to_history(view);
+                    }
 
                     // item always present here
                     let (transaction, additional_edits, snippet) = match item.clone() {
@@ -259,10 +271,14 @@ impl Completion {
                         };
                     }
 
-                    editor.last_completion = Some(CompleteAction::Applied {
-                        trigger_offset,
-                        changes: completion_changes(&transaction, trigger_offset),
-                        placeholder,
+                    editor.last_completion = Some(if let Some(rule) = rule {
+                        CompleteAction::AppliedIgnoreRule(rule.repeat.clone())
+                    } else {
+                        CompleteAction::Applied {
+                            trigger_offset,
+                            changes: completion_changes(&transaction, trigger_offset),
+                            placeholder,
+                        }
                     });
 
                     // TODO: add additional _edits to completion_changes?
@@ -311,6 +327,7 @@ impl Completion {
             // TODO: expand nucleo api to allow moving straight to a Utf32String here
             // and avoid allocation during matching
             filter: String::from(fragment),
+            rule_filter: crate::handlers::completion::gitignore::filter(doc, cursor),
             resolve_handler: ResolveHandler::new(),
         };
 
@@ -321,13 +338,12 @@ impl Completion {
     }
 
     fn score(&mut self, incremental: bool) {
-        let pattern = &self.filter;
         let mut matcher = MATCHER.lock();
         matcher.config = Config::DEFAULT;
         // slight preference towards prefix matches
         matcher.config.prefer_prefix = true;
         let pattern = Atom::new(
-            pattern,
+            &self.filter,
             CaseMatching::Ignore,
             Normalization::Smart,
             AtomKind::Fuzzy,
@@ -335,14 +351,29 @@ impl Completion {
         );
         let mut buf = Vec::new();
         let (matches, options) = self.popup.contents_mut().update_options();
+        let mut score_item = |option: &CompletionItem| {
+            if let CompletionItem::Other(item) = option {
+                if let Some(matching) = &item.ignore_rule {
+                    let class = crate::gitignore::suggest::match_class(
+                        self.rule_filter.as_deref()?,
+                        &matching.text,
+                    )?;
+                    // Keep the same (text match, rule effect) ordering as the bounded source.
+                    let order = u16::from_be_bytes([class, matching.rank]);
+                    return Some(u32::MAX - u32::from(order));
+                }
+            }
+            let divisor = if incremental { 2 } else { 3 };
+            pattern
+                .score(Utf32Str::new(option.filter_text(), &mut buf), &mut matcher)
+                .map(|score| u32::from(score) / divisor)
+        };
         if incremental {
             matches.retain_mut(|(index, score)| {
-                let option = &options[*index as usize];
-                let text = option.filter_text();
-                let new_score = pattern.score(Utf32Str::new(text, &mut buf), &mut matcher);
+                let new_score = score_item(&options[*index as usize]);
                 match new_score {
                     Some(new_score) => {
-                        *score = new_score as u32 / 2;
+                        *score = new_score;
                         true
                     }
                     None => false,
@@ -350,12 +381,12 @@ impl Completion {
             })
         } else {
             matches.clear();
-            matches.extend(options.iter().enumerate().filter_map(|(i, option)| {
-                let text = option.filter_text();
-                pattern
-                    .score(Utf32Str::new(text, &mut buf), &mut matcher)
-                    .map(|score| (i as u32, score as u32 / 3))
-            }));
+            matches.extend(
+                options
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, option)| score_item(option).map(|score| (i as u32, score))),
+            );
         }
         // Nucleo is meant as an FZF-like fuzzy matcher and only hides matches that are truly
         // impossible - as in the sequence of characters just doesn't appear. That doesn't work
@@ -369,11 +400,18 @@ impl Completion {
         let min_score = (7 + pattern.needle_text().len() as u32 * 14) / 3;
         matches.sort_unstable_by_key(|&(i, score)| {
             let option = &options[i as usize];
+            let rule_label = match option {
+                CompletionItem::Other(item) if item.ignore_rule.is_some() => {
+                    Some(item.label.as_ref())
+                }
+                _ => None,
+            };
             (
                 score <= min_score,
                 Reverse(option.preselect()),
                 option.provider_priority(),
                 Reverse(score),
+                rule_label,
                 i,
             )
         });
@@ -410,11 +448,19 @@ impl Completion {
     pub fn update_filter(&mut self, c: Option<char>) {
         // recompute menu based on matches
         let menu = self.popup.contents_mut();
+        if let Some(filter) = &mut self.rule_filter {
+            if let Some(ch) = c {
+                filter.push(ch);
+            } else {
+                filter.pop();
+            }
+        }
         match c {
             Some(c) => self.filter.push(c),
             None => {
                 self.filter.pop();
-                if self.filter.is_empty() {
+                if self.filter.is_empty() && self.rule_filter.as_ref().is_none_or(String::is_empty)
+                {
                     menu.clear();
                     return;
                 }
@@ -442,6 +488,10 @@ impl Completion {
 
     pub fn is_empty(&self) -> bool {
         self.popup.contents().is_empty()
+    }
+
+    pub(crate) fn has_rule_context(&self) -> bool {
+        self.rule_filter.is_some()
     }
 
     pub fn replace_item(

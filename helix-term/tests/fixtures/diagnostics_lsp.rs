@@ -16,6 +16,9 @@ fn send(output: &mut impl Write, id: &str, result: &str) {
 }
 
 fn main() {
+    let complete = std::env::args_os()
+        .nth(2)
+        .is_some_and(|arg| arg == "completion");
     let mut log = OpenOptions::new()
         .create(true)
         .append(true)
@@ -56,7 +59,15 @@ fn main() {
         if id.is_empty() {
             continue;
         }
-        if message.contains("\"method\":\"initialize\"") {
+        if complete && message.contains("\"method\":\"initialize\"") {
+            send(
+                &mut output,
+                &id,
+                r#"{"capabilities":{"completionProvider":{},"textDocumentSync":1}}"#,
+            );
+        } else if complete && message.contains("\"method\":\"textDocument/completion\"") {
+            send(&mut output, &id, r#"[{"label":"prefix-lsp"}]"#);
+        } else if message.contains("\"method\":\"initialize\"") {
             send(
                 &mut output,
                 &id,

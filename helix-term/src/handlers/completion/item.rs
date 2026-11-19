@@ -79,7 +79,9 @@ impl CompletionItem {
     pub fn filter_text(&self) -> &str {
         match self {
             CompletionItem::Lsp(item) => item.filter_text(),
-            CompletionItem::Other(item) => &item.label,
+            CompletionItem::Other(item) => {
+                item.ignore_rule.as_ref().map_or(&*item.label, |m| &m.text)
+            }
         }
     }
 }

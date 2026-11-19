@@ -42,6 +42,15 @@ Templates preserve lockfiles. The dotenv template keeps `.env.example`,
 `.env.sample` and `.env.template`; add exceptions for any other example names.
 Git already-tracked files remain tracked even if a new rule matches them.
 
+While editing a `.gitignore`, press `Ctrl-x` in insert mode to see completion
+suggestions. On an empty line the menu offers project-specific rules and nearby
+paths. Type `/build/` to browse that directory, `*.` to complete an extension,
+or `!` to find exceptions to earlier rules, including unsaved edits. Candidate
+details explain the rule's scope and its effect on a sample path when known.
+Paths are relative to the current `.gitignore`, including in subdirectories.
+The language's `path-completion` setting controls local path and extension
+suggestions. Project template rules remain available when it is disabled.
+
 Use `:delete-file` to permanently delete the current file from disk and close
 its buffer. The confirmation prompt shows the path: type `yes` and press Enter
 to delete, or press Escape to cancel. Any other answer also cancels. Files with

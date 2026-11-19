@@ -1408,6 +1408,8 @@ enum ThemeAction {
 #[derive(Debug, Clone)]
 pub enum CompleteAction {
     Triggered,
+    /// Recompute the segment boundaries when this insert is repeated on another line.
+    AppliedIgnoreRule(String),
     /// A savepoint of the currently selected completion. The savepoint
     /// MUST be restored before sending any event to the LSP
     Selected {

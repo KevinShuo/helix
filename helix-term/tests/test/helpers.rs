@@ -441,6 +441,33 @@ pub async fn run_event_loop_until_idle(app: &mut Application) {
     app.event_loop_until_idle(&mut rx_stream).await;
 }
 
+/// Build a std-only subprocess fixture into the test's own temporary directory.
+pub fn compile_fixture(name: &str, directory: &std::path::Path) -> anyhow::Result<PathBuf> {
+    let executable = directory.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(format!("{name}.rs"));
+    let mut compiler =
+        std::process::Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()));
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        compiler.creation_flags(0x08000000);
+    }
+    let output = compiler
+        .arg("--edition=2021")
+        .arg(source)
+        .arg("-o")
+        .arg(&executable)
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(executable)
+}
+
 pub fn assert_file_has_content(file: &mut NamedTempFile, content: &str) -> anyhow::Result<()> {
     reload_file(file)?;
 

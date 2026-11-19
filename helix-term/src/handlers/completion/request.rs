@@ -28,7 +28,7 @@ use crate::job::{dispatch, dispatch_blocking};
 use crate::ui;
 use crate::ui::editor::InsertEvent;
 
-use super::word;
+use super::{gitignore, word};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) enum TriggerKind {
@@ -77,6 +77,23 @@ impl helix_event::AsyncHook for CompletionHandler {
             self.in_flight = None;
         }
         match event {
+            CompletionEvent::RuleInput {
+                cursor,
+                doc,
+                view,
+                can_start,
+            } => {
+                let pending = self.trigger.or(self.in_flight);
+                if can_start || pending.is_some_and(|t| t.doc == doc && t.view == view) {
+                    self.task_controller.cancel();
+                    self.trigger = Some(Trigger {
+                        pos: cursor,
+                        doc,
+                        view,
+                        kind: TriggerKind::Auto,
+                    });
+                }
+            }
             CompletionEvent::AutoTrigger {
                 cursor: trigger_pos,
                 doc,
@@ -165,20 +182,20 @@ fn request_completions(
     compositor: &mut Compositor,
 ) {
     let (view, doc) = current_ref!(editor);
-
-    if compositor
-        .find::<ui::EditorView>()
-        .unwrap()
-        .completion
-        .is_some()
-        || editor.mode != Mode::Insert
-    {
+    if editor.mode != Mode::Insert || trigger.view != view.id || trigger.doc != doc.id() {
         return;
     }
-
+    let ui = compositor.find::<ui::EditorView>().unwrap();
+    if let Some(menu) = &ui.completion {
+        if trigger.kind != TriggerKind::Manual || !menu.has_rule_context() {
+            return;
+        }
+        ui.clear_completion(editor);
+    }
+    let (view, doc) = current_ref!(editor);
     let text = doc.text();
     let cursor = doc.selection(view.id).primary().cursor(text.slice(..));
-    if trigger.view != view.id || trigger.doc != doc.id() || cursor < trigger.pos {
+    if cursor < trigger.pos {
         return;
     }
     // This looks odd... Why are we not using the trigger position from the `trigger` here? Won't
@@ -189,6 +206,7 @@ fn request_completions(
     // rely on the trigger offset and primary cursor matching for multi-cursor completions so this
     // is definitely necessary from our side too.
     trigger.pos = cursor;
+    let trust = gitignore::enabled(doc).then(|| editor.workspace_trust.clone());
     let doc = doc_mut!(editor, &doc.id());
     let savepoint = doc.savepoint(view);
     let text = doc.text();
@@ -240,18 +258,32 @@ fn request_completions(
             savepoint.clone(),
         ));
     }
-    if let Some(path_completion_request) = path_completion(
-        doc.selection(view.id).clone(),
-        doc,
-        handle.clone(),
-        savepoint.clone(),
-    ) {
-        requests.spawn_blocking(path_completion_request);
-    }
-    if let Some(word_completion_request) =
-        word::completion(editor, trigger, handle.clone(), savepoint)
-    {
-        requests.spawn_blocking(word_completion_request);
+    let comment = trust.is_some() && gitignore::comment(text.slice(..), cursor);
+    let mut snapshot = None;
+    if let Some(trust) = trust.filter(|_| !comment) {
+        if let Some((state, request)) = gitignore::request(
+            doc,
+            view.id,
+            trigger.kind == TriggerKind::Manual,
+            handle.clone(),
+            trust,
+            savepoint,
+        ) {
+            snapshot = Some(state);
+            requests.spawn_blocking(request);
+        }
+    } else if !comment || trigger.kind == TriggerKind::Manual {
+        if let Some(request) = path_completion(
+            doc.selection(view.id).clone(),
+            doc,
+            handle.clone(),
+            savepoint.clone(),
+        ) {
+            requests.spawn_blocking(request);
+        }
+        if let Some(request) = word::completion(editor, trigger, handle.clone(), savepoint) {
+            requests.spawn_blocking(request);
+        }
     }
 
     let ui = compositor.find::<ui::EditorView>().unwrap();
@@ -278,12 +310,16 @@ fn request_completions(
             response.take_items(&mut items);
             context.insert(response.provider, response.context);
         }
+        let initial = snapshot.clone();
+        let initial_handle = handle_.clone();
         dispatch(move |editor, compositor| {
-            show_completion(editor, compositor, items, context, trigger)
+            if !initial_handle.is_canceled() {
+                show_completion(editor, compositor, items, context, trigger, initial)
+            }
         })
         .await;
         if !requests.is_empty() {
-            replace_completions(handle_, requests, false).await;
+            replace_completions(handle_, requests, false, snapshot).await;
         }
     };
     tokio::spawn(cancelable_future(request_completions, handle));
@@ -368,7 +404,11 @@ pub fn request_incomplete_completion_list(editor: &mut Editor, handle: TaskHandl
         );
         requests.spawn(request);
     }
+    let snapshot = gitignore::refresh(editor, handle.clone()).map(|(state, request)| {
+        requests.spawn_blocking(request);
+        state
+    });
     if !requests.is_empty() {
-        tokio::spawn(replace_completions(handle, requests, true));
+        tokio::spawn(replace_completions(handle, requests, true, snapshot));
     }
 }
