@@ -1,6 +1,6 @@
 use super::*;
 
-async fn wait_for_menu(app: &mut Application) -> anyhow::Result<()> {
+pub(super) async fn wait_for_menu(app: &mut Application) -> anyhow::Result<()> {
     tokio::time::timeout(Duration::from_secs(5), async {
         while app.editor.last_completion.is_none() {
             app.editor.reset_idle_timer();

@@ -55,6 +55,48 @@ fn assert_result(output: &str, path: &str, state: &str, source: &str, pattern: &
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn completed_exception_can_be_filtered_and_opened_before_saving() -> anyhow::Result<()> {
+    let repo = repository()?;
+    let root = repo.path();
+    let rules = root.join(".gitignore");
+    fs::write(&rules, "# saved\n")?;
+    fs::write(root.join("$a.tmp"), "")?;
+    fs::write(root.join("$b.tmp"), "")?;
+    let mut app = AppBuilder::new()
+        .with_file(&rules, None)
+        .with_input_text("*.tmp\n![$]a.tmp\n#[|\n]#")
+        .build()?;
+    app.test_resize(110, 24).await?;
+    keys(&mut app, "i!$<C-x>").await?;
+    super::completion::wait_for_menu(&mut app).await?;
+    keys(&mut app, "<tab><ret><esc>").await?;
+    assert_eq!(
+        doc!(app.editor).text().to_string(),
+        "*.tmp\n![$]a.tmp\n!$b.tmp\n"
+    );
+    keys(&mut app, &format!("{PREVIEW}<tab>/$b")).await?;
+    let output = wait_for_preview(&mut app, "Path filter matches 1 of 1 changed files").await?;
+    assert_result(
+        &output,
+        "> Now included  $b.tmp",
+        "Now included",
+        ".gitignore:3",
+        "!$b.tmp",
+    );
+    keys(&mut app, "<ret>").await?;
+    let (view, doc) = helix_view::current_ref!(app.editor);
+    assert_eq!(doc.path().unwrap(), rules);
+    let cursor = doc
+        .selection(view.id)
+        .primary()
+        .cursor(doc.text().slice(..));
+    assert_eq!(doc.text().slice(cursor..).to_string(), "!$b.tmp\n");
+    assert!(doc.is_modified());
+    assert_eq!(fs::read_to_string(&rules)?, "# saved\n");
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn changed_only_combines_with_path_and_jumps_to_the_reincluded_files_rule(
 ) -> anyhow::Result<()> {
     let repo = repository()?;

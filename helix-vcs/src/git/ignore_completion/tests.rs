@@ -59,6 +59,9 @@ fn overlays_the_buffer_and_compares_effects_like_git() -> anyhow::Result<()> {
             Effect::Overridden,
         ),
         ("*.LOG\n", "keep.log", "", "keep.log", Effect::Unchanged),
+        ("*.tmp\n", "!$b.tmp", "", "$b.tmp", Effect::Changed),
+        ("*.tmp\n!$b.tmp\n", "*.tmp", "", "$b.tmp", Effect::Changed),
+        ("", "*.tmp", "!$b.tmp\n", "$b.tmp", Effect::Overridden),
         (
             "build/\n",
             "!build/keep.txt",
@@ -131,7 +134,7 @@ fn repository_layers_index_and_linked_worktree() -> anyhow::Result<()> {
     let dir = base.join("out");
     fs::create_dir_all(&dir)?;
     fs::write(worktree.join(".gitignore"), "*.ancestor\n")?;
-    fs::write(dir.join(".gitignore"), "!local.tmp\n")?;
+    fs::write(dir.join(".gitignore"), "!$local.tmp\n")?;
     fs::write(dir.join("tracked"), "")?;
     git(&worktree, &["add", "app/out/tracked"]);
     let sources = Sources::load(&base, &dir, true);
@@ -148,7 +151,7 @@ fn repository_layers_index_and_linked_worktree() -> anyhow::Result<()> {
         );
     }
     assert_eq!(
-        rules.effect("out/*.tmp", &dir.join("local.tmp"), false),
+        rules.effect("out/*.tmp", &dir.join("$local.tmp"), false),
         Effect::Overridden
     );
     let (matcher, parent) = Matcher::load(&base, "# linked\n!out/*.info\n", 2, true, &|| false)?;

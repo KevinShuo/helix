@@ -44,6 +44,26 @@ fn git_path(path: &Path) -> Option<Cow<'_, BStr>> {
     ))
 }
 
+// gix-ignore 0.21 rejects !$ even with its precious-file extension disabled.
+// Git treats the dollar as literal. Preserve line numbers and all other bytes.
+fn git_pattern_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
+    let raw = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes);
+    if !raw.starts_with(b"!$") && raw.find(b"\n!$").is_none() {
+        return Cow::Borrowed(bytes);
+    }
+    let mut escaped = Vec::with_capacity(bytes.len());
+    escaped.extend_from_slice(&bytes[..bytes.len() - raw.len()]);
+    for line in raw.split_inclusive(|&b| b == b'\n') {
+        if let Some(tail) = line.strip_prefix(b"!$") {
+            escaped.extend_from_slice(b"!\\$");
+            escaped.extend_from_slice(tail);
+        } else {
+            escaped.extend_from_slice(line);
+        }
+    }
+    Cow::Owned(escaped)
+}
+
 impl Sources {
     pub fn load(base: &Path, directory: &Path, trust_full: bool) -> Self {
         Self(RepositorySources::load(base, directory, trust_full).ok())
@@ -55,7 +75,7 @@ impl Sources {
         if let Some(repo) = &self.0 {
             for (text, search) in [(before, &mut preceding), (after, &mut following)] {
                 search.add_patterns_buffer(
-                    text.as_bytes(),
+                    &git_pattern_bytes(text.as_bytes()),
                     &repo.document,
                     Some(&repo.root),
                     Default::default(),
@@ -205,7 +225,7 @@ fn tracked_names(repo: &gix::Repository, directory: &Path, case: Case) -> Option
 
 fn add_file(search: &mut Search, file: &Path, root: Option<&Path>) -> io::Result<()> {
     if let Some(bytes) = read_ignore_file(file, root.is_some())? {
-        search.add_patterns_buffer(&bytes, file, root, Default::default());
+        search.add_patterns_buffer(&git_pattern_bytes(&bytes), file, root, Default::default());
     }
     Ok(())
 }
@@ -273,7 +293,7 @@ impl Rules<'_> {
         };
         let mut candidate = Search::default();
         candidate.add_patterns_buffer(
-            rule.as_bytes(),
+            &git_pattern_bytes(rule.as_bytes()),
             &repo.document,
             Some(&repo.root),
             Default::default(),

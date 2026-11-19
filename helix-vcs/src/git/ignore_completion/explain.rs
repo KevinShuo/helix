@@ -16,7 +16,10 @@ use gix::{
     index::entry::Mode,
 };
 
-use super::{git_path, global_excludes, ignore_case, open_index, read_ignore_file, worktree_root};
+use super::{
+    git_path, git_pattern_bytes, global_excludes, ignore_case, open_index, read_ignore_file,
+    worktree_root,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Decision {
@@ -86,24 +89,12 @@ struct Source {
 impl Layer {
     fn parse(bytes: &[u8], file: &Path, base: Option<&Path>, root: &Path) -> Self {
         let raw = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes);
-        // gix-ignore 0.21 rejects !$ even with its precious-file extension
-        // disabled. Git treats the dollar as literal; escape it for parsing.
-        let normalized = if raw.starts_with(b"!$") || raw.find(b"\n!$").is_some() {
-            let mut escaped = Vec::with_capacity(bytes.len());
-            escaped.extend_from_slice(&bytes[..bytes.len() - raw.len()]);
-            for line in raw.split_inclusive(|&b| b == b'\n') {
-                if let Some(tail) = line.strip_prefix(b"!$") {
-                    escaped.extend_from_slice(b"!\\$");
-                    escaped.extend_from_slice(tail);
-                } else {
-                    escaped.extend_from_slice(line);
-                }
-            }
-            Cow::Owned(escaped)
-        } else {
-            Cow::Borrowed(bytes)
-        };
-        let list = List::from_bytes(&normalized, file.to_owned(), base, Ignore::default());
+        let list = List::from_bytes(
+            &git_pattern_bytes(bytes),
+            file.to_owned(),
+            base,
+            Ignore::default(),
+        );
         let source = Source {
             display_path: file.strip_prefix(root).unwrap_or(file).to_owned(),
             lines: raw.lines().map(|s| Box::from(pattern_text(s))).collect(),
