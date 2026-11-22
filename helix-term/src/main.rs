@@ -51,7 +51,7 @@ FLAGS:
     --strict                       Bail on error for commands that can fail.
     --tutor                        Load the tutorial
     --health [CATEGORY]            Check for potential errors in editor setup
-                                   CATEGORY can be a language or one of 'clipboard', 'languages',
+                                   CATEGORY can be a language or one of 'ai', 'clipboard', 'languages',
                                    'all-languages' or 'all'. 'languages' is filtered according to
                                    user config, 'all-languages' and 'all' are not. If not specified,
                                    the default is the same as 'all', but with languages filtering.

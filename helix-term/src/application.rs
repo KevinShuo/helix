@@ -109,7 +109,7 @@ impl Application {
 
     pub fn new(
         args: Args,
-        config: Config,
+        mut config: Config,
         lang_loader: syntax::Loader,
         workspace_trust: helix_loader::workspace_trust::WorkspaceTrust,
     ) -> Result<Self, Error> {
@@ -117,6 +117,9 @@ impl Application {
         setup_integration_logging();
 
         use helix_view::editor::Action;
+
+        // Callers may supply an in-memory config without loading a config file.
+        crate::ai_hardware::configure(&mut config.editor)?;
 
         let mut theme_parent_dirs = vec![helix_loader::config_dir()];
         theme_parent_dirs.extend(helix_loader::runtime_dirs().iter().cloned());
@@ -279,6 +282,7 @@ impl Application {
 
     async fn render(&mut self) {
         handlers::ai_doc::refresh(&mut self.editor, &mut self.compositor);
+        handlers::ai_generate::refresh(&mut self.editor, &mut self.compositor);
         handlers::ai_merge::refresh(&mut self.editor, &mut self.compositor);
         handlers::ai_test::refresh(&mut self.editor, &mut self.compositor);
         handlers::test::refresh(&mut self.editor, &mut self.compositor);
@@ -407,8 +411,8 @@ impl Application {
             // Since only the Application can make changes to Editor's config,
             // the Editor must send up a new copy of a modified config so that
             // the Application can apply it.
-            ConfigEvent::Update(editor_config) => {
-                if let Err(error) = editor_config.validate_ai() {
+            ConfigEvent::Update(mut editor_config) => {
+                if let Err(error) = crate::ai_hardware::configure(&mut editor_config) {
                     self.editor.set_error(error.to_string());
                     return;
                 }
@@ -417,6 +421,10 @@ impl Application {
                 if let Err(err) = self.terminal.reconfigure((&app_config.editor).into()) {
                     self.editor.set_error(err.to_string());
                 };
+                if old_editor_config.ai.enabled != app_config.editor.ai.enabled {
+                    self.editor
+                        .set_status(app_config.editor.ai.statusline().to_owned());
+                }
                 self.config.store(Arc::new(app_config));
             }
             ConfigEvent::ThemeChanged => {

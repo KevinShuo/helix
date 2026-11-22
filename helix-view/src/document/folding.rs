@@ -174,6 +174,13 @@ impl Document {
 
     pub(super) fn map_folds(&mut self, changes: &ChangeSet) {
         self.fold_candidates.take();
+        if self
+            .view_data
+            .values()
+            .all(|data| data.folding.closed.is_empty())
+        {
+            return;
+        }
         let edits: Vec<_> = changes
             .changes_iter()
             .map(|(start, end, _)| start..end)

@@ -3,6 +3,13 @@ use serde_json::{json, Value};
 use std::{fs::OpenOptions, io::Write, time::Duration};
 
 pub(super) fn model() -> AiProviderConfig {
+    if let Some(path) = std::env::var_os("HELIX_AI_EVAL_PROVIDER_CONFIG") {
+        let bytes = std::fs::read(path).expect("evaluation provider file");
+        let provider: AiProviderConfig =
+            serde_json::from_slice(&bytes).expect("evaluation provider");
+        provider.validate().expect("valid evaluation provider");
+        return provider;
+    }
     let thinking = std::env::var("HELIX_AI_EVAL_THINKING").as_deref() == Ok("true");
     AiProviderConfig {
         kind: AiProviderType::LlamaCpp,

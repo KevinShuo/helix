@@ -6,6 +6,102 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 pub(super) const MAX_SUPPORTING_CHARS: usize = 1200;
 
+/// Omit leading sibling functions from a CPU prompt only when their names
+/// aren't referenced by the function being edited. Keep the ordinary window
+/// for globals, imports, methods with implicit receivers, or incomplete trees.
+pub(super) fn compact_prefix_start(
+    text: RopeSlice,
+    syntax: Option<&Syntax>,
+    cursor: usize,
+    window: usize,
+    suffix_chars: usize,
+) -> usize {
+    let floor = cursor.saturating_sub(window);
+    if floor == 0 || window == 0 {
+        return floor;
+    }
+    let Some(syntax) = syntax else { return floor };
+    let is_function = |node: &Node| {
+        matches!(
+            node.kind(),
+            "function_definition" | "function_declaration" | "function_item"
+        )
+    };
+    // The last token can be a syntax error mid-expression. Anchor the lookup
+    // on the first code token on the current (or last nonblank) line instead.
+    let anchor = text
+        .chars_at(cursor)
+        .reversed()
+        .take(window)
+        .position(|ch| !ch.is_whitespace());
+    let Some(last) = anchor.map(|n| cursor - n - 1) else {
+        return floor;
+    };
+    let line = text.line_to_char(text.char_to_line(last)).max(floor);
+    let point = line
+        + text
+            .slice(line..=last)
+            .chars()
+            .take_while(|c| c.is_whitespace())
+            .count();
+    let byte = text.char_to_byte(point) as u32;
+    let Some(leaf) = syntax.named_descendant_for_byte_range(byte, byte + 1) else {
+        return floor;
+    };
+    let Some(function) = std::iter::successors(Some(leaf), |n| n.parent())
+        .take(48)
+        .find(is_function)
+    else {
+        return floor;
+    };
+    let Some(parent) = function.parent() else {
+        return floor;
+    };
+    if !matches!(
+        parent.kind(),
+        "module" | "program" | "source_file" | "translation_unit"
+    ) {
+        return floor;
+    }
+    let start = text.byte_to_char(function.start_byte() as usize);
+    if start <= floor {
+        return floor;
+    }
+    let body = text
+        .slice(start..(cursor + suffix_chars.min(16_000)).min(text.len_chars()))
+        .to_string();
+    let mut prev = function.prev_named_sibling();
+    for _ in 0..96 {
+        let Some(node) = prev else { return start };
+        if text.byte_to_char(node.end_byte() as usize) <= floor {
+            return start;
+        }
+        if !is_function(&node) {
+            return floor;
+        }
+        let Some(name) = node
+            .children()
+            .find(|n| n.kind() == "identifier")
+            .or_else(|| {
+                node.children()
+                    .find(|n| n.kind() == "function_declarator")?
+                    .children()
+                    .find(|n| n.kind() == "identifier")
+            })
+        else {
+            return floor;
+        };
+        let name = text
+            .byte_slice(name.start_byte() as usize..name.end_byte() as usize)
+            .to_string();
+        if body.contains(&name) {
+            return floor;
+        }
+        prev = node.prev_named_sibling();
+    }
+    floor
+}
+
 pub(super) fn member_stem(prefix: &str) -> Option<&str> {
     let line = prefix.rsplit('\n').next()?;
     let stem = line
@@ -19,15 +115,122 @@ pub(super) fn member_stem(prefix: &str) -> Option<&str> {
 pub(super) struct MemberContext {
     pub notes: String,
     pub names: Option<Vec<String>>,
+    pub field_suffix: Option<String>,
+}
+
+/// Only look up standalone names where the user is already writing an expression.
+pub(super) fn variable_stem<'a>(
+    prefix: &'a str,
+    syntax: Option<&Syntax>,
+    end: u32,
+) -> Option<&'a str> {
+    let line = prefix.rsplit('\n').next()?.trim_start();
+    let stem = line
+        .rsplit(|ch| !helix_core::chars::char_is_word(ch))
+        .next()?;
+    if stem.chars().count() < 3 || !stem.starts_with(|ch: char| ch.is_alphabetic() || ch == '_') {
+        return None;
+    }
+    let name = syntax?.named_descendant_for_byte_range(end.checked_sub(1)?, end)?;
+    if !matches!(name.kind(), "identifier" | "name") || name.end_byte() != end {
+        return None;
+    }
+    let before = line.strip_suffix(stem)?.trim_end();
+    if before == "return" || before.ends_with('=') {
+        return Some(stem);
+    }
+    let parent = name.parent()?;
+    let expression = match parent.kind() {
+        "arguments" | "argument_list" => parent
+            .parent()
+            .is_some_and(|p| matches!(p.kind(), "call" | "call_expression" | "method_invocation")),
+        "condition_clause" => true,
+        "if_statement" | "elif_clause" | "while_statement" | "if_expression"
+        | "while_expression" => {
+            matches!(before, "if" | "elif" | "while")
+        }
+        _ => false,
+    };
+    expression.then_some(stem)
+}
+
+/// Finish only an unambiguous field whose complete edit is the typed identifier.
+fn literal_field_suffix(
+    items: &[lsp::CompletionItem],
+    stem: &str,
+    edit_range: Option<lsp::Range>,
+) -> Option<String> {
+    literal_suffix(
+        items,
+        stem,
+        edit_range,
+        &[
+            lsp::CompletionItemKind::FIELD,
+            lsp::CompletionItemKind::PROPERTY,
+        ],
+    )
+}
+
+fn literal_suffix(
+    items: &[lsp::CompletionItem],
+    stem: &str,
+    edit_range: Option<lsp::Range>,
+    kinds: &[lsp::CompletionItemKind],
+) -> Option<String> {
+    if stem.chars().count() < 2 {
+        return None;
+    }
+    let mut matching = items.iter().filter(|item| {
+        item.filter_text
+            .as_deref()
+            .unwrap_or(item.label.trim())
+            .starts_with(stem)
+    });
+    let item = matching.next()?;
+    let name = item.label.trim();
+    if matching.next().is_some()
+        || !item.kind.is_some_and(|kind| kinds.contains(&kind))
+        || !name.chars().all(helix_core::chars::char_is_word)
+        || item.filter_text.as_deref().is_some_and(|text| text != name)
+        || item.insert_text.as_deref().is_some_and(|text| text != name)
+        || item
+            .additional_text_edits
+            .as_ref()
+            .is_some_and(|edits| !edits.is_empty())
+        || item.command.is_some()
+        || item.deprecated == Some(true)
+        || item.tags.as_ref().is_some_and(|tags| !tags.is_empty())
+    {
+        return None;
+    }
+    let edit_matches = match &item.text_edit {
+        None => true,
+        Some(lsp::CompletionTextEdit::Edit(edit)) => {
+            edit.new_text == name && Some(edit.range) == edit_range
+        }
+        Some(lsp::CompletionTextEdit::InsertAndReplace(edit)) => {
+            edit.new_text == name && edit.insert == edit.replace && Some(edit.insert) == edit_range
+        }
+    };
+    let suffix = name.strip_prefix(stem)?;
+    (edit_matches && !suffix.is_empty() && suffix.len() <= 96).then(|| suffix.to_owned())
 }
 
 impl MemberContext {
-    pub fn from_response(response: lsp::CompletionResponse, stem: &str, budget: usize) -> Self {
+    pub fn from_response(
+        response: lsp::CompletionResponse,
+        stem: &str,
+        budget: usize,
+        edit_range: Option<lsp::Range>,
+    ) -> Self {
         let (items, complete) = match response {
             lsp::CompletionResponse::Array(items) => (items, true),
             lsp::CompletionResponse::List(list) => (list.items, !list.is_incomplete),
         };
         let mut authoritative = complete && items.len() <= 128;
+        let field_suffix = authoritative
+            .then(|| literal_field_suffix(&items, stem, edit_range))
+            .flatten();
         let mut items: Vec<_> = items.into_iter().take(128).collect();
         items.sort_by(|a, b| {
             a.sort_text
@@ -105,6 +308,7 @@ impl MemberContext {
             );
         }
         Self {
+            field_suffix,
             notes,
             names: (authoritative && !names.is_empty()).then(|| names.into_iter().collect()),
         }
@@ -117,6 +321,68 @@ pub(super) async fn fetch_members(
     stem: &str,
     budget: usize,
 ) -> Option<MemberContext> {
+    let (response, range) = fetch_completions(server, params, stem).await?;
+    Some(MemberContext::from_response(response, stem, budget, range))
+}
+
+pub(super) async fn fetch_variable(
+    server: Arc<helix_lsp::Client>,
+    params: lsp::CompletionParams,
+    stem: &str,
+) -> Option<String> {
+    let (response, range) = fetch_completions(server, params, stem).await?;
+    let items = match response {
+        lsp::CompletionResponse::Array(items) => items,
+        lsp::CompletionResponse::List(list) if !list.is_incomplete => list.items,
+        _ => return None,
+    };
+    variable_suffix(items, stem, range)
+}
+
+fn variable_suffix(
+    mut items: Vec<lsp::CompletionItem>,
+    stem: &str,
+    range: Option<lsp::Range>,
+) -> Option<String> {
+    if items.len() > 128 {
+        return None;
+    }
+    // clangd also searches headers outside this translation unit. Those
+    // candidates require an include edit and cannot be inserted inline.
+    items.retain(|item| {
+        !item.additional_text_edits.as_deref().is_some_and(|edits| {
+            edits.iter().any(|edit| {
+                edit.range.start == edit.range.end
+                    && edit.new_text.trim_start().starts_with("#include ")
+            })
+        })
+    });
+    literal_suffix(
+        &items,
+        stem,
+        range,
+        &[
+            lsp::CompletionItemKind::VARIABLE,
+            lsp::CompletionItemKind::CONSTANT,
+        ],
+    )
+}
+
+async fn fetch_completions(
+    server: Arc<helix_lsp::Client>,
+    params: lsp::CompletionParams,
+    stem: &str,
+) -> Option<(lsp::CompletionResponse, Option<lsp::Range>)> {
+    let end = params.text_document_position.position;
+    let width = match server.offset_encoding() {
+        helix_lsp::OffsetEncoding::Utf8 => stem.len(),
+        helix_lsp::OffsetEncoding::Utf16 => stem.encode_utf16().count(),
+        helix_lsp::OffsetEncoding::Utf32 => stem.chars().count(),
+    };
+    let range = end
+        .character
+        .checked_sub(width as u32)
+        .map(|character| lsp::Range::new(lsp::Position::new(end.line, character), end));
     let response = tokio::time::timeout(
         Duration::from_millis(200),
         server.call_cancellable::<lsp::request::Completion>(params),
@@ -124,7 +390,7 @@ pub(super) async fn fetch_members(
     .await
     .ok()?
     .ok()??;
-    Some(MemberContext::from_response(response, stem, budget))
+    Some((response, range))
 }
 
 pub(super) fn source_notes(
@@ -139,6 +405,10 @@ pub(super) fn source_notes(
     let prefix_chars = prefix_chars.min(64_000);
     let budget = (prefix_chars / 4).min(600);
     let recent_start = cursor.saturating_sub(prefix_chars.saturating_sub(2 * budget));
+    // Only declarations outside the retained prefix can contribute notes.
+    if recent_start == 0 {
+        return String::new();
+    }
     let preceding = text
         .chars_at(cursor)
         .reversed()
@@ -341,6 +611,41 @@ mod tests {
     }
 
     #[test]
+    fn compact_window_keeps_the_active_function_and_preserves_referenced_helpers() {
+        let loader = helix_core::config::default_lang_loader();
+        let previous = (0..75)
+            .map(|n| format!("def old_{n}(x):\n    return x\n\n"))
+            .collect::<String>();
+        for (active, compact) in [
+            (
+                "def weighted_mean(values, weights):\n    return sum(values) / ",
+                true,
+            ),
+            ("def square(number):\n    ", true),
+            ("def convert(x):\n    return old_74(x) + ", false),
+        ] {
+            let text = Rope::from(format!("{previous}{active}\n"));
+            let cursor = text.len_chars() - 1;
+            let syntax = Syntax::new(
+                text.slice(..),
+                loader.language_for_name("python").unwrap(),
+                &loader,
+            )
+            .unwrap();
+            let start = compact_prefix_start(text.slice(..), Some(&syntax), cursor, 960, 240);
+            assert_eq!(
+                start,
+                if compact {
+                    previous.chars().count()
+                } else {
+                    cursor - 960
+                },
+                "{active}"
+            );
+        }
+    }
+
+    #[test]
     fn source_context_restores_distant_python_contract() {
         let source = format!(
             "def process(values):\r\n    \"\"\"Return the largest strictly negative value; use 0 when absent. 中文。\"\"\"\r\n{}    return \r\n",
@@ -445,6 +750,156 @@ mod tests {
     }
 
     #[test]
+    fn inline_variable_requires_a_unique_literal_name_in_an_expression() {
+        let loader = helix_core::config::default_lang_loader();
+        for (language, marked, expected) in [
+            ("python", "def f():\n    return total_b|", Some("total_b")),
+            ("python", "value = tot|", Some("tot")),
+            ("python", "value = apply(a, tot|)", Some("tot")),
+            ("cpp", "void f() { use(tot|); }", Some("tot")),
+            ("cpp", "void f() { if (tot|) {} }", Some("tot")),
+            ("python", "if tot|:\n    pass", Some("tot")),
+            ("python", "def f(tot|):\n    pass", None),
+            ("python", "call(obj.tot|)", None),
+            ("python", "call('tot|')", None),
+            ("python", "call(to|)", None),
+            ("python", "call(total_b |)", None),
+            ("python", "call(tot|al)", None),
+        ] {
+            let (prefix, suffix) = marked.split_once('|').unwrap();
+            let text = Rope::from(format!("{prefix}{suffix}"));
+            let syntax = Syntax::new(
+                text.slice(..),
+                loader.language_for_name(language).unwrap(),
+                &loader,
+            )
+            .unwrap();
+            assert_eq!(
+                variable_stem(prefix, Some(&syntax), prefix.len() as u32),
+                expected,
+                "{marked}"
+            );
+        }
+        let local = |name: &str| lsp::CompletionItem {
+            label: name.to_owned(),
+            kind: Some(lsp::CompletionItemKind::VARIABLE),
+            ..Default::default()
+        };
+        let kinds = &[
+            lsp::CompletionItemKind::VARIABLE,
+            lsp::CompletionItemKind::CONSTANT,
+        ];
+        let external = lsp::CompletionItem {
+            filter_text: Some("total_buffer".into()),
+            additional_text_edits: Some(vec![lsp::TextEdit {
+                range: lsp::Range::default(),
+                new_text: "#include <buffer>\n".into(),
+            }]),
+            ..local("ext::total_buffer")
+        };
+        assert_eq!(
+            variable_suffix(
+                vec![external.clone(), local("total_bytes")],
+                "total_b",
+                None
+            )
+            .as_deref(),
+            Some("ytes")
+        );
+        assert!(variable_suffix(vec![external], "total_b", None).is_none());
+        assert!(variable_suffix(
+            vec![local("total_bytes"), local("total_blocks")],
+            "total_b",
+            None
+        )
+        .is_none());
+        assert_eq!(
+            literal_suffix(&[local("total_bytes")], "total_b", None, kinds).as_deref(),
+            Some("ytes")
+        );
+        assert!(literal_suffix(
+            &[local("total_bytes"), local("total_blocks")],
+            "total_b",
+            None,
+            kinds
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn clangd_field_edit_must_replace_exactly_the_typed_prefix() {
+        let range = lsp::Range::new(lsp::Position::new(1, 33), lsp::Position::new(1, 36));
+        let field = lsp::CompletionItem {
+            label: " payload_size".into(),
+            kind: Some(lsp::CompletionItemKind::FIELD),
+            filter_text: Some("payload_size".into()),
+            text_edit: Some(lsp::CompletionTextEdit::Edit(lsp::TextEdit {
+                range,
+                new_text: "payload_size".into(),
+            })),
+            ..Default::default()
+        };
+        let items = [field];
+        assert_eq!(
+            literal_field_suffix(&items, "pay", Some(range)).as_deref(),
+            Some("load_size")
+        );
+        assert!(literal_field_suffix(&items, "pay", None).is_none());
+        assert!(
+            literal_field_suffix(&items, "pay", Some(lsp::Range::new(range.end, range.end)))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn only_an_unambiguous_literal_field_can_skip_inference() {
+        let field = lsp::CompletionItem {
+            label: "payload_size".into(),
+            kind: Some(lsp::CompletionItemKind::FIELD),
+            ..Default::default()
+        };
+        let lookup = |items, incomplete, stem| {
+            MemberContext::from_response(
+                lsp::CompletionResponse::List(lsp::CompletionList {
+                    items,
+                    is_incomplete: incomplete,
+                }),
+                stem,
+                200,
+                None,
+            )
+            .field_suffix
+        };
+        assert_eq!(
+            lookup(vec![field.clone()], false, "pay").as_deref(),
+            Some("load_size")
+        );
+        assert!(lookup(vec![field.clone()], true, "pay").is_none());
+        assert!(lookup(vec![field.clone()], false, "p").is_none());
+        assert!(lookup(
+            vec![
+                field.clone(),
+                lsp::CompletionItem {
+                    label: "payment".into(),
+                    ..field.clone()
+                }
+            ],
+            false,
+            "pay"
+        )
+        .is_none());
+        assert!(lookup(
+            vec![lsp::CompletionItem {
+                insert_text: Some("other".into()),
+                ..field
+            }],
+            false,
+            "pay"
+        )
+        .is_none());
+    }
+
+    #[test]
     fn member_context_limits_metadata_and_authority() {
         let item = lsp::CompletionItem {
             label: "lookup_by_id(int id)".into(),
@@ -457,6 +912,7 @@ mod tests {
             lsp::CompletionResponse::Array(vec![item.clone()]),
             "look",
             200,
+            None,
         );
         assert_eq!(result.names, Some(vec!["lookup_by_id".into()]));
         assert!(result.notes.contains("const Record*"));
@@ -469,6 +925,7 @@ mod tests {
             }),
             "",
             200,
+            None,
         );
         assert!(result.names.is_none());
         assert!(!result.notes.is_empty());
@@ -476,6 +933,7 @@ mod tests {
             lsp::CompletionResponse::Array(vec![item.clone(); 129]),
             "",
             200,
+            None,
         );
         assert!(result.names.is_none());
         let result = MemberContext::from_response(
@@ -485,6 +943,7 @@ mod tests {
             }]),
             "",
             200,
+            None,
         );
         assert!(result.names.is_none());
         assert!(result.notes.is_empty());
@@ -509,6 +968,7 @@ mod tests {
             lsp::CompletionResponse::Array(vec![function.clone(), enumeration]),
             "",
             600,
+            None,
         );
         assert!(result.names.unwrap().contains(&"Color".to_owned()));
         let unknown = lsp::CompletionItem {
@@ -520,6 +980,7 @@ mod tests {
             lsp::CompletionResponse::Array(vec![function, unknown]),
             "",
             600,
+            None,
         );
         assert!(result.names.is_none());
     }

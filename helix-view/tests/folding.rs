@@ -145,6 +145,7 @@ fn edits_outside_function_that_change_syntax_remove_stale_folds() {
 fn folds_clear_ai_previews_and_cancel_pending_requests() {
     let (mut doc, view, _) = document(SOURCE);
     doc.ai_completion = Some(helix_view::ai_completion::AiCompletion {
+        request_latency: None,
         view,
         version: doc.version(),
         annotation: helix_core::text_annotations::InlineAnnotation::new(0, "preview"),

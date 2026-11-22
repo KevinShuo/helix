@@ -3,9 +3,11 @@ pub mod macros;
 
 pub mod action;
 pub mod ai;
+pub mod ai_chat;
 pub mod ai_commit;
 pub mod ai_completion;
 pub mod ai_doc;
+pub mod ai_generate;
 pub mod ai_merge;
 pub mod ai_test;
 pub mod annotations;

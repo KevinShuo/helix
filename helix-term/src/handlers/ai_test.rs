@@ -61,12 +61,16 @@ fn preflight(
 }
 
 pub(crate) fn start(editor: &mut Editor) -> Result<()> {
+    editor.config().check_ai_enabled()?;
     ensure!(
         editor.config().ai_test.enabled,
         "请先在 [editor.ai-test] 中启用 enabled = true"
     );
     ensure!(
-        !editor.ai_commit_running && editor.ai_doc.is_none() && editor.ai_merge.is_none(),
+        !super::ai::interactive_busy(editor)
+            && !editor.ai_commit_running
+            && editor.ai_doc.is_none()
+            && editor.ai_merge.is_none(),
         "请先完成或取消其他 AI 生成任务"
     );
     ensure!(
@@ -274,7 +278,10 @@ pub(crate) fn accept(editor: &mut Editor) -> Result<()> {
 
 pub(crate) fn run_last(editor: &mut Editor) -> Result<()> {
     ensure!(
-        !editor.ai_commit_running && editor.ai_doc.is_none() && editor.ai_merge.is_none(),
+        !super::ai::interactive_busy(editor)
+            && !editor.ai_commit_running
+            && editor.ai_doc.is_none()
+            && editor.ai_merge.is_none(),
         "请先完成其他 AI 生成任务"
     );
     let mut op = editor

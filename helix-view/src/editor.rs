@@ -351,6 +351,8 @@ pub struct Config {
     /// Independent inline suggestions from an OpenAI-compatible model.
     pub ai_completion: crate::ai_completion::AiCompletionConfig,
     pub ai_doc: crate::ai_doc::AiDocConfig,
+    pub ai_explain: crate::ai::InteractiveConfig,
+    pub ai_generate: crate::ai::InteractiveConfig,
     pub ai_test: crate::ai_test::AiTestConfig,
     pub test: crate::test::TestConfig,
     pub ai_commit: crate::ai_commit::AiCommitConfig,
@@ -710,7 +712,7 @@ impl Default for StatusLineConfig {
                 E::ReadOnlyIndicator,
                 E::FileModificationIndicator,
             ],
-            center: vec![],
+            center: vec![E::AiStatus],
             right: vec![
                 E::Diagnostics,
                 E::Selections,
@@ -747,6 +749,9 @@ impl Default for ModeConfig {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum StatusLineElement {
+    /// The AI master switch and effective model.
+    AiStatus,
+
     /// The editor mode (Normal, Insert, Visual/Selection)
     Mode,
 
@@ -1214,6 +1219,8 @@ impl Default for Config {
             ai: crate::ai::AiConfig::default(),
             ai_completion: crate::ai_completion::AiCompletionConfig::default(),
             ai_doc: crate::ai_doc::AiDocConfig::default(),
+            ai_explain: Default::default(),
+            ai_generate: Default::default(),
             ai_test: crate::ai_test::AiTestConfig::default(),
             test: crate::test::TestConfig::default(),
             ai_commit: crate::ai_commit::AiCommitConfig::default(),
@@ -1308,6 +1315,7 @@ pub struct Editor {
     pub next_document_id: DocumentId,
     pub ai_doc: Option<crate::ai_doc::Operation>,
     pub ai_doc_serial: u64,
+    pub ai_chat: Option<crate::ai_chat::Session>,
     pub ai_merge: Option<crate::ai_merge::Operation>,
     pub ai_merge_serial: u64,
     pub ai_test: Option<crate::ai_test::Operation>,
@@ -1476,6 +1484,7 @@ impl Editor {
             next_document_id: DocumentId::default(),
             ai_doc: None,
             ai_doc_serial: 0,
+            ai_chat: None,
             ai_merge: None,
             ai_merge_serial: 0,
             ai_test: None,
@@ -2975,10 +2984,14 @@ impl Config {
     /// Legacy provider settings. New callers should resolve `ai_provider` per feature.
     pub fn ai_model_config(&self) -> crate::ai_completion::AiCompletionConfig {
         let mut model = self.ai_completion.clone();
-        model.enabled |= self.ai_doc.enabled
-            || self.ai_commit.enabled
-            || self.ai_merge.enabled
-            || self.ai_test.enabled;
+        model.enabled |= !self.laptop()
+            && (self.ai_doc.enabled
+                || self.ai_commit.enabled
+                || self.ai_merge.enabled
+                || self.ai_test.enabled
+                || self.ai_explain.enabled
+                || self.ai_generate.enabled);
+        model.enabled &= self.ai.enabled && !self.ai.deepseek_only;
         model
     }
 }

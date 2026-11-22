@@ -1,7 +1,21 @@
 # Merge these sections into your Helix config.toml.
 # Set DEEPSEEK_API_KEY in the environment before launching Helix.
 [editor.ai]
-default-provider = "local" # Change only this to "deepseek" to use online models.
+enabled = true # Master switch; individual feature settings are preserved.
+min-local-vram-gib = 8 # Below this dedicated GPU capacity, use DeepSeek.
+default-provider = "deepseek"
+auto-local-provider = "local" # Desktop: use installed models that fit this GPU.
+# Optional directories to browse in :ai. By default Helix checks the directories
+# of configured generation weights. Use :config-reload after adding GGUF files.
+# local-model-directories = ['D:\models', 'E:\LLMs']
+# To retain a chosen desktop default across restarts, use its provider name:
+# local-generation-provider = "local-27b"
+# Laptops always use DeepSeek for manual features. Inline completion can run locally.
+
+[editor.ai.deepseek-thinking]
+commit = "low"
+merge = "low"
+test = "low"
 
 [editor.ai.providers.deepseek]
 type = "deepseek"
@@ -72,6 +86,14 @@ local-provider = "local-27b" # Ignored when the inherited provider is online.
 language = "zh-CN"
 timeout-ms = 120000
 max-tokens = 1024
+
+[editor.ai-explain]
+enabled = true
+# Follows the shared generation model in :ai.
+
+[editor.ai-generate]
+enabled = true
+# Set local-provider here to choose a different local generation model.
 
 [editor.ai-commit]
 enabled = true

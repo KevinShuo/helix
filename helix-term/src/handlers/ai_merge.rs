@@ -22,12 +22,14 @@ pub(crate) fn start(editor: &mut Editor, block: usize, intent: String) -> Result
         cfg!(feature = "git"),
         "AI Merge requires a build with Git support"
     );
+    editor.config().check_ai_enabled()?;
     ensure!(
         editor.config().ai_merge.enabled,
         "请先在 [editor.ai-merge] 中启用 enabled = true"
     );
     ensure!(
-        !editor.ai_commit_running
+        !super::ai::interactive_busy(editor)
+            && !editor.ai_commit_running
             && !editor.ai_doc.as_ref().is_some_and(|op| op.is_valid(editor))
             && !super::ai_test::busy(editor),
         "请先完成或取消其他 AI 生成"

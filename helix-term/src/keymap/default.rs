@@ -6,6 +6,9 @@ use helix_core::hashmap;
 
 pub fn default() -> HashMap<Mode, KeyTrie> {
     let normal = keymap!({ "Normal mode"
+        // Legacy terminals encode Ctrl+backslash as 0x1c, decoded as Ctrl+4.
+        "C-\\" | "C-4" => ai_generate,
+        "S-right" => ai_completion_accept,
         "h" | "left" => move_char_left,
         "j" | "down" => move_visual_line_down,
         "k" | "up" => move_visual_line_up,
@@ -408,6 +411,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         },
     }));
     let insert = keymap!({ "Insert mode"
+        "C-\\" | "C-4" => ai_generate,
         "esc" => normal_mode,
 
         "C-s" => commit_undo_checkpoint,

@@ -1,0 +1,61 @@
+set,case,old_result,new_result,old_ms,new_ms,old_suggestion,new_suggestion
+original,signed_ceil_div,wrong,wrong,1836,1809,(a + abs(b) - 1) // abs(b),(a + abs(b) - 1) // abs(b)
+original,descending_lower_bound,wrong,withheld,1170,,<=,
+original,weighted_mean,passed,passed,887,808,sum(weights),sum(weights)
+original,overlapping_occurrences,passed,passed,1354,1249,pos + 1,pos + 1
+original,empty_suffix,wrong,withheld,990,,"suffix: suffix != """"",
+original,signed_rotation,passed,passed,1068,1012,k % len(items),k % len(items)
+original,dedup_last_occurrence,wrong,withheld,1193,,dict.fromkeys(values).keys(),
+original,two_key_sort,passed,passed,1251,1223,"(row[1], -row[0])","(row[1], -row[0])"
+original,clamp_swapped_bounds,passed,passed,1221,1169,"max(low, min(value, high))","max(low, min(value, high))"
+original,chunk_end,passed,passed,936,913,start + size,start + size
+original,first_nonnegative,passed,passed,1065,934,value >= 0,value >= 0
+original,closed_integer_intervals,wrong,wrong,1795,1663,result[-1][1] >= start,result[-1][1] >= start
+original,lazy_default_factory,wrong,wrong,1172,1063,"mapping.get(key, factory())","mapping.get(key, factory())"
+original,coalesce_none,passed,passed,911,857,value is not None,value is not None
+original,binary_search_absent,wrong,wrong,1171,1170,-1,-1
+original,single_prefix_removal,wrong,wrong,1065,1040,text[len(prefix):],text[len(prefix):]
+original,flatten_once,passed,passed,650,625,row,row
+original,positive_modulo,passed,passed,887,830,index % length,index % length
+original,strictly_increasing,passed,passed,1040,963,left < right,left < right
+original,keyword_only_arguments,wrong,wrong,1066,1041,sequence=seq,sequence=seq
+original,safe_abs_int_min,wrong,wrong,1742,1739,-2147483648,-2147483648
+original,uint64_mask,passed,withheld,990,,1ULL << bit,
+original,overlap_shift,passed,passed,1171,1094,values[i-1],values[i-1]
+original,descending_upper_bound,compile_error,withheld,1348,,>=target,
+original,unsigned_saturating_add,passed,passed,1192,1065,maximum - b,maximum - b
+original,closed_interval_intersection,wrong,withheld,1040,,&&,
+original,overflow_safe_average,wrong,wrong,1219,1143,(a + b) / 2,(a + b) / 2
+original,overflow_safe_midpoint,wrong,wrong,1221,1202,(lo + hi) / 2,(lo + hi) / 2
+original,cpp_positive_modulo,wrong,withheld,1011,,value % modulus,
+original,next_power_of_two,passed,passed,1326,1273,++value,++value
+original,header_lookup,passed,passed,1012,991,key.lower(),key.lower()
+original,batch_tail,passed,passed,1012,991,start:start+width,start:start+width
+original,path_extension,passed,passed,1039,1014,Path(filename).suffix.lower(),Path(filename).suffix.lower()
+original,counter_update,passed,passed,1246,1243,"counts.get(word, 0) + 1","counts.get(word, 0) + 1"
+original,first_match,withheld,withheld,,,,
+original,join_names,wrong,withheld,887,,names if names else '',
+original,read_default,passed,passed,1040,963,"options.get(name, default)","options.get(name, default)"
+original,append_if_new,passed,passed,858,805,not in items,not in items
+original,cpp_nonempty,passed,passed,1012,986,&& !b.empty(),&& !b.empty()
+original,cpp_last_index,passed,passed,988,933,i,i
+original,cpp_drop_last,compile_error,withheld,1094,,pop_back,
+original,cpp_minimum,passed,passed,988,881,values.end(),values.end()
+fresh,strip_newlines,wrong,passed,778,929,rstrip(),rstrip('\r\n')
+fresh,mirror_list,passed,passed,802,830,list(reversed(items)),list(reversed(items))
+fresh,first_separator,wrong,withheld,1248,,split(line.split(':')),
+fresh,safe_pop,wrong,passed,832,859,"get(key, None)","pop(key, None)"
+fresh,group_by_user,wrong,withheld,861,,get(),
+fresh,sorted_unique,wrong,withheld,782,,list(set(items)),
+fresh,short_bytes,wrong,withheld,1121,,from struct import unpack,
+fresh,adjacent_pairs,passed,passed,782,778,values[1:],values[1:]
+fresh,suffix_extension,wrong,withheld,1224,,"endswith("".zip"")",
+fresh,window_count,wrong,wrong,1041,1014,range(n - width + 1),range(n - width + 1)
+fresh,first_key_pos,passed,passed,1483,1480,"(i for i, k in enumerate(keys) if k == key), None","(i for i, k in enumerate(keys) if k == key), None"
+fresh,last_separator,wrong,wrong,1456,1064,"rsplit('/', 1)[0]","rsplit('/', 1)[0]"
+fresh,unsigned_high,passed,passed,2050,2003,(word & 0x80000000) != 0,(word & 0x80000000) != 0
+fresh,vector_replace,wrong,wrong,1172,961,resize(n),resize(n)
+fresh,is_sorted,compile_error,passed,2239,1350,all(v[i] <= v[i + 1] for i in range(len(v) - 1)),"is_sorted(v.begin(), v.end())"
+fresh,count_values,compile_error,compile_error,754,781,v.end(),v.end()
+fresh,cross_zero,wrong,withheld,1248,,a != b && a * b < 0,
+fresh,erase_all,passed,passed,2158,2180,"std::remove_if(v.begin(), v.end(), [x](int y) { return y == x; })","std::remove_if(v.begin(), v.end(), [x](int y) { return y == x; })"

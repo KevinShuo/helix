@@ -229,7 +229,7 @@ impl Lease {
         let mut changes = shared.epoch.subscribe();
         let (epoch, configured) = shared.snapshot();
         ensure!(
-            !shared.stopped.load(Ordering::Acquire) && configured.contains(model),
+            !shared.stopped.load(Ordering::Acquire) && super::registered_for(&configured, model),
             "AI model configuration changed"
         );
         let lease = Self {

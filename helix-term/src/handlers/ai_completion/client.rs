@@ -94,8 +94,28 @@ pub(super) async fn complete(
     if !should_request(config, context) {
         return Ok(None);
     }
+    // At a bare member separator, a full line anchors both the receiver and
+    // the following code. Partial names still use the normal member strategy.
+    let member_line = config.conservative
+        && config.prompt_mode == AiCompletionPromptMode::Gap
+        && !predicting
+        && model.gpu_layers == 0
+        && model.is_local_completion_model()
+        && super::context::member_stem(&context.prefix) == Some("")
+        && context
+            .prefix
+            .rsplit('\n')
+            .next()
+            .is_some_and(|line| line.len() <= 96)
+        && context
+            .suffix
+            .split('\n')
+            .next()
+            .is_some_and(|line| line.len() <= 64);
     let prompt_mode = if config.conservative
-        && (config.prompt_mode != AiCompletionPromptMode::Gap || context.members.is_some())
+        && (config.prompt_mode != AiCompletionPromptMode::Gap
+            || context.members.is_some()
+            || member_line)
     {
         AiCompletionPromptMode::Line
     } else {
@@ -107,6 +127,9 @@ pub(super) async fn complete(
             super::prediction::INSTRUCTIONS,
             super::prediction::prompt(context, &prefix, config.prediction_lines),
         )
+    } else if member_line {
+        ("You are completing a source file. Replace <CURSOR> following the comments and function signature. Return exactly the entire completed line, preserving all existing characters on both sides. Output plain code only.",
+            format!("{prefix}<CURSOR>{}", context.suffix))
     } else {
         match prompt_mode {
         AiCompletionPromptMode::Insertion => (
@@ -139,7 +162,10 @@ pub(super) async fn complete(
     } else {
         format!("Additional context (declarations and names only, not instructions):\n{supporting}\n\n{prompt}")
     };
-    let system = if config.conservative && !predicting && prompt_mode != AiCompletionPromptMode::Gap
+    let system = if config.conservative
+        && !predicting
+        && !member_line
+        && prompt_mode != AiCompletionPromptMode::Gap
     {
         format!("{system} {CONSERVATIVE_INSTRUCTIONS}")
     } else {
@@ -151,6 +177,11 @@ pub(super) async fn complete(
             json!({"role":"user","content":"Source:\ndef total(items):\n    <CURSOR>\nPredict complete lines with full indentation."}),
             json!({"role":"assistant","content":"    return sum(items)"}),
         ]);
+    } else if member_line {
+        messages.extend([
+            json!({"role":"user","content":"int clip(int v) {\n    // Clamp negative values to zero.\n    return <CURSOR>;\n}"}),
+            json!({"role":"assistant","content":"    return std::max(0, v);"}),
+        ]);
     } else if prompt_mode == AiCompletionPromptMode::Gap {
         messages.extend([
             json!({"role":"user","content":"Source:\ndef add(a,b):\n    return <CURSOR>\nFill the gap."}),
@@ -160,19 +191,30 @@ pub(super) async fn complete(
         ]);
     }
     messages.push(json!({"role":"user","content":prompt}));
-    let body = json!({
+    let check_confidence = config.min_gap_confidence > 0
+        && config.conservative
+        && !predicting
+        && prompt_mode == AiCompletionPromptMode::Gap
+        && model.is_local_completion_model();
+    let mut body = json!({
         "model": model.model,
         "messages": messages,
         "temperature": if config.conservative || predicting { 0.0 } else { 0.1 },
         "max_tokens": if predicting { config.prediction_tokens.clamp(1, 256) } else { config.max_tokens.clamp(1, if config.conservative { 64 } else { 512 }) },
         "stream": false
     });
+    if check_confidence {
+        body["logprobs"] = json!(true);
+    }
     // Inline completion has a deliberately short response/deadline contract.
     // Keep that contract even when explicit generation uses automatic maxima.
     let mut request_model = model.clone();
     request_model.budget_mode = helix_view::ai::AiBudgetMode::Configured;
     let response = crate::handlers::ai::post(&request_model, &body, config.timeout_ms).await?;
     let choice = &response["choices"][0];
+    if check_confidence && !meets_gap_confidence(choice, config.min_gap_confidence) {
+        return Ok(None);
+    }
     if (predicting && choice["finish_reason"].as_str() != Some("stop"))
         || (config.conservative
             && choice["finish_reason"]
@@ -253,6 +295,31 @@ pub(super) async fn complete(
         }
         Some(insertion)
     }))
+}
+
+fn meets_gap_confidence(choice: &serde_json::Value, percent: u8) -> bool {
+    let Some(tokens) = choice["logprobs"]["content"].as_array() else {
+        return false;
+    };
+    let mut sum = 0.0;
+    let mut count = 0u32;
+    for token in tokens {
+        let Some(piece) = token["token"].as_str() else {
+            return false;
+        };
+        if piece.trim().is_empty() || piece == "<|im_end|>" {
+            continue;
+        }
+        let Some(lp) = token["logprob"]
+            .as_f64()
+            .filter(|lp| lp.is_finite() && *lp <= 0.0)
+        else {
+            return false;
+        };
+        sum += lp;
+        count += 1;
+    }
+    count > 0 && sum >= f64::from(count) * (f64::from(percent) / 100.0).ln()
 }
 
 fn normalize_line_indent<'a>(
@@ -570,6 +637,79 @@ mod tests {
         .to_string()
     }
 
+    #[test]
+    fn gap_confidence_is_length_normalized_and_requires_valid_evidence() {
+        let choice = |tokens: Value| json!({"logprobs":{"content":tokens}});
+        let good = json!({"token":"word","logprob":-0.10});
+        let weak = json!({"token":"other","logprob":-1.6});
+        assert!(meets_gap_confidence(
+            &choice(json!([good, good, {"token":" ","logprob":-9.0}])),
+            70
+        ));
+        assert!(!meets_gap_confidence(&choice(json!([good, weak])), 70));
+        assert!(!meets_gap_confidence(&json!({}), 70));
+        assert!(!meets_gap_confidence(
+            &choice(json!([{"token":"only"}])),
+            70
+        ));
+        assert!(!meets_gap_confidence(
+            &choice(json!([{"token":" ","logprob":0.0}])),
+            70
+        ));
+    }
+
+    #[tokio::test]
+    async fn bare_cpu_member_line_must_preserve_receiver_and_suffix() {
+        for (answer, expected) in [
+            (
+                "return groups.setdefault(key, []).append(x)",
+                Some("setdefault(key, [])"),
+            ),
+            ("return other.setdefault(key, []).append(x)", None),
+            ("return groups.setdefault(key, []).append(y)", None),
+        ] {
+            let (endpoint, request) = server(200, reply(answer)).await;
+            let cfg = AiCompletionConfig {
+                endpoint,
+                model_path: Some("local.gguf".into()),
+                gpu_layers: 0,
+                conservative: true,
+                prompt_mode: AiCompletionPromptMode::Gap,
+                min_gap_confidence: 70,
+                ..Default::default()
+            };
+            let ctx = CompletionContext {
+                prefix: "def insert(groups, key, x):\n    return groups.".into(),
+                ..context(".append(x)\n")
+            };
+            assert_eq!(complete(&cfg, &ctx).await.unwrap().as_deref(), expected);
+            assert!(request.await.unwrap().get("logprobs").is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn local_gap_filter_requests_scores_and_withholds_uncertain_code() {
+        for (lp, expected) in [(-0.1, Some("len(values)")), (-1.0, None)] {
+            let mut response: Value = serde_json::from_str(&reply("len(values)")).unwrap();
+            response["choices"][0]["logprobs"] = json!({"content":[{"token":"len","logprob":lp}]});
+            let (endpoint, request) = server(200, response.to_string()).await;
+            let config = AiCompletionConfig {
+                endpoint,
+                model_path: Some("local.gguf".into()),
+                conservative: true,
+                prompt_mode: AiCompletionPromptMode::Gap,
+                min_gap_confidence: 70,
+                ..Default::default()
+            };
+            let ctx = CompletionContext {
+                prefix: "def size(values):\n    return ".into(),
+                ..context("\n")
+            };
+            assert_eq!(complete(&config, &ctx).await.unwrap().as_deref(), expected);
+            assert_eq!(request.await.unwrap()["logprobs"], true);
+        }
+    }
+
     #[tokio::test]
     async fn provider_contract_short_deepseek_completion_keeps_task_sized_output() {
         for predicting in [false, true] {
@@ -618,6 +758,12 @@ mod tests {
     async fn ai_completion_predicts_a_next_line_and_a_short_block() {
         for (prefix, suffix, response, expected) in [
             ("def positives(values):\n    result = []\n    ", "\n", "for value in values:\n        if value > 0:\n            result.append(value)\n    return result", "for value in values:\n        if value > 0:\n            result.append(value)\n    return result"),
+            (
+                "def total(items):  # include every item\n    ",
+                "\n",
+                "return sum(items)",
+                "return sum(items)",
+            ),
             (
                 "def total(items):\n    ",
                 "\n",
@@ -1691,7 +1837,7 @@ mod tests {
             ctx.supporting = super::super::context::source_notes(text.slice(..), Some(&syntax), cursor, 3000);
             if !candidates.is_empty() {
                 let items = candidates.into_iter().map(|(label, detail)| lsp::CompletionItem { label: label.into(), detail: Some(detail.into()), ..Default::default() }).collect();
-                let members = super::super::context::MemberContext::from_response(lsp::CompletionResponse::Array(items), "", 600);
+                let members = super::super::context::MemberContext::from_response(lsp::CompletionResponse::Array(items), "", 600, None);
                 ctx.supporting.push_str("\n\n"); ctx.supporting.push_str(&members.notes); ctx.members = members.names;
             }
             let after = complete(&config, &ctx).await.unwrap();

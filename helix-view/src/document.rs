@@ -230,7 +230,11 @@ pub struct Document {
     /// Annotations for LSP document color swatches
     pub color_swatches: Option<DocumentColorSwatches>,
     pub ai_completion: Option<crate::ai_completion::AiCompletion>,
+    pub ai_generate: Option<crate::ai_generate::Operation>,
     pub ai_completion_controller: TaskController,
+    pub ai_anticipated_edit: Option<crate::ai_completion::AnticipatedEdit>,
+    pub ai_cached_completion: Option<crate::ai_completion::CachedAiCompletion>,
+    pub last_ai_completion_edit: Option<std::time::Instant>,
     pub ai_doc_controller: TaskController,
     pub ai_merge_controller: TaskController,
     /// Cached LSP document links for navigation (e.g. goto_file).
@@ -790,7 +794,11 @@ impl Document {
             code_action_hints: HashSet::new(),
             color_swatches: None,
             ai_completion: None,
+            ai_generate: None,
             ai_completion_controller: TaskController::new(),
+            ai_anticipated_edit: None,
+            ai_cached_completion: None,
+            last_ai_completion_edit: None,
             ai_doc_controller: TaskController::new(),
             ai_merge_controller: TaskController::new(),
             document_links: Vec::new(),

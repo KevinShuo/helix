@@ -566,6 +566,7 @@ impl MappableCommand {
         remove_primary_selection, "Remove primary selection",
         completion, "Invoke completion popup",
         ai_completion_accept, "Accept the entire AI inline completion",
+        ai_generate, "Generate code at the cursor from an instruction",
         hover, "Show docs for item under cursor",
         toggle_comments, "Comment/uncomment selections",
         toggle_line_comments, "Line comment/uncomment selections",
@@ -5631,6 +5632,17 @@ pub fn ai_completion_accept(cx: &mut Context) {
     cx.callback.push(Box::new(|compositor, cx| {
         if let Some(editor_view) = compositor.find::<ui::EditorView>() {
             editor_view.accept_ai_completion(cx.editor);
+        }
+    }));
+}
+
+pub fn ai_generate(cx: &mut Context) {
+    cx.callback.push(Box::new(|compositor, cx| {
+        if let Some(view) = compositor.find::<ui::EditorView>() {
+            view.clear_completion(cx.editor);
+        }
+        if let Err(error) = crate::handlers::ai_generate::open(cx, String::new()) {
+            cx.editor.set_error(error.to_string());
         }
     }));
 }

@@ -23,9 +23,12 @@ pub(crate) fn cancel(editor: &mut Editor) {
 pub(crate) fn start(editor: &mut Editor) -> Result<()> {
     ensure!(!super::ai_test::busy(editor), "请先完成或取消 AI 测试任务");
     ensure!(
-        !editor.ai_commit_running && editor.ai_merge.is_none(),
+        !super::ai::interactive_busy(editor)
+            && !editor.ai_commit_running
+            && editor.ai_merge.is_none(),
         "其他 AI 生成正在运行，请先完成或取消"
     );
+    editor.config().check_ai_enabled()?;
     ensure!(
         editor.config().ai_doc.enabled,
         "请先在 [editor.ai-doc] 中启用 enabled = true"

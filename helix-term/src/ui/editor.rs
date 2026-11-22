@@ -174,11 +174,7 @@ impl EditorView {
             if let Some(tabstops) = Self::tabstop_highlights(doc, theme) {
                 overlays.push(tabstops);
             }
-            if !doc
-                .ai_completion
-                .as_ref()
-                .is_some_and(|s| s.is_valid(doc, view.id))
-            {
+            if doc.ai_inline_preview(view.id).is_none() {
                 overlays.push(Self::doc_selection_highlights(
                     editor.mode(),
                     doc,
@@ -1224,6 +1220,9 @@ impl EditorView {
         trigger_offset: usize,
         size: Rect,
     ) -> Option<Rect> {
+        if crate::handlers::ai_generate::active(editor) {
+            return None;
+        }
         let mut completion = Completion::new(editor, items, trigger_offset);
 
         if completion.is_empty() {
@@ -1282,6 +1281,17 @@ impl EditorView {
     }
 
     pub fn accept_ai_completion(&mut self, editor: &mut Editor) {
+        if crate::handlers::ai_generate::active(editor) {
+            if let Some(text) = crate::handlers::ai_generate::accept(editor) {
+                if editor.mode() == Mode::Insert {
+                    self.last_insert.1.push(InsertEvent::Literal(text));
+                }
+            }
+            return;
+        }
+        if editor.mode() != Mode::Insert {
+            return;
+        }
         let suggestion = {
             let (_, doc) = current!(editor);
             doc.ai_completion_controller.cancel();
@@ -1306,7 +1316,7 @@ impl EditorView {
         }
     }
 
-    fn is_ai_accept_key(&self, key: KeyEvent) -> bool {
+    fn is_insert_command_key(&self, key: KeyEvent, mapped: &commands::MappableCommand) -> bool {
         let mut path = self.keymaps.pending().to_vec();
         path.push(key);
         let map = self.keymaps.map();
@@ -1318,12 +1328,8 @@ impl EditorView {
             &map[&Mode::Insert]
         };
         match trie.search(&path) {
-            Some(KeyTrie::MappableCommand(command)) => {
-                *command == commands::MappableCommand::ai_completion_accept
-            }
-            Some(KeyTrie::Sequence(commands)) => {
-                commands.contains(&commands::MappableCommand::ai_completion_accept)
-            }
+            Some(KeyTrie::MappableCommand(command)) => command == mapped,
+            Some(KeyTrie::Sequence(commands)) => commands.contains(mapped),
             _ => false,
         }
     }
@@ -1717,14 +1723,25 @@ impl Component for EditorView {
                 cx.editor.status_msg = None;
 
                 let mode = cx.editor.mode();
-                let ai_accept = mode == Mode::Insert && self.is_ai_accept_key(key);
+                if key == key!(Esc) && crate::handlers::ai_generate::active(cx.editor) {
+                    crate::handlers::ai_generate::cancel(cx.editor);
+                    cx.editor.set_status("已放弃生成代码");
+                    return EventResult::Consumed(None);
+                }
+                let ai_accept = mode == Mode::Insert
+                    && self.is_insert_command_key(
+                        key,
+                        &commands::MappableCommand::ai_completion_accept,
+                    );
+                let ai_generate = mode == Mode::Insert
+                    && self.is_insert_command_key(key, &commands::MappableCommand::ai_generate);
 
                 if !self.on_next_key(OnKeyCallbackKind::PseudoPending, &mut cx, key) {
                     match mode {
                         Mode::Insert => {
                             // let completion swallow the event if necessary
                             let mut consumed = false;
-                            if ai_accept {
+                            if ai_accept || ai_generate {
                                 self.insert_mode(&mut cx, key);
                                 consumed = true;
                             } else if let Some(completion) = &mut self.completion {
@@ -1795,6 +1812,10 @@ impl Component for EditorView {
                     cx.callback.push(Box::new(|_, cx| {
                         crate::handlers::ai_completion::trigger(cx.editor)
                     }));
+                } else if mode != Mode::Insert && cx.editor.mode() == Mode::Insert {
+                    cx.callback.push(Box::new(|_, cx| {
+                        crate::handlers::ai_completion::on_insert(cx.editor)
+                    }));
                 }
 
                 // appease borrowck
@@ -1842,6 +1863,7 @@ impl Component for EditorView {
                 EventResult::Consumed(None)
             }
             Event::FocusLost => {
+                crate::handlers::ai_generate::cancel(cx.editor);
                 cx.editor.git_conflict_scan.cancel();
                 self.minimap.cancel();
                 crate::handlers::ai_completion::clear(cx.editor);
@@ -1989,11 +2011,7 @@ impl Component for EditorView {
             // all block cursors are drawn manually
             (pos, CursorKind::Block) => {
                 let (view, doc) = current_ref!(editor);
-                if doc
-                    .ai_completion
-                    .as_ref()
-                    .is_some_and(|s| s.is_valid(doc, view.id))
-                {
+                if doc.ai_inline_preview(view.id).is_some() {
                     (pos, CursorKind::Block)
                 } else if self.terminal_focused {
                     (pos, CursorKind::Hidden)

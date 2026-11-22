@@ -15,6 +15,7 @@ mod test {
         Ok(())
     }
 
+    mod ai_actions;
     #[cfg(feature = "git")]
     mod ai_commit;
     mod ai_completion;

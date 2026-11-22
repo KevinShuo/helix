@@ -42,7 +42,7 @@ fn valid(syntax: &Syntax, changed: RangeInclusive<u32>) -> Option<bool> {
 }
 
 pub(super) fn check(
-    mut source: Rope,
+    source: Rope,
     cursor: usize,
     insertion: &str,
     language: Language,
@@ -52,26 +52,21 @@ pub(super) fn check(
     if source.len_bytes() > MAX_SOURCE_BYTES || cursor > source.len_chars() {
         return true;
     }
-    let baseline = if predicting {
-        None
-    } else {
-        Syntax::new(source.slice(..), language, loader)
-            .ok()
-            .and_then(|syntax| {
-                valid(
-                    &syntax,
-                    source.char_to_byte(cursor) as u32..=source.char_to_byte(cursor) as u32,
-                )
-            })
-    };
     let start = source.char_to_byte(cursor) as u32;
-    source.insert(cursor, insertion);
-    match Syntax::new(source.slice(..), language, loader)
+    let mut proposed = source.clone();
+    proposed.insert(cursor, insertion);
+    match Syntax::new(proposed.slice(..), language, loader)
         .ok()
         .and_then(|syntax| valid(&syntax, start..=start + insertion.len() as u32))
     {
         Some(true) => true,
-        Some(false) => !predicting && baseline != Some(true),
+        Some(false) => {
+            !predicting
+                && Syntax::new(source.slice(..), language, loader)
+                    .ok()
+                    .and_then(|syntax| valid(&syntax, start..=start))
+                    != Some(true)
+        }
         None => !predicting,
     }
 }

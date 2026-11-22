@@ -448,6 +448,7 @@ async fn minimap_softwrap_and_virtual_annotations_do_not_enter_source_summary() 
     let summary = doc.minimap.summary.as_ref().unwrap().clone();
     assert_eq!(summary.lines, 3);
     doc.ai_completion = Some(AiCompletion {
+        request_latency: None,
         view: view.id,
         version: doc.version(),
         annotation: InlineAnnotation::new(0, "virtual preview\nsecond virtual line\n"),

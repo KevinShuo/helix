@@ -435,11 +435,76 @@ fn probe_treesitter_feature(lang: &str, feature: TsFeature) -> std::io::Result<(
     Ok(())
 }
 
+fn ai() -> std::io::Result<()> {
+    let config = match Config::load_default() {
+        Ok(config) => config,
+        Err(ConfigLoadError::Error(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            Config::default()
+        }
+        Err(err) => return Err(std::io::Error::other(err.to_string())),
+    };
+    let mut stdout = std::io::stdout().lock();
+    writeln!(
+        stdout,
+        "AI master switch: {}",
+        if config.editor.ai.enabled {
+            "on"
+        } else {
+            "off"
+        }
+    )?;
+    match crate::ai_hardware::checked_vram() {
+        Some(0) => writeln!(stdout, "Dedicated GPU memory: unavailable")?,
+        Some(bytes) => writeln!(stdout, "Dedicated GPU memory: {} MiB", bytes >> 20)?,
+        None => writeln!(stdout, "GPU check skipped (no enabled AI features)")?,
+    }
+    if let Some(reason) = &config.editor.ai_completion.unavailable {
+        writeln!(stdout, "Inline completion unavailable: {reason}")?;
+    }
+    if config.editor.laptop() {
+        writeln!(
+            stdout,
+            "Laptop: DeepSeek for all features except inline completion"
+        )?;
+    }
+    let providers = config
+        .editor
+        .active_ai_providers()
+        .map_err(std::io::Error::other)?;
+    for provider in providers {
+        writeln!(
+            stdout,
+            "Active AI provider: {} ({})",
+            provider.route_label(),
+            provider.model
+        )?;
+    }
+    if config.editor.ai.enabled {
+        for (feature, _) in config
+            .editor
+            .ai_features()
+            .into_iter()
+            .filter(|(_, enabled)| *enabled)
+        {
+            if let Ok(provider) = config.editor.ai_provider(feature) {
+                writeln!(
+                    stdout,
+                    "  {feature:?}: {} ({})",
+                    provider.route_label(),
+                    provider.model
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn print_health(health_arg: Option<String>) -> std::io::Result<()> {
     match health_arg.as_deref() {
         Some("languages") => languages_selection()?,
         Some("all-languages") => languages_all()?,
         Some("clipboard") => clipboard()?,
+        Some("ai") => ai()?,
         None => {
             general()?;
             clipboard()?;

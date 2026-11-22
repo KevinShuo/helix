@@ -359,19 +359,65 @@ provider = "deepseek"
     }
 }
 
-#[test]
-fn shipped_ai_provider_example_switches_local_and_online_generation_with_one_setting() {
+fn installed_example() -> (Config, tempfile::NamedTempFile) {
     let example: toml::Value =
         toml::from_str(include_str!("../../contrib/config-ai-providers.toml")).unwrap();
     let mut config: Config = example["editor"].clone().try_into().unwrap();
+    let weights = tempfile::NamedTempFile::new().unwrap();
+    for p in config
+        .ai
+        .providers
+        .values_mut()
+        .filter(|p| p.model_path.is_some())
+    {
+        p.model_path = Some(weights.path().into());
+        p.server_path = std::env::current_exe().unwrap();
+    }
+    (config, weights)
+}
+
+#[test]
+fn shipped_settings_use_deepseek_on_a_laptop_and_27b_on_a_capable_desktop() {
+    let (mut config, _weights) = installed_example();
     config.validate_ai().unwrap();
+    config.apply_ai_host(|| (24 << 30, true)).unwrap();
+    assert!(config.laptop());
+    let inline = config.ai_provider(AiFeature::Completion).unwrap();
+    assert_eq!(inline.kind, AiProviderType::LlamaCpp);
+    assert!(!inline.on_demand);
+    for (feature, _) in config.ai_features() {
+        if feature == AiFeature::Completion {
+            continue;
+        }
+        // Even a saved local override must not start a manual model on a laptop.
+        *config.ai_feature_settings(feature).1 = Some("local-27b".into());
+        assert_eq!(
+            config.ai_provider(feature).unwrap().kind,
+            AiProviderType::Deepseek
+        );
+        *config.ai_feature_settings(feature).1 = None;
+    }
+    assert!(config
+        .active_ai_providers()
+        .unwrap()
+        .iter()
+        .all(|p| p == &inline || p.kind == AiProviderType::Deepseek));
+    config.apply_ai_host(|| (24 << 30, false)).unwrap();
+    assert!(!config.laptop());
     assert_eq!(
         config.ai_provider(AiFeature::Completion).unwrap().kind,
         AiProviderType::LlamaCpp
     );
-    for feature in [AiFeature::Doc, AiFeature::Commit] {
+    for feature in [
+        AiFeature::Doc,
+        AiFeature::Commit,
+        AiFeature::Test,
+        AiFeature::Explain,
+        AiFeature::Generate,
+    ] {
         let model = config.ai_provider(feature).unwrap();
         assert_eq!(model.kind, AiProviderType::LlamaCpp);
+        assert_eq!(model.model, "Qwen3.8-27B-UD-Q5_K_M");
         assert!(model.on_demand);
         assert!(model.thinking);
         assert_eq!(model.thinking_budget, Some(2048));
@@ -379,16 +425,261 @@ fn shipped_ai_provider_example_switches_local_and_online_generation_with_one_set
     let merge = config.ai_provider(AiFeature::Merge).unwrap();
     assert_eq!(merge.model, "Qwen3.8-27B-UD-Q5_K_M");
     assert!(merge.on_demand && !merge.thinking);
-    config.ai.default_provider = Some("deepseek".into());
+    config.apply_ai_host(|| (1 << 30, false)).unwrap();
     for feature in [
-        AiFeature::Completion,
         AiFeature::Doc,
         AiFeature::Commit,
         AiFeature::Merge,
+        AiFeature::Explain,
+        AiFeature::Generate,
     ] {
         assert_eq!(
             config.ai_provider(feature).unwrap().kind,
             AiProviderType::Deepseek
+        );
+    }
+}
+
+const MANUAL_FEATURES: [AiFeature; 6] = [
+    AiFeature::Doc,
+    AiFeature::Commit,
+    AiFeature::Test,
+    AiFeature::Merge,
+    AiFeature::Explain,
+    AiFeature::Generate,
+];
+
+#[test]
+fn shared_local_generation_switches_six_routes_and_restores_automatic_models() {
+    let (mut config, _weights) = installed_example();
+    let mut alternative = config.ai.providers["local-27b"].clone();
+    alternative.model = "alternate-coder".into();
+    alternative.endpoint = "http://127.0.0.1:19250/v1/chat/completions".into();
+    config.ai.providers.insert("alternate".into(), alternative);
+    config.apply_ai_host(|| (24 << 30, false)).unwrap();
+    let inline = config.ai_provider(AiFeature::Completion).unwrap();
+    let defaults = MANUAL_FEATURES.map(|f| config.ai_provider(f).unwrap());
+
+    config.ai.local_generation_provider = Some("alternate".into());
+    config.apply_ai_host(|| (24 << 30, false)).unwrap();
+    for feature in MANUAL_FEATURES {
+        let selected = config.ai_provider(feature).unwrap();
+        assert_eq!(selected.model, "alternate-coder", "{feature:?}");
+        assert!(selected.on_demand, "{feature:?}");
+    }
+    assert_eq!(config.ai_provider(AiFeature::Completion).unwrap(), inline);
+    let registered = config.active_ai_providers().unwrap();
+    assert_eq!(registered.len(), 2, "{registered:?}");
+    assert!(registered.contains(&inline));
+    assert!(registered
+        .iter()
+        .any(|p| p.model == "alternate-coder" && p.on_demand));
+
+    config.ai_doc.provider = Some("deepseek".into());
+    assert_eq!(
+        config.ai_provider(AiFeature::Doc).unwrap().kind,
+        AiProviderType::Deepseek
+    );
+    assert_eq!(
+        config.ai_provider(AiFeature::Generate).unwrap().model,
+        "alternate-coder"
+    );
+    config.ai_doc.provider = None;
+
+    config.apply_ai_host(|| (24 << 30, true)).unwrap();
+    for feature in MANUAL_FEATURES {
+        assert_eq!(
+            config.ai_provider(feature).unwrap().kind,
+            AiProviderType::Deepseek,
+            "{feature:?}"
+        );
+    }
+    assert_eq!(config.ai_provider(AiFeature::Completion).unwrap(), inline);
+    assert!(config
+        .active_ai_providers()
+        .unwrap()
+        .iter()
+        .all(|p| p == &inline || p.kind == AiProviderType::Deepseek));
+    config.apply_ai_host(|| (24 << 30, false)).unwrap();
+    assert_eq!(
+        config.ai_provider(AiFeature::Generate).unwrap().model,
+        "alternate-coder"
+    );
+
+    config.ai.local_generation_provider = None;
+    config.apply_ai_host(|| (24 << 30, false)).unwrap();
+    for (feature, original) in MANUAL_FEATURES.into_iter().zip(defaults) {
+        assert_eq!(
+            config.ai_provider(feature).unwrap(),
+            original,
+            "{feature:?}"
+        );
+    }
+    assert_eq!(config.ai_provider(AiFeature::Completion).unwrap(), inline);
+}
+
+#[test]
+fn unavailable_shared_generation_falls_back_without_displacing_resident_inline() {
+    let (mut config, _weights) = installed_example();
+    config.ai.min_local_vram_gib = 0;
+    let bigger = tempfile::NamedTempFile::new().unwrap();
+    bigger.as_file().set_len(256).unwrap();
+    let mut chosen = config.ai.providers["local-27b"].clone();
+    chosen.model_path = Some(bigger.path().into());
+    chosen.model = "too-large".into();
+    config.ai.providers.insert("chosen".into(), chosen);
+    config.ai.local_generation_provider = Some("chosen".into());
+    // Inline fits exactly with the required 1 GiB headroom. The chosen file does not.
+    let verify = |config: &mut Config| {
+        config.apply_ai_host(|| ((1 << 30) + 128, false)).unwrap();
+        let inline = config.ai_provider(AiFeature::Completion).unwrap();
+        assert_eq!(inline.model, "local-coder");
+        assert!(!inline.on_demand);
+        for feature in MANUAL_FEATURES {
+            assert_eq!(
+                config.ai_provider(feature).unwrap().kind,
+                AiProviderType::Deepseek,
+                "{feature:?}"
+            );
+        }
+        assert!(config
+            .active_ai_providers()
+            .unwrap()
+            .iter()
+            .all(|p| p == &inline || p.kind == AiProviderType::Deepseek));
+    };
+    verify(&mut config);
+    drop(bigger);
+    verify(&mut config);
+}
+
+#[test]
+fn explicit_feature_and_shared_generation_reuse_one_model_lease() {
+    let (mut config, _weights) = installed_example();
+    config.ai.local_generation_provider = Some("local-27b".into());
+    config.ai_doc.provider = Some("local-27b".into());
+    config.apply_ai_host(|| (24 << 30, false)).unwrap();
+    let doc = config.ai_provider(AiFeature::Doc).unwrap();
+    let generated = config.ai_provider(AiFeature::Generate).unwrap();
+    assert_eq!(doc.endpoint, generated.endpoint);
+    assert!(doc.on_demand && generated.on_demand);
+    assert_eq!(config.active_ai_providers().unwrap().len(), 2);
+}
+
+#[test]
+fn independent_model_directories_select_the_largest_fit_and_allow_a_smaller_override() {
+    let root = tempfile::tempdir().unwrap();
+    let first = root.path().join("first");
+    let second = root.path().join("second");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    std::fs::write(first.join("small.gguf"), [0; 32]).unwrap();
+    std::fs::write(second.join("medium.gguf"), [0; 64]).unwrap();
+    std::fs::write(second.join("large.gguf"), [0; 256]).unwrap();
+    std::fs::write(second.join("tiny-3B.Q8_0.gguf"), [0; 512]).unwrap();
+    let mut config = Config::default();
+    config.ai.min_local_vram_gib = 0;
+    config.ai.local_model_directories = vec![first, second];
+    for feature in MANUAL_FEATURES {
+        *config.ai_feature_settings(feature).0 = true;
+    }
+    config.load_local_model_catalog();
+    assert_eq!(config.ai.providers.len(), 4);
+    // The catalog above has no provider template. Replace its executable in this
+    // fixture so checking availability never depends on llama-server being on PATH.
+    let runner = std::env::current_exe().unwrap();
+    for provider in config.ai.providers.values_mut() {
+        provider.server_path = runner.clone();
+    }
+    let small = config
+        .ai
+        .providers
+        .iter()
+        .find(|(_, p)| p.model == "small")
+        .unwrap()
+        .0
+        .clone();
+    let tiny = config
+        .ai
+        .providers
+        .iter()
+        .find(|(_, p)| p.model == "tiny-3B.Q8_0")
+        .unwrap()
+        .0
+        .clone();
+    for (choice, capacity, expected) in [
+        (None, 128, "medium"),
+        (Some(small), 128, "small"),
+        (None, 128, "medium"),
+        (None, 256, "large"),
+        (None, 1024, "large"),
+        (Some(tiny), 1024, "tiny-3B.Q8_0"),
+    ] {
+        config.ai.local_generation_provider = choice;
+        config
+            .apply_ai_host(|| ((1 << 30) + capacity, false))
+            .unwrap();
+        let active = config.active_ai_providers().unwrap();
+        assert_eq!(active.len(), 1, "{active:?}");
+        assert!(active[0].on_demand);
+        for feature in MANUAL_FEATURES {
+            assert_eq!(
+                config.ai_provider(feature).unwrap().model,
+                expected,
+                "{feature:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_normal_editor_option_change_preserves_automatic_model_discovery() {
+    let (mut config, _weights) = installed_example();
+    let library = tempfile::tempdir().unwrap();
+    std::fs::write(library.path().join("library-coder.gguf"), b"model").unwrap();
+    config.ai.local_model_directories = vec![library.path().into()];
+    config.ai_doc.local_provider = None;
+    config.ai_explain.local_provider = None;
+    config.ai_test.local_provider = None;
+    config.ai_commit.local_provider = None;
+    config.load_local_model_catalog();
+    config.apply_ai_host(|| (16 << 30, false)).unwrap();
+    let before = config.ai_provider(AiFeature::Explain).unwrap();
+    assert_eq!(before.model, "library-coder");
+
+    // :set-option and :toggle update a JSON copy of the active editor config.
+    let mut settings = serde_json::to_value(&config).unwrap();
+    settings["scrolloff"] = 3.into();
+    let mut updated: Config = serde_json::from_value(settings).unwrap();
+    updated.load_local_model_catalog();
+    updated.apply_ai_host(|| (16 << 30, false)).unwrap();
+    assert_eq!(updated.ai_provider(AiFeature::Explain).unwrap(), before);
+}
+
+#[test]
+fn automatic_routing_replaces_oversized_generation_profile_without_displacing_inline() {
+    let (mut config, _weights) = installed_example();
+    config.ai.min_local_vram_gib = 0;
+    config.ai.default_provider = Some("local".into());
+    let big = tempfile::NamedTempFile::new().unwrap();
+    big.as_file().set_len(512).unwrap();
+    for name in ["local-27b", "local-27b-direct"] {
+        config.ai.providers.get_mut(name).unwrap().model_path = Some(big.path().into());
+    }
+    let library = tempfile::tempdir().unwrap();
+    std::fs::write(library.path().join("medium.gguf"), [0; 64]).unwrap();
+    config.ai.local_model_directories = vec![library.path().into()];
+    config.load_local_model_catalog();
+    config.apply_ai_host(|| ((1 << 30) + 128, false)).unwrap();
+    assert_eq!(
+        config.ai_provider(AiFeature::Completion).unwrap().model,
+        "local-coder"
+    );
+    for feature in MANUAL_FEATURES {
+        assert_eq!(
+            config.ai_provider(feature).unwrap().model,
+            "medium",
+            "{feature:?}"
         );
     }
 }
@@ -694,4 +985,294 @@ fn test_generation_follows_global_switch_and_uses_bounded_local_27b_on_demand() 
     );
     config.ai_test.local_provider = Some("typo".into());
     assert!(config.validate_ai().is_err());
+}
+
+#[test]
+fn master_switch_preserves_feature_settings_and_skips_hardware_detection() {
+    let mut config = mixed();
+    config.ai.enabled = false;
+    config.apply_ai_hardware(|| panic!("AI is off")).unwrap();
+    assert!(config.active_ai_providers().unwrap().is_empty());
+    for feature in [
+        AiFeature::Completion,
+        AiFeature::Doc,
+        AiFeature::Commit,
+        AiFeature::Merge,
+        AiFeature::Test,
+    ] {
+        assert!(config.ai_provider(feature).is_err());
+    }
+    assert!(config.ai_completion.enabled);
+    assert!(!config.ai_test.enabled);
+    config.ai.enabled = true;
+    config.apply_ai_hardware(|| 32 << 30).unwrap();
+    assert_eq!(
+        config.ai_provider(AiFeature::Completion).unwrap().model,
+        "local-model"
+    );
+    Config::default()
+        .apply_ai_hardware(|| panic!("no enabled features"))
+        .unwrap();
+}
+
+#[test]
+fn low_or_unknown_dedicated_memory_routes_all_features_to_deepseek() {
+    let mut config = mixed();
+    config.ai.default_provider = Some("local".into());
+    config.ai_test.enabled = true;
+    config.ai_explain.enabled = true;
+    config.ai_generate.enabled = true;
+    config.ai_test.local_provider = Some("local".into());
+    config.ai_merge.enabled = true;
+    for vram in [0, (8 << 30) - 1] {
+        config.apply_ai_hardware(|| vram).unwrap();
+        assert_eq!(
+            config.active_ai_providers().unwrap(),
+            vec![config.ai.providers["cloud"].clone()]
+        );
+        for feature in [
+            AiFeature::Completion,
+            AiFeature::Doc,
+            AiFeature::Commit,
+            AiFeature::Merge,
+            AiFeature::Test,
+            AiFeature::Explain,
+            AiFeature::Generate,
+        ] {
+            let provider = config.ai_provider(feature).unwrap();
+            assert_eq!(provider.model, "cloud-model");
+            assert!(!provider.on_demand && provider.model_path.is_none());
+        }
+    }
+    config.apply_ai_hardware(|| 8 << 30).unwrap();
+    assert_eq!(
+        config.ai_provider(AiFeature::Completion).unwrap().model,
+        "local-model"
+    );
+    assert_eq!(
+        config.ai_provider(AiFeature::Commit).unwrap().model,
+        "other-model"
+    );
+}
+
+#[test]
+fn managed_model_file_and_runtime_headroom_can_exceed_the_configured_floor() {
+    let mut config = mixed();
+    let model = tempfile::NamedTempFile::new().unwrap();
+    model.as_file().set_len(4096).unwrap();
+    config.ai.providers.get_mut("local").unwrap().model_path = Some(model.path().into());
+    config.ai.min_local_vram_gib = 1;
+    config.apply_ai_hardware(|| (1 << 30) + 4095).unwrap();
+    assert_eq!(
+        config.ai_provider(AiFeature::Completion).unwrap().kind,
+        AiProviderType::Deepseek
+    );
+    config.apply_ai_hardware(|| (1 << 30) + 4096).unwrap();
+    assert_eq!(
+        config.ai_provider(AiFeature::Completion).unwrap().kind,
+        AiProviderType::LlamaCpp
+    );
+}
+
+#[test]
+fn legacy_local_only_config_uses_authenticated_deepseek_on_small_gpus() {
+    let mut config = Config::default();
+    config.ai_doc.enabled = true;
+    config.apply_ai_hardware(|| 128 << 20).unwrap();
+    let provider = config.ai_provider(AiFeature::Doc).unwrap();
+    assert_eq!(
+        provider.endpoint,
+        "https://api.deepseek.com/chat/completions"
+    );
+    assert_eq!(provider.api_key_env.as_deref(), Some("DEEPSEEK_API_KEY"));
+    assert!(provider.model_path.is_none());
+}
+
+#[test]
+fn feature_thinking_overrides_survive_gpu_routing_without_changing_model_registration() {
+    use helix_view::ai::AiThinking;
+    let mut config = mixed();
+    config
+        .ai
+        .thinking
+        .insert(AiFeature::Completion, AiThinking::High);
+    config.ai.thinking.insert(AiFeature::Doc, AiThinking::Off);
+    config.ai.providers.get_mut("cloud").unwrap().thinking = true;
+    config.apply_ai_hardware(|| 128 << 20).unwrap();
+    let completion = config.ai_provider(AiFeature::Completion).unwrap();
+    assert_eq!(completion.kind, AiProviderType::Deepseek);
+    assert_eq!(completion.reasoning_effort.as_deref(), Some("high"));
+    assert!(completion.thinking);
+    assert!(!config.ai_provider(AiFeature::Doc).unwrap().thinking);
+    config.ai_doc.provider = Some("local".into());
+    config.apply_ai_hardware(|| 32 << 30).unwrap();
+    let locals = config
+        .active_ai_providers()
+        .unwrap()
+        .into_iter()
+        .filter(|p| p.model_path.is_some())
+        .count();
+    assert_eq!(locals, 1);
+    assert_eq!(
+        config
+            .ai_provider(AiFeature::Completion)
+            .unwrap()
+            .thinking_budget,
+        Some(2048)
+    );
+}
+
+#[test]
+fn local_only_inline_completion_keeps_cloud_features_and_never_falls_back_online() {
+    let mut config = mixed();
+    config.ai_completion.local_only = true;
+    config.apply_ai_hardware(|| 128 << 20).unwrap();
+    assert_eq!(
+        config.ai.statusline(),
+        format!("AI 开 · 补全 本地 / {}", config.ai.providers["local"].model)
+    );
+    assert_eq!(
+        config.ai_provider(AiFeature::Completion).unwrap().kind,
+        AiProviderType::LlamaCpp
+    );
+    for feature in [
+        AiFeature::Doc,
+        AiFeature::Commit,
+        AiFeature::Merge,
+        AiFeature::Test,
+    ] {
+        assert_eq!(
+            config.ai_provider(feature).unwrap().kind,
+            AiProviderType::Deepseek
+        );
+    }
+    config.ai_completion.provider = Some("cloud".into());
+    assert!(config.ai_provider(AiFeature::Completion).is_err());
+    config.ai.enabled = false;
+    assert!(config.active_ai_providers().unwrap().is_empty());
+}
+
+#[test]
+fn interactive_generation_uses_large_local_or_deepseek_even_when_inline_fits() {
+    let mut config = mixed();
+    config.ai.auto_local_provider = Some("local".into());
+    config.ai_completion.provider = None;
+    let inline_weights = tempfile::NamedTempFile::new().unwrap();
+    let large_weights = tempfile::NamedTempFile::new().unwrap();
+    let inline = config.ai.providers.get_mut("local").unwrap();
+    inline.model = "inline-3b".into();
+    inline.model_path = Some(inline_weights.path().into());
+    inline.server_path = std::env::current_exe().unwrap();
+    let mut large = inline.clone();
+    large.model = "generation-27b".into();
+    large.model_path = Some(large_weights.path().into());
+    large.endpoint = "http://127.0.0.1:19300/v1/chat/completions".into();
+    config.ai.providers.insert("large".into(), large);
+    config.ai_doc.local_provider = Some("large".into());
+    config.ai_explain.enabled = true;
+    config.ai_generate.enabled = true;
+    config.apply_ai_hardware(|| 24 << 30).unwrap();
+    for feature in [AiFeature::Explain, AiFeature::Generate] {
+        let model = config.ai_provider(feature).unwrap();
+        assert_eq!(model.model, "generation-27b");
+        assert!(model.on_demand);
+    }
+    assert_eq!(
+        config.ai_provider(AiFeature::Completion).unwrap().model,
+        "inline-3b"
+    );
+    drop(large_weights);
+    for feature in [AiFeature::Explain, AiFeature::Generate] {
+        assert_eq!(config.ai_provider(feature).unwrap().model, "cloud-model");
+    }
+    config.ai.auto_local_provider = None;
+    config.ai.default_provider = Some("local".into());
+    assert_eq!(
+        config.ai_provider(AiFeature::Generate).unwrap().model,
+        "cloud-model"
+    );
+    config.ai_doc.local_provider = None;
+    for feature in [AiFeature::Explain, AiFeature::Generate] {
+        assert_eq!(config.ai_provider(feature).unwrap().model, "cloud-model");
+    }
+    for feature in [AiFeature::Explain, AiFeature::Generate] {
+        assert_eq!(
+            Config::default().ai_provider(feature).unwrap().kind,
+            AiProviderType::Deepseek
+        );
+    }
+    config.ai.providers.get_mut("other").unwrap().endpoint =
+        "http://localhost:8080/v1/chat/completions".into();
+    config.ai.default_provider = Some("other".into());
+    assert_eq!(
+        config.ai_provider(AiFeature::Explain).unwrap().model,
+        "cloud-model"
+    );
+    config.ai_explain.provider = Some("other".into());
+    assert_eq!(
+        config.ai_provider(AiFeature::Explain).unwrap().model,
+        "other-model"
+    );
+}
+
+#[test]
+fn automatic_routing_uses_installed_models_that_fit_the_current_gpu() {
+    let mut config = mixed();
+    config.ai_completion.provider = None;
+    config.ai.auto_local_provider = Some("local".into());
+    let weights = tempfile::NamedTempFile::new().unwrap();
+    let local = config.ai.providers.get_mut("local").unwrap();
+    local.server_path = std::env::current_exe().unwrap();
+    local.model_path = Some(weights.path().into());
+    config.apply_ai_hardware(|| 24 << 30).unwrap();
+    assert_eq!(
+        config.ai_provider(AiFeature::Completion).unwrap().model,
+        "local-model"
+    );
+    assert_eq!(
+        config.ai_provider(AiFeature::Doc).unwrap().model,
+        "local-model"
+    );
+    config.apply_ai_hardware(|| 128 << 20).unwrap();
+    assert!(config.ai_provider(AiFeature::Completion).is_err());
+    assert_eq!(
+        config.ai_provider(AiFeature::Doc).unwrap().model,
+        "cloud-model"
+    );
+    config.apply_ai_hardware(|| 24 << 30).unwrap();
+    drop(weights);
+    assert!(config.ai_provider(AiFeature::Completion).is_err());
+    config.apply_ai_hardware(|| 24 << 30).unwrap();
+    assert!(config.ai_provider(AiFeature::Completion).is_err());
+    assert_eq!(
+        config.ai_provider(AiFeature::Doc).unwrap().model,
+        "cloud-model"
+    );
+}
+
+#[test]
+fn deepseek_feature_effort_follows_the_route_and_yields_to_the_panel() {
+    use helix_view::ai::AiThinking;
+    let mut config = mixed();
+    config.ai_commit.provider = Some("local".into());
+    config
+        .ai
+        .deepseek_thinking
+        .insert(AiFeature::Commit, AiThinking::Low);
+    config.apply_ai_hardware(|| 128 << 20).unwrap();
+    let cloud = config.ai_provider(AiFeature::Commit).unwrap();
+    assert_eq!(cloud.kind, AiProviderType::Deepseek);
+    assert!(cloud.thinking);
+    assert_eq!(cloud.reasoning_effort.as_deref(), Some("low"));
+    assert!(!config.ai_provider(AiFeature::Doc).unwrap().thinking);
+    config.apply_ai_hardware(|| 24 << 30).unwrap();
+    let local = config.ai_provider(AiFeature::Commit).unwrap();
+    assert_eq!(local.kind, AiProviderType::LlamaCpp);
+    assert!(!local.thinking);
+    config.apply_ai_hardware(|| 128 << 20).unwrap();
+    config
+        .ai
+        .thinking
+        .insert(AiFeature::Commit, AiThinking::Off);
+    assert!(!config.ai_provider(AiFeature::Commit).unwrap().thinking);
 }

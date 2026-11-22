@@ -1807,6 +1807,7 @@ dependencies = [
  "toml",
  "unicase",
  "unicode-normalization",
+ "winapi",
  "winapi-util",
  "windows-sys 0.61.2",
 ]

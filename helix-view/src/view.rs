@@ -521,13 +521,9 @@ impl View {
         let mut text_annotations = TextAnnotations::default();
         text_annotations.add_folds(doc.folds(self.id));
 
-        if let Some(suggestion) = doc
-            .ai_completion
-            .as_ref()
-            .filter(|s| s.is_valid(doc, self.id))
-        {
+        if let Some(annotation) = doc.ai_inline_preview(self.id) {
             let style = theme.and_then(|t| t.find_highlight_exact("ui.virtual.ai-completion"));
-            text_annotations.add_inline_completion(&suggestion.annotation, style);
+            text_annotations.add_inline_completion(annotation, style);
         }
 
         if let Some(labels) = doc.jump_labels.get(&self.id) {

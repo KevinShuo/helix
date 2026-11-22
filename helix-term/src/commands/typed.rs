@@ -3296,6 +3296,76 @@ fn ai_test_cancel(
     Ok(())
 }
 
+fn ai_explain(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_chat::open(
+            cx,
+            Some(if args.is_empty() {
+                crate::handlers::ai_chat::DEFAULT_QUESTION.into()
+            } else {
+                args.join(" ")
+            }),
+        )?;
+    }
+    Ok(())
+}
+
+fn ai_ask(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_chat::open(cx, (!args.is_empty()).then(|| args.join(" ")))?;
+    }
+    Ok(())
+}
+
+fn ai_explain_show(
+    cx: &mut compositor::Context,
+    _: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_chat::show(cx)?;
+    }
+    Ok(())
+}
+
+fn ai_explain_cancel(
+    cx: &mut compositor::Context,
+    _: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_chat::cancel(cx.editor);
+    }
+    Ok(())
+}
+
+fn ai_generate(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_generate::open(cx, args.join(" "))?;
+    }
+    Ok(())
+}
+
+fn ai_generate_cancel(
+    cx: &mut compositor::Context,
+    _: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        crate::handlers::ai_generate::cancel(cx.editor);
+    }
+    Ok(())
+}
+
+fn ai_settings(cx: &mut compositor::Context, _: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        cx.jobs.after_event.push(Box::new(|editor, compositor| {
+            compositor.replace_or_push("ai-settings", ui::ai_settings::Panel::new(editor));
+        }));
+    }
+    Ok(())
+}
+
 fn ai_doc(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
     if event == PromptEvent::Validate {
         crate::handlers::ai_doc::start(cx.editor)?;
@@ -3355,6 +3425,13 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
     TypableCommand { name: "next-problem", aliases: &[], doc: "Go to next problem, optionally setting source, minimum severity and scope filters", fun: problem_commands::next, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
     TypableCommand { name: "previous-problem", aliases: &[], doc: "Go to previous problem, optionally setting source, minimum severity and scope filters", fun: problem_commands::previous, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
     TypableCommand { name: "problems", aliases: &[], doc: "Show filtered live diagnostics and compiler problems", fun: problem_commands::list, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
+    TypableCommand { name: "ai-explain", aliases: &[], doc: "Explain selected code and ask follow-up questions", fun: ai_explain, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-ask", aliases: &[], doc: "Ask a question about the current selection", fun: ai_ask, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-explain-show", aliases: &[], doc: "Resume the latest selection conversation", fun: ai_explain_show, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-explain-cancel", aliases: &[], doc: "Stop the current answer and keep the conversation", fun: ai_explain_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-generate", aliases: &[], doc: "Generate code at the cursor from an instruction", fun: ai_generate, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-generate-cancel", aliases: &[], doc: "Discard the current code generation or preview", fun: ai_generate_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai", aliases: &[], doc: "Open the AI actions and session settings panel", fun: ai_settings, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-test", aliases: &[], doc: "Generate pytest or GoogleTest tests and preview CMake integration for the current function", fun: ai_test, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-test-run", aliases: &[], doc: "Run saved generated tests; preview at most one compile/import repair", fun: ai_test_run, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-test-show", aliases: &[], doc: "Show the latest generated test changes or execution report", fun: ai_test_show, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
@@ -4559,7 +4636,7 @@ fn execute_command_line(
     }
 }
 
-pub(super) fn execute_command(
+pub(crate) fn execute_command(
     cx: &mut compositor::Context,
     cmd: &TypableCommand,
     args: &str,

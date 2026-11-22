@@ -84,7 +84,10 @@ impl CommitWorkspace {
                         p.message =
                             "已有暂存将全部提交。空格选候选，s 暂存；g 生成信息，e 编辑，C 提交"
                                 .into();
-                        if analyze && editor.config().ai_commit.enabled {
+                        if analyze
+                            && editor.config().ai.enabled
+                            && editor.config().ai_commit.enabled
+                        {
                             p.start_ai(editor, true);
                         }
                     }
@@ -120,12 +123,14 @@ impl CommitWorkspace {
     }
     fn prepare_ai(&mut self, editor: &mut Editor, recommend: bool) -> Result<()> {
         ensure!(self.busy == Busy::Idle, "当前操作尚未结束");
+        editor.config().check_ai_enabled()?;
         ensure!(
             editor.config().ai_commit.enabled,
             "请先在 [editor.ai-commit] 中启用 enabled = true；仍可手动暂存和提交"
         );
         ensure!(
-            !editor.ai_commit_running
+            !crate::handlers::ai::interactive_busy(editor)
+                && !editor.ai_commit_running
                 && editor.ai_doc.is_none()
                 && editor.ai_merge.is_none()
                 && !crate::handlers::ai_test::busy(editor),
@@ -482,6 +487,7 @@ impl CommitWorkspace {
                         }
                         p.message = status;
                         if kind == 0
+                            && editor.config().ai.enabled
                             && editor.config().ai_commit.enabled
                             && !p.draft.manual
                             && p.draft.text.is_empty()

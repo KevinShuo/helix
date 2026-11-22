@@ -1,0 +1,127 @@
+model,mode,set,case,request_ms,grade,suggestion
+3B,chat-gap,original,signed_ceil_div,2572,passed,int(a // b) + (a % b != 0)
+3B,chat-gap,original,descending_lower_bound,826,wrong,<=
+3B,chat-gap,original,weighted_mean,647,passed,sum(weights)
+3B,chat-gap,original,overlapping_occurrences,1021,passed,pos + 1
+3B,chat-gap,original,empty_suffix,680,wrong,suffix: suffix
+3B,chat-gap,original,signed_rotation,1033,passed,k % len(items)
+3B,chat-gap,original,dedup_last_occurrence,937,wrong,dict.fromkeys(values).values()
+3B,chat-gap,original,two_key_sort,1128,passed,"(row[1], -row[0])"
+3B,chat-gap,original,clamp_swapped_bounds,1012,passed,"max(low, min(value, high))"
+3B,chat-gap,original,chunk_end,905,passed,start + size
+3B,chat-gap,original,first_nonnegative,837,passed,value >= 0
+3B,chat-gap,original,closed_integer_intervals,1532,wrong,result[-1][1] >= start
+3B,chat-gap,original,lazy_default_factory,903,wrong,"mapping.get(key, factory())"
+3B,chat-gap,original,coalesce_none,752,passed,value is not None
+3B,chat-gap,original,binary_search_absent,1077,wrong,-1
+3B,chat-gap,original,single_prefix_removal,833,wrong,text[len(prefix):]
+3B,chat-gap,original,flatten_once,536,passed,row
+3B,chat-gap,original,positive_modulo,711,passed,index % length
+3B,chat-gap,original,strictly_increasing,786,passed,left < right
+3B,chat-gap,original,keyword_only_arguments,1001,wrong,"seq, final=True"
+3B,chat-gap,original,safe_abs_int_min,897,wrong,-2 * value
+3B,chat-gap,original,uint64_mask,1248,withheld,
+3B,chat-gap,original,overlap_shift,1015,passed,values[i-1]
+3B,chat-gap,original,descending_upper_bound,1213,compile_error,>=target
+3B,chat-gap,original,unsigned_saturating_add,948,passed,maximum - b
+3B,chat-gap,original,closed_interval_intersection,786,passed,<=
+3B,chat-gap,original,overflow_safe_average,980,wrong,(a + b) / 2
+3B,chat-gap,original,overflow_safe_midpoint,929,wrong,(lo + hi) / 2
+3B,chat-gap,original,cpp_positive_modulo,1742,withheld,
+3B,chat-gap,original,next_power_of_two,1277,passed,++value
+3B,chat-gap,fresh,header_lookup,972,passed,key.lower()
+3B,chat-gap,fresh,batch_tail,810,passed,start:start+width
+3B,chat-gap,fresh,path_extension,815,passed,Path(filename).suffix.lower()
+3B,chat-gap,fresh,counter_update,1043,passed,"counts.get(word, 0) + 1"
+3B,chat-gap,fresh,first_match,1169,withheld,
+3B,chat-gap,fresh,join_names,901,passed,"filter(lambda x: x, names)"
+3B,chat-gap,fresh,read_default,821,passed,"options.get(name, default)"
+3B,chat-gap,fresh,append_if_new,632,passed,not in items
+3B,chat-gap,fresh,cpp_nonempty,836,passed,&& !b.empty()
+3B,chat-gap,fresh,cpp_last_index,711,passed,i
+3B,chat-gap,fresh,cpp_drop_last,573,passed,pop_back()
+3B,chat-gap,fresh,cpp_minimum,665,passed,values.end()
+3B,native-infill,original,signed_ceil_div,1195,wrong,int(a / b) + (a % b != 0)
+3B,native-infill,original,descending_lower_bound,642,wrong,<=
+3B,native-infill,original,weighted_mean,1274,passed,sum(weights) if sum(weights) > 0 else 0.0
+3B,native-infill,original,overlapping_occurrences,858,passed,pos + 1
+3B,native-infill,original,empty_suffix,528,wrong,text.endswith(suffix)
+3B,native-infill,original,signed_rotation,1534,passed,k % len(items)  # Normalize k to be within the length of the list.
+3B,native-infill,original,dedup_last_occurrence,812,withheld,
+3B,native-infill,original,two_key_sort,852,passed,"(row[1], -row[0])"
+3B,native-infill,original,clamp_swapped_bounds,747,passed,"max(low, min(value, high))"
+3B,native-infill,original,chunk_end,571,passed,start + size
+3B,native-infill,original,first_nonnegative,688,withheld,
+3B,native-infill,original,closed_integer_intervals,1123,wrong,result[-1][1] >= start
+3B,native-infill,original,lazy_default_factory,1292,passed,mapping.get(key) or factory() if key not in mapping else mapping[key]
+3B,native-infill,original,coalesce_none,514,passed,value is not None
+3B,native-infill,original,binary_search_absent,1227,wrong,lo if values[lo] == target else -1
+3B,native-infill,original,single_prefix_removal,965,passed,text[len(prefix):] if text.startswith(prefix) else text
+3B,native-infill,original,flatten_once,249,passed,row
+3B,native-infill,original,positive_modulo,461,passed,index % length
+3B,native-infill,original,strictly_increasing,510,passed,left < right
+3B,native-infill,original,keyword_only_arguments,778,passed,"sequence=seq, final=True"
+3B,native-infill,original,safe_abs_int_min,550,wrong,-1 * value
+3B,native-infill,original,uint64_mask,560,passed,1ULL << bit
+3B,native-infill,original,overlap_shift,681,passed,values[i-1]
+3B,native-infill,original,descending_upper_bound,1217,withheld,
+3B,native-infill,original,unsigned_saturating_add,713,withheld,
+3B,native-infill,original,closed_interval_intersection,784,passed,"<= std::min(b,d);"
+3B,native-infill,original,overflow_safe_average,703,wrong,(a + b) / 2
+3B,native-infill,original,overflow_safe_midpoint,682,wrong,(lo + hi) / 2
+3B,native-infill,original,cpp_positive_modulo,1647,wrong,value >= 0 ? value % modulus : modulus - 1 - (-value) % modulus
+3B,native-infill,original,next_power_of_two,955,passed,value+1
+3B,native-infill,fresh,header_lookup,651,passed,key.lower()
+3B,native-infill,fresh,batch_tail,671,passed,start:start + width
+3B,native-infill,fresh,path_extension,1092,passed,Path(filename).suffix.lower() if Path(filename).suffix else ''
+3B,native-infill,fresh,counter_update,911,passed,"counts.get(word, 0) + 1"
+3B,native-infill,fresh,first_match,851,withheld,
+3B,native-infill,fresh,join_names,735,passed,name for name in names if name
+3B,native-infill,fresh,read_default,1188,wrong,"options.get(name, default) if options.get(name) else default"
+3B,native-infill,fresh,append_if_new,492,withheld,
+3B,native-infill,fresh,cpp_nonempty,627,passed,&& !b.empty()
+3B,native-infill,fresh,cpp_last_index,639,passed,i
+3B,native-infill,fresh,cpp_drop_last,486,passed,pop_back()
+3B,native-infill,fresh,cpp_minimum,646,passed,values.end()
+7B,chat-gap,original,signed_ceil_div,5236,passed,a // b + (a % b != 0)
+7B,chat-gap,original,descending_lower_bound,1901,wrong,<=
+7B,chat-gap,original,weighted_mean,1699,passed,sum(weights)
+7B,chat-gap,original,overlapping_occurrences,2254,passed,pos + 1
+7B,chat-gap,original,empty_suffix,1156,wrong,suffix
+7B,chat-gap,original,signed_rotation,2019,passed,k % len(items)
+7B,chat-gap,original,dedup_last_occurrence,2036,wrong,dict.fromkeys(values).keys()
+7B,chat-gap,original,two_key_sort,2471,passed,"(row[1], -row[0])"
+7B,chat-gap,original,clamp_swapped_bounds,2004,passed,"max(low, min(value, high))"
+7B,chat-gap,original,chunk_end,1634,passed,start + size
+7B,chat-gap,original,first_nonnegative,1618,passed,value >= 0
+7B,chat-gap,original,closed_integer_intervals,3068,wrong,start <= result[-1][1]
+7B,chat-gap,original,lazy_default_factory,1756,wrong,"mapping.get(key, factory())"
+7B,chat-gap,original,coalesce_none,1550,passed,value is not None
+7B,chat-gap,original,binary_search_absent,1873,wrong,lo
+7B,chat-gap,original,single_prefix_removal,2567,passed,text[len(prefix):] if text.startswith(prefix) else text
+7B,chat-gap,original,flatten_once,845,passed,row
+7B,chat-gap,original,positive_modulo,1557,passed,(index % length)
+7B,chat-gap,original,strictly_increasing,1556,passed,left < right
+7B,chat-gap,original,keyword_only_arguments,2234,passed,"sequence=seq, final=True"
+7B,chat-gap,original,safe_abs_int_min,1784,passed,-(long long)value
+7B,chat-gap,original,uint64_mask,1537,passed,1ULL << bit
+7B,chat-gap,original,overlap_shift,2008,passed,values[i-1]
+7B,chat-gap,original,descending_upper_bound,2168,wrong,<
+7B,chat-gap,original,unsigned_saturating_add,1777,passed,maximum - b
+7B,chat-gap,original,closed_interval_intersection,1477,passed,<=
+7B,chat-gap,original,overflow_safe_average,1897,wrong,(a + b) / 2
+7B,chat-gap,original,overflow_safe_midpoint,1867,wrong,(lo + hi) / 2
+7B,chat-gap,original,cpp_positive_modulo,2154,wrong,(value % modulus + modulus) % modulus
+7B,chat-gap,original,next_power_of_two,2574,passed,value + 1
+7B,chat-gap,fresh,header_lookup,1942,passed,key.lower()
+7B,chat-gap,fresh,batch_tail,1799,passed,start:start+width
+7B,chat-gap,fresh,path_extension,1715,passed,Path(filename).suffix.lower()
+7B,chat-gap,fresh,counter_update,2367,passed,"counts.get(word, 0) + 1"
+7B,chat-gap,fresh,first_match,2380,wrong,(record for record in records if record.is_active)
+7B,chat-gap,fresh,join_names,1005,wrong,names
+7B,chat-gap,fresh,read_default,1842,passed,"options.get(name, default)"
+7B,chat-gap,fresh,append_if_new,1357,passed,not in items
+7B,chat-gap,fresh,cpp_nonempty,1896,passed,&& !b.empty()
+7B,chat-gap,fresh,cpp_last_index,1687,passed,i
+7B,chat-gap,fresh,cpp_drop_last,1271,passed,pop_back()
+7B,chat-gap,fresh,cpp_minimum,1489,passed,values.end()

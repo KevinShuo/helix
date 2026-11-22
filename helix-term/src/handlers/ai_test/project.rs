@@ -439,14 +439,22 @@ fn cmake(project: &mut Project, target: &Target, config: &AiTestConfig) -> Resul
     integration.push_str(&format!(
         "if(MSVC)\n  set_property(SOURCE \"{file}\" TARGET_DIRECTORY {test_name} APPEND PROPERTY COMPILE_OPTIONS /utf-8)\nendif()\n"
     ));
+    // CTest can pass a non-ASCII GoogleTest case name through the Windows
+    // ANSI command line and silently run zero cases. Filter the generated
+    // suite by its ASCII id and let GoogleTest enumerate its cases itself.
+    let suite = &project.test_filter;
+    integration.push_str(&format!(
+        "if(WIN32)\n  add_test(NAME {suite} COMMAND {test_name} \"--gtest_filter={suite}.*:*/{suite}.*\")\n  set_tests_properties({suite} PROPERTIES FAIL_REGULAR_EXPRESSION \"Running 0 tests from 0 test suites\")\n"
+    ));
     if !calls
         .iter()
         .any(|(c, a, _)| c == "gtest_discover_tests" && a.first() == Some(&test_name))
     {
         integration.push_str(&format!(
-            "include(GoogleTest)\ngtest_discover_tests({test_name} DISCOVERY_MODE PRE_TEST)\n"
+            "else()\n  include(GoogleTest)\n  gtest_discover_tests({test_name} DISCOVERY_MODE PRE_TEST)\n"
         ));
     }
+    integration.push_str("endif()\n");
     change(project, id_dir.join("CMakeLists.txt"), integration)?;
     append(
         project,

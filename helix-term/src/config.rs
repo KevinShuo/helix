@@ -62,6 +62,18 @@ impl Config {
         global: Result<&String, ConfigLoadError>,
         local: Result<String, ConfigLoadError>,
     ) -> Result<Config, ConfigLoadError> {
+        let config = Self::parse(global, local)?;
+        config
+            .editor
+            .validate_ai()
+            .map_err(|err| ConfigLoadError::InvalidAiConfig(format!("{err:#}")))?;
+        Ok(config)
+    }
+
+    fn parse(
+        global: Result<&String, ConfigLoadError>,
+        local: Result<String, ConfigLoadError>,
+    ) -> Result<Config, ConfigLoadError> {
         let global_config: Result<ConfigRaw, ConfigLoadError> =
             global.and_then(|file| toml::from_str(file).map_err(ConfigLoadError::BadConfig));
         let local_config: Result<ConfigRaw, ConfigLoadError> =
@@ -127,9 +139,6 @@ impl Config {
             (Err(err), Err(_)) => return Err(err),
         };
 
-        res.editor
-            .validate_ai()
-            .map_err(|err| ConfigLoadError::InvalidAiConfig(format!("{err:#}")))?;
         Ok(res)
     }
 
@@ -140,7 +149,7 @@ impl Config {
             .map_err(ConfigLoadError::Error);
 
         let phony_config = ConfigLoadError::Error(IOError::other("hacky placeholder"));
-        let global_parsed = Config::load(Ok(&global_config), Err(phony_config))?;
+        let global_parsed = Config::parse(Ok(&global_config), Err(phony_config))?;
 
         // We need to build a transient `WorkspaceTrust` just to ask whether the workspace is
         // trusted enough to load its `.helix/config.toml`. The persisted-trust file on disk is the
@@ -149,21 +158,26 @@ impl Config {
         let trust = helix_loader::workspace_trust::WorkspaceTrust::new(
             (&global_parsed.editor.workspace_trust).into(),
         );
-        if trust
+        let mut config = if trust
             .query_current(helix_loader::workspace_trust::TrustQuery::LocalConfig)
             .is_trusted()
         {
-            let mut merged = Config::load(Ok(&global_config), local_config)?;
+            let mut merged = Config::parse(Ok(&global_config), local_config)?;
             // editor.workspace-trust is global/user-scope only. Without this override, a
             // workspace's `.helix/config.toml` could set `level = "insecure"`; once the user trusted
             // *that* workspace, refresh_config would re-load with the override merged in and from
             // then on every subsequent workspace in the session would be implicitly trusted. Pin
             // the gate's own configuration to the global file.
             merged.editor.workspace_trust = global_parsed.editor.workspace_trust;
-            Ok(merged)
+            // A workspace may disable AI but cannot undo the user's global off switch.
+            merged.editor.ai.enabled &= global_parsed.editor.ai.enabled;
+            merged
         } else {
-            Ok(global_parsed)
-        }
+            global_parsed
+        };
+        crate::ai_hardware::configure(&mut config.editor)
+            .map_err(|err| ConfigLoadError::InvalidAiConfig(format!("{err:#}")))?;
+        Ok(config)
     }
 }
 

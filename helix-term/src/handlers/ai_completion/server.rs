@@ -119,6 +119,13 @@ impl Drop for LocalServer {
     }
 }
 
+// Thinking options are per request; they do not identify a model lease.
+pub(crate) fn registered_for(providers: &[AiProviderConfig], model: &AiProviderConfig) -> bool {
+    providers
+        .iter()
+        .any(|p| p.on_demand == model.on_demand && same_server(p, model))
+}
+
 pub(crate) fn same_server(a: &AiProviderConfig, b: &AiProviderConfig) -> bool {
     a.model_path == b.model_path
         && a.server_path == b.server_path
@@ -342,6 +349,9 @@ async fn prepare(config: &AiProviderConfig, child: &mut Option<Child>) -> anyhow
         .stdout(log.try_clone()?)
         .stderr(log)
         .kill_on_drop(true);
+    if config.gpu_layers == 0 {
+        command.args(["--device", "none"]);
+    }
     if config.runtime.speculative_decoding != helix_view::ai::AiSpeculativeDecoding::None {
         command.args([
             "--spec-type",

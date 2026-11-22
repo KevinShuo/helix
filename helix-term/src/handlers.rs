@@ -16,6 +16,8 @@ use self::document_colors::DocumentColorsHandler;
 use self::document_links::DocumentLinksHandler;
 
 pub(crate) mod ai;
+pub(crate) mod ai_chat;
+pub(crate) mod ai_generate;
 pub(crate) mod ai_commit;
 pub mod ai_completion;
 pub(crate) mod ai_doc;
@@ -67,6 +69,8 @@ pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
     completion::register_hooks(&handlers);
     ai_completion::register_hooks();
     ai_doc::register_hooks();
+    ai_chat::register_hooks();
+    ai_generate::register_hooks();
     ai_merge::register_hooks();
     ai_test::register_hooks();
     function_hints::register_hooks();

@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate helix_view;
 
+mod ai_hardware;
 pub mod ai_manager;
 pub mod application;
 pub mod args;

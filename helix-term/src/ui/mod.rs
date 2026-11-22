@@ -1,6 +1,9 @@
+pub(crate) mod ai_chat;
 pub(crate) mod ai_doc;
+pub(crate) mod ai_generate;
 pub(crate) mod ai_merge;
 mod ai_preview_text;
+pub(crate) mod ai_settings;
 pub(crate) mod ai_test;
 mod completion;
 mod document;

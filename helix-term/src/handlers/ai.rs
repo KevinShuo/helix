@@ -75,6 +75,11 @@ pub(crate) async fn post(
     parameters.remove("thinking");
     match config.kind {
         AiProviderType::Deepseek => {
+            if config.thinking {
+                if let Some(effort) = &config.reasoning_effort {
+                    parameters.insert("reasoning_effort".into(), json!(effort));
+                }
+            }
             parameters.insert(
                 "thinking".into(),
                 json!({"type": if config.thinking { "enabled" } else { "disabled" }}),
@@ -180,6 +185,72 @@ pub(crate) async fn post(
         }
         return Ok(response);
     }
+}
+
+pub(crate) fn interactive_busy(editor: &helix_view::Editor) -> bool {
+    super::ai_chat::busy(editor) || super::ai_generate::active(editor)
+}
+
+fn interactive_output(model: &AiProviderConfig) -> u32 {
+    model.budget_output_tokens(
+        (model.budget_context() as u32 / 4)
+            .min(2048)
+            .saturating_add(model.reasoning_tokens()),
+    )
+}
+
+pub(super) const MESSAGE_OVERHEAD: usize = 16;
+
+pub(super) fn message_bytes(messages: &[Value]) -> usize {
+    messages
+        .iter()
+        .map(|m| m["content"].as_str().map_or(0, str::len) + MESSAGE_OVERHEAD)
+        .sum()
+}
+
+pub(super) fn interactive_input_fits(model: &AiProviderConfig, input: usize) -> bool {
+    model.budget_fits(input, interactive_output(model), 128)
+}
+
+pub(super) fn interactive_fits(model: &AiProviderConfig, messages: &[Value]) -> bool {
+    interactive_input_fits(model, message_bytes(messages))
+}
+
+/// Execute an explicit user request through the same model lease and HTTP transport
+/// as documentation and tests. Preserve code indentation for the insertion preview.
+pub(crate) async fn interactive(
+    model: &AiProviderConfig,
+    messages: Vec<Value>,
+) -> anyhow::Result<String> {
+    anyhow::ensure!(
+        interactive_fits(model, &messages),
+        "内容超出模型上下文，请缩小选区、缩短需求或选择更大上下文的模型"
+    );
+    let body = json!({"model": model.model, "messages": messages, "max_tokens": interactive_output(model),
+        "stream": false, "temperature": 0.2});
+    super::ai_completion::server::with_model(model, async {
+        super::ai_completion::server::wait_ready(model).await?;
+        let response = post(model, &body, 120_000).await?;
+        let choice = &response["choices"][0];
+        anyhow::ensure!(
+            matches!(choice["finish_reason"].as_str(), None | Some("stop")),
+            "模型未返回完整结果，请缩小请求后重试"
+        );
+        let message = &choice["message"];
+        anyhow::ensure!(
+            message["refusal"].is_null()
+                && message["function_call"].is_null()
+                && message["tool_calls"].as_array().is_none_or(Vec::is_empty),
+            "模型未返回可显示的文本"
+        );
+        let content = message["content"]
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
+            .context("模型返回了空内容")?;
+        anyhow::ensure!(content.len() <= 128 * 1024, "回答过长，请缩小问题范围");
+        Ok(content.to_owned())
+    })
+    .await
 }
 
 // Inspect only structured provider errors, never include their contents in an error.

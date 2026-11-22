@@ -252,7 +252,10 @@ pub(crate) async fn with_model<T>(
     let mut ready = client.ready.subscribe();
     let mut changes = client.providers.subscribe();
     let providers = changes.borrow_and_update().clone();
-    ensure!(providers.contains(config), "AI model configuration changed");
+    ensure!(
+        crate::handlers::ai_completion::server::registered_for(&providers, config),
+        "AI model configuration changed"
+    );
     let restore = if config.on_demand {
         providers
             .iter()
@@ -292,7 +295,7 @@ pub(crate) async fn with_model<T>(
         _ = changes.changed() => anyhow::bail!("AI model configuration changed"),
     };
     ensure!(
-        client.providers.borrow().contains(config),
+        crate::handlers::ai_completion::server::registered_for(&client.providers.borrow(), config),
         "AI model configuration changed"
     );
     let result = tokio::select! {

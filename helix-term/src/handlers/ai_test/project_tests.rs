@@ -245,13 +245,20 @@ async fn cmake_smoke(fetch: bool, existing: bool) {
     if existing {
         assert_eq!(project.target_name, "existing");
     }
-    let code = format!("#include <gtest/gtest.h>\nextern \"C\" {{\n#include \"maths.h\"\n}}\n// 正常解析：中间值\nTEST({}, Adds) {{ EXPECT_EQ(add(2, 3), 5); }}\n", project.test_filter);
+    let code = format!("#include <gtest/gtest.h>\nextern \"C\" {{\n#include \"maths.h\"\n}}\nTEST({}, 相加) {{ EXPECT_EQ(add(2, 3), 5); }}\n", project.test_filter);
     for change in changes(&project, &code).unwrap() {
         std::fs::create_dir_all(change.before.path.parent().unwrap()).unwrap();
         std::fs::write(change.before.path, change.after).unwrap();
     }
     let report = super::super::runner::run(&project, &config).await;
     assert!(report.success, "stage={:?}\n{}", report.stage, report.log);
+    std::fs::write(&source, "int add(int a, int b) { return a - b; }\n").unwrap();
+    let report = super::super::runner::run(&project, &config).await;
+    assert!(
+        !report.success && report.log.contains("Expected equality"),
+        "{}",
+        report.log
+    );
 }
 
 #[tokio::test]

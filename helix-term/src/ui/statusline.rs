@@ -130,6 +130,7 @@ where
     F: Fn(&mut RenderContext<'a>, Span<'a>) + Copy,
 {
     match element_id {
+        StatusLineElementID::AiStatus => render_ai_status,
         helix_view::editor::StatusLineElement::Mode => render_mode,
         helix_view::editor::StatusLineElement::Spinner => render_lsp_spinner,
         helix_view::editor::StatusLineElement::FileBaseName => render_file_base_name,
@@ -159,6 +160,23 @@ where
         helix_view::editor::StatusLineElement::CurrentWorkingDirectory => render_cwd,
         helix_view::editor::StatusLineElement::CodeActionHint => render_code_action_hint,
     }
+}
+
+fn render_ai_status<'a, F>(context: &mut RenderContext<'a>, write: F)
+where
+    F: Fn(&mut RenderContext<'a>, Span<'a>) + Copy,
+{
+    let config = context.editor.config();
+    let label = config.ai.statusline();
+    let preview = context.doc.ai_completion.as_ref().filter(|preview| {
+        context.focused && context.editor.mode() == Mode::Insert && preview.view == context.view.id
+    });
+    let label = match preview.map(|preview| preview.request_latency) {
+        Some(Some(elapsed)) => format!("{} ms · {label}", elapsed.as_millis()),
+        Some(None) => format!("即时续显 · {label}"),
+        None => label.to_owned(),
+    };
+    write(context, Span::raw(label));
 }
 
 fn render_mode<'a, F>(context: &mut RenderContext<'a>, write: F)

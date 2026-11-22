@@ -130,7 +130,7 @@ The `[editor.statusline]` key takes the following sub-keys:
 | Key           | Description | Default |
 | ---           | ---         | ---     |
 | `left`        | A list of elements aligned to the left of the statusline | `["mode", "spinner", "file-name", "read-only-indicator", "file-modification-indicator"]` |
-| `center`      | A list of elements aligned to the middle of the statusline | `[]` |
+| `center`      | A list of elements aligned to the middle of the statusline | `["ai-status"]` |
 | `right`       | A list of elements aligned to the right of the statusline | `["diagnostics", "selections", "register", "position", "file-encoding"]` |
 | `separator`   | The character used to separate elements in the statusline | `"│"` |
 | `mode.normal` | The text shown in the `mode` element for normal mode | `"NOR"` |
@@ -166,6 +166,7 @@ The following statusline elements can be configured:
 | `spacer` | Inserts a space between elements (multiple/contiguous spacers may be specified) |
 | `version-control` | The current branch name or detached commit hash of the opened workspace |
 | `register` | The current selected register |
+| `ai-status` | AI master switch, provider and model. While an inline suggestion is visible, the millisecond reading includes debounce, completion and validation. Typing its matching prefix shows the remaining text immediately and displays `即时续显`. Open `:ai` for per-feature routes. |
 | `code-action-hint` | Indicator for when code actions are available |
 
 ### `[editor.lsp]` Section
@@ -831,12 +832,174 @@ fn main() {
 
 ### `[editor.ai]` Section
 
-Configure named models once and select them independently for inline completion,
-function documentation and commit assistance. Providers use OpenAI-compatible
+Open `:ai` for AI actions and settings. Use the arrow keys or `j` / `k` to
+select an action, then press Enter. In a merge draft the panel selects conflict
+assistance. With a selection it selects code explanation. At a single cursor it
+selects code generation. The same list includes function documentation, test
+generation, Git commits and the current inline completion switch. Choose that
+switch to open its settings. The panel shows the current file and selection
+line count. When available, it also lists recent answers, test
+results, the action to run accepted tests, and actions to cancel current tasks.
+
+Press `s` or Tab to open session settings. Tab switches between actions and
+settings and preserves pending edits. Choosing a disabled action takes
+you to its switch, or to the master switch if all AI is off. Select a switch
+with the arrow keys, then press Space to toggle it.
+For an enabled feature, press `m` to cycle through inherited routing, configured
+providers and DeepSeek Flash/Pro. Press `t` to cycle through inherited thinking,
+off, low, high and maximum. Generic OpenAI-compatible providers keep their own
+defaults. Enter applies the edits together and Esc discards them. The statusline
+shows the effective route and model, or indicates that multiple models are in use.
+To persist a thinking override, use an entry such as `doc = "high"` under
+`[editor.ai.thinking]` (keys include `completion`, `doc`, `commit`, `test`,
+`merge`, `explain`, and `generate`).
+Run `hx --health ai` to see detected memory and effective providers.
+To persist the setting, set `enabled` in `[editor.ai]`. It
+defaults to `true` and respects each feature's individual switch. Turning it off
+cancels current AI work and releases this editor's local model leases.
+
+#### Ask about selected code
+
+Select one contiguous range and run `:ai-explain` for an explanation, or
+`:ai-ask` to type a question first. Both commands also accept a question on
+the command line, for example `:ai-ask What happens if the input is empty?`.
+Press Enter to send a follow-up about the same selection snapshot. Page Up and
+Page Down scroll the conversation. Esc hides it while a pending answer
+continues. Use `:ai-explain-show` to reopen the most recent conversation after
+editing or switching files. Starting another `:ai-ask` or `:ai-explain`
+replaces that conversation. Ctrl-c in the conversation or
+`:ai-explain-cancel` from the editor stops a pending answer and restores the
+question for editing.
+
+#### Generate code at the cursor
+
+Press `Ctrl-\` in normal, select or insert mode, describe the code to insert
+and press Enter. In select mode, accepting the draft inserts at the active
+cursor and preserves the selected text. You can also run `:ai-generate` or
+pass an instruction directly, such
+as `:ai-generate Add a check for an empty input`. The generated text appears
+in grey at the cursor. Press Shift-Right to insert it in one undo step,
+`Ctrl-\` to refine the draft, or Esc to discard it. Moving the cursor or changing
+the document discards the preview. Use `:ai-generate-cancel` to stop a request.
+
+Both features default to off. Enable them in session settings or persist them
+in your configuration. In automatic mode a shared desktop selection applies
+to both features. Without a shared selection they use their own
+`local-provider` or inherit a configured local generation model from
+function documentation, test generation, and commit generation, in that order.
+When available, the model library supplies an automatic alternative. If no
+suitable generation model is available, Helix uses DeepSeek.
+The lightweight inline completion model stays dedicated to typing. Set
+`provider` on either feature to select a specific service.
+
+```toml
+[editor.ai-explain]
+enabled = true
+# provider = "deepseek"
+
+[editor.ai-generate]
+enabled = true
+# local-provider = "local-27b"
+```
+
+#### Hardware and model routing
+
+With at least one feature enabled, Helix checks the largest dedicated memory
+capacity of a single hardware GPU (Windows DXGI or Linux DRM/NVIDIA). Shared
+system RAM does not count. The default floor is 8 GiB. For each enabled managed
+model with a readable GGUF file, Helix also reserves the file size plus 1 GiB
+for runtime overhead. This is a routing estimate. Model and context settings
+can affect actual memory use.
+
+For an explicitly selected managed llama.cpp model on loopback, set `local-only = true`
+in `[editor.ai-completion]` to keep inline completion local on shared-memory GPUs
+or CPUs. If that server is unavailable, inline completion waits or withholds the
+suggestion. Other features continue to follow the hardware policy.
+
+Set `idle-debounce-ms` in the completion settings to shorten the delay on the
+first edit after a pause. For example, `idle-debounce-ms = 40` and
+`debounce-ms = 120` use 40 ms after at least half a second of inactivity and
+120 ms during continuous typing. Omitting the idle setting uses the normal
+debounce for every edit.
+
+The same configuration can be used on a laptop and a workstation:
+
+```toml
+[editor.ai]
+default-provider = "deepseek"
+auto-local-provider = "local"
+# Optional GGUF libraries on the workstation.
+# local-model-directories = ['D:\models', 'E:\LLMs']
+# Optional saved desktop default (use the provider name shown in the panel).
+# local-generation-provider = "local-27b"
+```
+
+On a laptop, explanation, prompted code generation, documentation, tests,
+commit assistance and conflict resolution always use DeepSeek, including
+on AC power. A feature-specific local model selection also follows this rule.
+Inline completion keeps its own local routing. On a desktop, Helix checks
+the GGUF weights, server executable and dedicated GPU memory. In automatic mode
+it prefers each feature's configured generation model, then the largest eligible
+GGUF that fits. Automatic selection skips dedicated inline weights and models
+labeled 3B or smaller. Open `:ai`, press `s`, highlight **默认本地生成模型**, and press
+`m` to browse local models. Enter selects a model and Enter again applies it
+to the session. Choose the automatic option to restore hardware selection.
+A shared choice applies to all six manual features. An explicit per-feature
+`provider` still takes precedence. If the selected weights cannot run, the
+inherited manual features use DeepSeek.
+
+By default Helix looks beside configured generation weights. Set
+`local-model-directories` to browse other GGUF directories, and run
+`:config-reload` after installing models. To use the same choice after restart,
+set `local-generation-provider` to its provider name in `[editor.ai]`.
+Run `hx --health ai` to inspect the routes on each machine.
+
+Use `[editor.ai.deepseek-thinking]` to choose a thinking level for individual
+features when they use DeepSeek. The example config sets `commit`, `merge` and
+`test` to `"low"`. An explicit thinking level in the `:ai` panel takes precedence.
+
+When the preferred completion model cannot run, Helix looks for
+`helix-ai/inline.toml` beside its executable. Set `HELIX_AI_HOME` to an absolute
+directory to keep the bundle elsewhere. The bundle's `[provider]` describes a
+loopback llama.cpp model with `gpu-layers = 0`. Model and server paths resolve
+relative to the bundle. Its `[completion]` supplies the lightweight prompt and
+timing settings. Helix checks available system RAM against the GGUF size plus
+2 GiB and caps CPU threads to leave a core available when possible. Without a
+usable local model, automatic inline completion stays idle. See `:ai` or
+`hx --health ai` for model availability.
+
+With conservative CPU completion, Helix can shorten a long prefix to the
+current top-level function when the syntax tree shows that the preceding
+definitions are functions whose names do not appear near the cursor. If the
+prefix includes a referenced helper or a nearby declaration of another kind,
+Helix keeps the configured window. To request a single line after pressing
+Enter in a code block, set `predict-next = true` and `prediction-lines = 1`
+in the bundle's `[completion]` section.
+
+The conservative CPU path also starts preparing suggestions when you enter
+insert mode. At common operator and block boundaries it can include the next
+space or newline and indentation in the request. Matching edits can use that
+request while it is running. A different edit or cursor movement cancels it.
+Revisiting the same caret and identical buffer can reuse the most recent
+validated model suggestion for that document. When typing a variable name in
+a return or assignment, Helix also checks for a unique literal completion
+from the language server.
+
+If capacity is unknown or below the requirement, the remaining enabled features use
+DeepSeek, including features explicitly set to a local provider. A configured
+DeepSeek provider for the feature or global default takes precedence, followed
+by a provider named `deepseek` of that type and then the first DeepSeek provider
+in name order. Without one, Helix uses the official `deepseek-flash` endpoint
+and reads `DEEPSEEK_API_KEY`. The selected AI feature sends its usual input to
+DeepSeek. Otherwise, Helix uses the configured providers normally.
+
+Configure named models once and select them independently for each feature. Providers use OpenAI-compatible
 Chat Completions; their `endpoint` is the complete URL, including any API path.
 
 ```toml
 [editor.ai]
+enabled = true
+min-local-vram-gib = 8
 default-provider = "deepseek"
 
 [editor.ai.providers.deepseek]
@@ -1105,6 +1268,7 @@ establish type or semantic correctness, and may hide useful incomplete blocks.
 | `provider` | Named model from `[editor.ai.providers]`; otherwise use the global default or legacy connection fields | unset |
 | `conservative` | Prefer short current-line suggestions and suppress weak contexts and overlong responses; see below | `false` |
 | `predict-next` | Automatically predict the next line or a short block at a block opener or an indented blank line with usable context | `false` |
+| `min-gap-confidence` | Minimum geometric mean probability of the generated code tokens, in percent (0–100), for conservative gap requests to a managed local llama.cpp model. Zero disables the filter. | `0` |
 | `prediction-lines` | Maximum lines in one prediction; clamped to 1–12, overlong responses are rejected whole | `6` |
 | `prediction-tokens` | Separate output token limit for next-line/block prediction, clamped to 1–256 | `192` |
 | `endpoint` | Full HTTP(S) chat completions URL | `"http://127.0.0.1:19239/v1/chat/completions"` |

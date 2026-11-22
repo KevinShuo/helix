@@ -94,8 +94,9 @@ getrandom = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 winapi-util = "0.1"
+winapi = { version = "0.3.9", features = ["dxgi", "sysinfoapi"] }
 crossterm = { version = "0.28", features = ["event-stream"] }
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Power"] }
 
 [target.'cfg(not(windows))'.dependencies]  # https://github.com/vorner/signal-hook/issues/100
 signal-hook-tokio = { version = "0.4", features = ["futures-v0_3"] }

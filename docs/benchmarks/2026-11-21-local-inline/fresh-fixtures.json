@@ -1,0 +1,98 @@
+[
+  {
+    "id": "header_lookup",
+    "language": "python",
+    "code": "def header_value(headers, key):\n    \"\"\"Look up a header ignoring letter case. Return None if missing.\"\"\"\n    for name, value in headers.items():\n        if name.lower() == <CURSOR>:\n            return value\n    return None\n",
+    "reference": "key.lower()",
+    "checks": "assert header_value({\"Content-Type\":\"text\"}, \"CONTENT-type\")==\"text\"\nassert header_value({\"x\":1},\"y\") is None",
+    "split": "holdout"
+  },
+  {
+    "id": "batch_tail",
+    "language": "python",
+    "code": "def batches(items, width):\n    \"\"\"Yield slices of at most width items, including the final short slice.\"\"\"\n    for start in range(0, len(items), width):\n        yield items[<CURSOR>]\n",
+    "reference": "start:start+width",
+    "checks": "assert list(batches([1,2,3,4,5],2))==[[1,2],[3,4],[5]]\nassert list(batches([],3))==[]",
+    "split": "holdout"
+  },
+  {
+    "id": "path_extension",
+    "language": "python",
+    "code": "from pathlib import Path\n\ndef extension(filename):\n    \"\"\"Return the lowercase final extension including its dot.\"\"\"\n    return <CURSOR>\n",
+    "reference": "Path(filename).suffix.lower()",
+    "checks": "assert extension(\"a.TAR.GZ\")==\".gz\"\nassert extension(\".profile\")==\"\"",
+    "split": "holdout"
+  },
+  {
+    "id": "counter_update",
+    "language": "python",
+    "code": "def count_words(words):\n    counts = {}\n    for word in words:\n        counts[word] = <CURSOR>\n    return counts\n",
+    "reference": "counts.get(word, 0) + 1",
+    "checks": "assert count_words([\"a\",\"a\",\"b\"])=={\"a\":2,\"b\":1}",
+    "split": "holdout"
+  },
+  {
+    "id": "first_match",
+    "language": "python",
+    "code": "def first_active(records):\n    \"\"\"Return the first active record itself, or None.\"\"\"\n    return next(<CURSOR>)\n",
+    "reference": "(r for r in records if r[\"active\"]), None",
+    "checks": "a={\"active\":False}; b={\"active\":True}; assert first_active([a,b]) is b\nassert first_active([]) is None",
+    "split": "holdout"
+  },
+  {
+    "id": "join_names",
+    "language": "python",
+    "code": "def format_names(names):\n    \"\"\"Join nonempty names using a comma followed by a space.\"\"\"\n    return \", \".join(<CURSOR>)\n",
+    "reference": "n for n in names if n",
+    "checks": "assert format_names([\"\",\"x\",\"y\",\"\"])==\"x, y\"\nassert format_names([])==\"\"",
+    "split": "holdout"
+  },
+  {
+    "id": "read_default",
+    "language": "python",
+    "code": "def setting(options, name, default):\n    \"\"\"Honor present falsy values; use default only when the key is absent.\"\"\"\n    return <CURSOR>\n",
+    "reference": "options.get(name, default)",
+    "checks": "assert setting({\"x\":False},\"x\",1) is False\nassert setting({},\"x\",1)==1\nassert setting({\"x\":None},\"x\",1) is None",
+    "split": "holdout"
+  },
+  {
+    "id": "append_if_new",
+    "language": "python",
+    "code": "def add_new(items, value):\n    \"\"\"Append value if absent, preserving order.\"\"\"\n    if value <CURSOR>:\n        items.append(value)\n",
+    "reference": "not in items",
+    "checks": "x=[1];add_new(x,2);add_new(x,1);assert x==[1,2]",
+    "split": "holdout"
+  },
+  {
+    "id": "cpp_nonempty",
+    "language": "cpp",
+    "code": "bool both_nonempty(const std::vector<int>& a, const std::vector<int>& b) {\n    return !a.empty() <CURSOR>;\n}\n",
+    "reference": "&& !b.empty()",
+    "checks": "assert(both_nonempty({1},{2}));assert(!both_nonempty({},{2}));assert(!both_nonempty({1},{}));",
+    "split": "holdout"
+  },
+  {
+    "id": "cpp_last_index",
+    "language": "cpp",
+    "code": "int last_index(const std::vector<int>& v, int needle) {\n    for (int i=static_cast<int>(v.size())-1; i>=0; --i) {\n        if (v[i] == needle) return <CURSOR>;\n    }\n    return -1;\n}\n",
+    "reference": "i",
+    "checks": "assert(last_index({4,1,4},4)==2);assert(last_index({},1)==-1);",
+    "split": "holdout"
+  },
+  {
+    "id": "cpp_drop_last",
+    "language": "cpp",
+    "code": "void drop_last_if_any(std::vector<int>& values) {\n    if (!values.empty()) values.<CURSOR>;\n}\n",
+    "reference": "pop_back()",
+    "checks": "std::vector<int> v={4,9};drop_last_if_any(v);assert(v.size()==1 && v[0]==4);v.clear();drop_last_if_any(v);assert(v.empty());",
+    "split": "holdout"
+  },
+  {
+    "id": "cpp_minimum",
+    "language": "cpp",
+    "code": "int minimum_or(const std::vector<int>& values, int fallback) {\n    if (values.empty()) return fallback;\n    return *std::min_element(values.begin(), <CURSOR>);\n}\n",
+    "reference": "values.end()",
+    "checks": "assert(minimum_or({4,-2,3},0)==-2);assert(minimum_or({},8)==8);",
+    "split": "holdout"
+  }
+]

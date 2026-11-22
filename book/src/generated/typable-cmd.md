@@ -16,6 +16,13 @@
 | `:next-problem` | Go to next problem, optionally setting source, minimum severity and scope filters |
 | `:previous-problem` | Go to previous problem, optionally setting source, minimum severity and scope filters |
 | `:problems` | Show filtered live diagnostics and compiler problems |
+| `:ai-explain` | Explain selected code and ask follow-up questions |
+| `:ai-ask` | Ask a question about the current selection |
+| `:ai-explain-show` | Resume the latest selection conversation |
+| `:ai-explain-cancel` | Stop the current answer and keep the conversation |
+| `:ai-generate` | Generate code at the cursor from an instruction |
+| `:ai-generate-cancel` | Discard the current code generation or preview |
+| `:ai` | Open the AI actions and session settings panel |
 | `:ai-test` | Generate pytest or GoogleTest tests and preview CMake integration for the current function |
 | `:ai-test-run` | Run saved generated tests; preview at most one compile/import repair |
 | `:ai-test-show` | Show the latest generated test changes or execution report |

@@ -47,6 +47,7 @@ fn crossterm_event(key: helix_view::input::KeyEvent) -> termina::event::Event {
 fn show(app: &mut Application, text: &str) {
     let (view, doc) = current!(app.editor);
     doc.ai_completion = Some(AiCompletion {
+        request_latency: None,
         view: view.id,
         version: doc.version(),
         annotation: InlineAnnotation::new(
@@ -66,6 +67,38 @@ fn show(app: &mut Application, text: &str) {
 
 fn text(app: &Application) -> String {
     current_ref!(app.editor).1.text().to_string()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_completion_keeps_matching_unicode_suffix_without_another_request() -> anyhow::Result<()>
+{
+    let (endpoint, mut requests, server) = model_server(0, vec!["变量_end"]).await;
+    let mut app = AppBuilder::new()
+        .with_config(model_config(endpoint))
+        .with_input_text("#[|\n]#")
+        .build()?;
+    keys(&mut app, "ix").await?;
+    wait_for_preview(&mut app).await;
+    requests.recv().await.unwrap();
+    assert!(current_ref!(app.editor)
+        .1
+        .ai_completion
+        .as_ref()
+        .unwrap()
+        .request_latency
+        .is_some());
+    keys(&mut app, "变量").await?;
+    let (view, doc) = current_ref!(app.editor);
+    let preview = doc.ai_completion.as_ref().expect("visible remainder");
+    assert!(preview.is_valid(doc, view.id));
+    assert_eq!(preview.annotation.text.as_str(), "_end");
+    assert!(preview.request_latency.is_none());
+    assert!(!doc.ai_completion_controller.is_running());
+    keys(&mut app, "<S-right>").await?;
+    assert_eq!(text(&app), "x变量_end\n");
+    app.close().await;
+    server.await?;
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -799,6 +832,45 @@ async fn ai_completion_live_clangd_grounded_member() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "requires clangd available on PATH"]
+async fn ai_completion_live_clangd_finishes_unique_field_offline() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("packet.cpp");
+    std::fs::write(&path, "")?;
+    let mut config = model_config("http://127.0.0.1:1/v1/chat/completions".into());
+    config.editor.lsp.enable = true;
+    config.editor.ai_completion.conservative = true;
+    config.editor.ai_completion.debounce_ms = 120;
+    let mut app = AppBuilder::new().with_config(config).with_file(path, None)
+        .with_input_text("struct Packet { int payload_size; int version; };\nint example(Packet p) { return p.pa#[|;]# }\n").build()?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    while current_ref!(app.editor)
+        .1
+        .language_servers()
+        .next()
+        .is_none()
+    {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "clangd did not initialize"
+        );
+        idle(&mut app).await;
+    }
+    keys(&mut app, "iy").await?;
+    wait_for_preview(&mut app).await;
+    let preview = current_ref!(app.editor).1.ai_completion.as_ref().unwrap();
+    assert_eq!(preview.annotation.text.as_str(), "load_size");
+    println!(
+        "offline field completion latency: {:?}",
+        preview.request_latency.unwrap()
+    );
+    keys(&mut app, "<S-right>").await?;
+    assert!(text(&app).contains("return p.payload_size;"));
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn ai_completion_disabled_local_model_keeps_editing_available() -> anyhow::Result<()> {
     let mut config = test_config();
     config.editor.ai_completion.model_path = Some("missing-model.gguf".into());
@@ -1278,4 +1350,62 @@ async fn ai_completion_sequence_accept_then_normal_mode() -> anyhow::Result<()> 
 #[tokio::test(flavor = "multi_thread")]
 async fn ai_completion_sequence_accept_then_move() -> anyhow::Result<()> {
     sequence_accept_and_replay("move_char_left", "X<esc>", "abXC").await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ai_panel_applies_and_cancels_independent_feature_edits() -> anyhow::Result<()> {
+    use helix_view::ai::{AiProviderConfig, AiProviderType};
+
+    let mut config = model_config("http://127.0.0.1:1/chat/completions".into());
+    config.editor.ai.enabled = false;
+    config.editor.ai_completion.model = "local-test-model".into();
+    config.editor.ai_doc.enabled = true;
+    config.editor.ai_doc.provider = Some("cloud".into());
+    config.editor.ai.providers.insert(
+        "cloud".into(),
+        AiProviderConfig {
+            kind: AiProviderType::Deepseek,
+            endpoint: "http://127.0.0.1:2/chat/completions".into(),
+            model: "deepseek-test-model".into(),
+            ..AiProviderConfig::default()
+        },
+    );
+    let mut app = AppBuilder::new().with_config(config).build()?;
+    let screen = |app: &Application| {
+        app.test_screen()
+            .content
+            .iter()
+            .map(|cell| cell.symbol.as_str())
+            .collect::<String>()
+    };
+    keys(&mut app, ":ai<ret>s<space>").await?;
+    assert!(!app.editor.config().ai.enabled, "changes are staged");
+    assert!(screen(&app).contains("local-test-model"));
+    assert!(screen(&app).contains("deepseek-test-model"));
+    keys(&mut app, "jjtt<ret>").await?;
+    assert!(app.editor.config().ai.enabled);
+    let doc = app
+        .editor
+        .config()
+        .ai_provider(helix_view::ai::AiFeature::Doc)?;
+    assert!(doc.thinking);
+    assert_eq!(doc.reasoning_effort.as_deref(), Some("low"));
+    assert!(
+        !app.editor
+            .config()
+            .ai_provider(helix_view::ai::AiFeature::Completion)?
+            .thinking
+    );
+    keys(&mut app, ":ai<ret>sjm<ret>").await?;
+    assert!(app.editor.config().ai_completion.provider.is_some());
+    keys(&mut app, ":ai<ret>sjj<space><ret>").await?;
+    assert!(!app.editor.config().ai_doc.enabled);
+    assert!(app.editor.config().ai_completion.enabled);
+    keys(&mut app, ":ai<ret>s<space><esc>").await?;
+    assert!(app.editor.config().ai.enabled);
+    keys(&mut app, ":ai<ret>s<space><ret>").await?;
+    assert!(!app.editor.config().ai.enabled);
+    assert!(app.editor.config().active_ai_providers()?.is_empty());
+    app.close().await;
+    Ok(())
 }
