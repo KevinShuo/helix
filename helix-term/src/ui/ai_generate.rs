@@ -106,10 +106,11 @@ impl Component for Dialog {
         let style = cx.editor.theme.get("ui.popup");
         surface.clear_with(area, style);
         if area.height >= 3 && area.width >= 8 {
-            let title = if self.refining {
-                " 补充需求 · Enter 重新生成 · Esc 放弃 "
-            } else {
-                " 描述要生成的代码 · Enter 生成 · Esc 取消 "
+            let title = match (self.refining, area.width >= 44) {
+                (true, true) => " 补充需求 · Enter 重新生成 · Esc 放弃 ",
+                (false, true) => " 描述要生成的代码 · Enter 生成 · Esc 取消 ",
+                (true, false) => " 补充需求 ",
+                (false, false) => " 生成代码 ",
             };
             Block::default()
                 .borders(Borders::ALL)

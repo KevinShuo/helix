@@ -142,9 +142,15 @@ pub(crate) async fn post(
         })?;
         let status = response.status().as_u16();
         if !response.status().is_success() {
-            if automatic && status == 400 {
+            let requested_tools = body.get("tools").is_some();
+            if (automatic && status == 400)
+                || (requested_tools && matches!(status, 400 | 422 | 500 | 501))
+            {
                 let bytes = response_bytes(response, config.budget_response_bytes()).await?;
-                if context_reservation_error(&bytes) {
+                if requested_tools && tools_rejected(&bytes) {
+                    return Err(UnsupportedTools.into());
+                }
+                if automatic && status == 400 && context_reservation_error(&bytes) {
                     if !retried_context && attempts < 3 {
                         retried_context = true;
                         body["max_tokens"] = json!(128);
@@ -191,7 +197,7 @@ pub(crate) fn interactive_busy(editor: &helix_view::Editor) -> bool {
     super::ai_chat::busy(editor) || super::ai_generate::active(editor)
 }
 
-fn interactive_output(model: &AiProviderConfig) -> u32 {
+pub(super) fn interactive_output(model: &AiProviderConfig) -> u32 {
     model.budget_output_tokens(
         (model.budget_context() as u32 / 4)
             .min(2048)
@@ -231,26 +237,88 @@ pub(crate) async fn interactive(
     super::ai_completion::server::with_model(model, async {
         super::ai_completion::server::wait_ready(model).await?;
         let response = post(model, &body, 120_000).await?;
-        let choice = &response["choices"][0];
-        anyhow::ensure!(
-            matches!(choice["finish_reason"].as_str(), None | Some("stop")),
-            "模型未返回完整结果，请缩小请求后重试"
-        );
-        let message = &choice["message"];
-        anyhow::ensure!(
-            message["refusal"].is_null()
-                && message["function_call"].is_null()
-                && message["tool_calls"].as_array().is_none_or(Vec::is_empty),
-            "模型未返回可显示的文本"
-        );
-        let content = message["content"]
-            .as_str()
-            .filter(|s| !s.trim().is_empty())
-            .context("模型返回了空内容")?;
-        anyhow::ensure!(content.len() <= 128 * 1024, "回答过长，请缩小问题范围");
-        Ok(content.to_owned())
+        answer_text(&response)
     })
     .await
+}
+
+pub(super) fn answer_text(response: &Value) -> anyhow::Result<String> {
+    let choice = &response["choices"][0];
+    anyhow::ensure!(
+        matches!(choice["finish_reason"].as_str(), None | Some("stop")),
+        "模型未返回完整结果，请缩小请求后重试"
+    );
+    let message = &choice["message"];
+    anyhow::ensure!(
+        message["refusal"].is_null()
+            && message["function_call"].is_null()
+            && message["tool_calls"].as_array().is_none_or(Vec::is_empty),
+        "模型未返回可显示的文本"
+    );
+    let content = message["content"]
+        .as_str()
+        .filter(|s| !s.trim().is_empty())
+        .context("模型返回了空内容")?;
+    anyhow::ensure!(content.len() <= 128 * 1024, "回答过长，请缩小问题范围");
+    Ok(content.to_owned())
+}
+
+#[derive(Debug)]
+pub(super) struct UnsupportedTools;
+
+impl std::fmt::Display for UnsupportedTools {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("当前模型不支持工具调用")
+    }
+}
+
+impl std::error::Error for UnsupportedTools {}
+
+fn tools_rejected(bytes: &[u8]) -> bool {
+    let Ok(error) = serde_json::from_slice::<Value>(bytes) else {
+        return false;
+    };
+    // Some local OpenAI-compatible servers use FastAPI's structured 422 response.
+    if error["detail"].as_array().is_some_and(|items| {
+        items.iter().any(|item| {
+            matches!(
+                item["type"].as_str(),
+                Some("extra_forbidden" | "value_error.extra")
+            ) && item["loc"]
+                .as_array()
+                .and_then(|p| p.last())
+                .and_then(Value::as_str)
+                == Some("tools")
+        })
+    }) {
+        return true;
+    }
+    let detail = error["detail"].as_str().unwrap_or("");
+    let error = &error["error"];
+    let message = format!(
+        "{} {} {detail}",
+        error["param"].as_str().unwrap_or_default(),
+        error["message"]
+            .as_str()
+            .or_else(|| error.as_str())
+            .unwrap_or_default()
+    )
+    .to_ascii_lowercase();
+    (message.contains("tool") || message.contains("function calling"))
+        && [
+            "unsupported",
+            "not supported",
+            "does not support",
+            "not support",
+            "unknown parameter",
+            "unknown field",
+            "unrecognized",
+            "not available",
+            "not allowed",
+            "unexpected keyword",
+        ]
+        .iter()
+        .any(|s| message.contains(s))
 }
 
 // Inspect only structured provider errors, never include their contents in an error.

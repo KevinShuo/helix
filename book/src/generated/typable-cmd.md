@@ -16,7 +16,9 @@
 | `:next-problem` | Go to next problem, optionally setting source, minimum severity and scope filters |
 | `:previous-problem` | Go to previous problem, optionally setting source, minimum severity and scope filters |
 | `:problems` | Show filtered live diagnostics and compiler problems |
-| `:ai-explain` | Explain selected code and ask follow-up questions |
+| `:ai-explain` | Explain the selection, function, file, or project (optional scope and question) |
+| `:ai-optimize` | Review the selection, function, or file for improvements |
+| `:ai-optimize-preview` | Preview an optimization suggestion by number |
 | `:ai-ask` | Ask a question about the current selection |
 | `:ai-explain-show` | Resume the latest selection conversation |
 | `:ai-explain-cancel` | Stop the current answer and keep the conversation |

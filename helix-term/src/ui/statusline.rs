@@ -166,6 +166,16 @@ fn render_ai_status<'a, F>(context: &mut RenderContext<'a>, write: F)
 where
     F: Fn(&mut RenderContext<'a>, Span<'a>) + Copy,
 {
+    if context.focused
+        && context.doc.ai_generate.as_ref().is_some_and(|op| {
+            op.annotation.is_some()
+                && op.mode == context.editor.mode()
+                && op.matches(context.doc, context.view.id)
+        })
+    {
+        write(context, Span::raw("待插入 · Shift+Right 接受"));
+        return;
+    }
     let config = context.editor.config();
     let label = config.ai.statusline();
     let preview = context.doc.ai_completion.as_ref().filter(|preview| {

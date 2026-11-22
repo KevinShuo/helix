@@ -1,4 +1,6 @@
 use super::*;
+use crate::ui::ai_preview_text::review::{ReviewLines, Role};
+use crate::ui::ai_preview_text::{sanitized_text, PreviewText};
 use helix_view::theme::Style;
 use tui::{
     text::Text,
@@ -108,54 +110,7 @@ impl CommitWorkspace {
             &lines.join("\n"),
             0,
         );
-        let (diff, title) = self
-            .active()
-            .and_then(|row| {
-                self.snapshot.as_ref().and_then(|s| {
-                    s.files.iter().find(|f| f.id == row.id).map(|f| {
-                        let reason = self
-                            .reasons
-                            .get(&f.id)
-                            .or(f.exclusion.as_ref())
-                            .cloned()
-                            .unwrap_or_default();
-                        (
-                            format!(
-                                "{reason}\n{}",
-                                if row.staged {
-                                    &f.staged_diff
-                                } else {
-                                    &f.worktree_diff
-                                }
-                            ),
-                            if row.staged {
-                                "暂存 diff (HEAD → index)"
-                            } else {
-                                "候选 diff (index → 磁盘)"
-                            },
-                        )
-                    })
-                })
-            })
-            .unwrap_or(("没有文件改动".into(), "Diff"));
-        let diff_lines = diff.lines().count();
-        self.diff_scroll = self
-            .diff_scroll
-            .min(diff_lines.saturating_sub(self.diff_area.height.saturating_sub(2) as usize));
-        pane(frame, self.diff_area, title, &diff, self.diff_scroll);
-        let mut text = self.draft.text.clone();
-        if self.editing {
-            text.insert(self.draft.cursor, '▏');
-        }
-        let cursor_line = self.draft.text[..self.draft.cursor]
-            .lines()
-            .count()
-            .saturating_sub(1);
-        let scroll = if self.editing {
-            cursor_line.saturating_sub(message_height.saturating_sub(3) as usize)
-        } else {
-            0
-        };
+        self.draw_file_review(frame, editor);
         use helix_core::unicode::width::UnicodeWidthStr;
         let long_title = self
             .draft
@@ -172,7 +127,20 @@ impl CommitWorkspace {
         } else {
             "提交信息 · 需生成或手动检查"
         };
-        pane(frame, self.message_area, title, &text, scroll);
+        let input_cursor = self.editing.then_some(self.draft.cursor);
+        if self.draft_preview.as_ref().is_none_or(|preview| {
+            (preview.revision, preview.input_cursor) != (self.draft.revision, input_cursor)
+        }) {
+            self.draft_preview = Some(DraftPreview::new(&self.draft, input_cursor));
+        }
+        let preview = self.draft_preview.as_mut().unwrap();
+        let mut body = self.message_area;
+        if body.height >= 3 && body.width >= 3 {
+            let block = Block::default().borders(Borders::ALL).title(title);
+            body = block.inner(self.message_area);
+            block.render(self.message_area, frame);
+        }
+        preview.render(body, frame, editor);
         let y = (1 + upper_height + message_height) as usize;
         line(frame, area, y, &self.message, normal);
         line(
@@ -186,9 +154,126 @@ impl CommitWorkspace {
             frame,
             area,
             y + 2,
-            "e 编辑 | i 意图 | v 保留手动文本 | C 提交 | d 完整diff | r 刷新 | F11 全屏 | q 关闭",
+            "e 编辑 | [ ] 翻阅草稿 | i 意图 | v 保留手动文本 | C 提交 | d 完整diff | r 刷新 | F11 全屏 | q 关闭",
             normal,
         );
+    }
+
+    fn draw_file_review(&mut self, frame: &mut Buffer, editor: &Editor) {
+        let Some(row) = self.active() else {
+            pane(frame, self.diff_area, "Diff", "没有文件改动", 0);
+            return;
+        };
+        if self
+            .diff_preview
+            .as_ref()
+            .is_none_or(|(cached, _)| *cached != row)
+        {
+            let Some(file) = self
+                .snapshot
+                .as_ref()
+                .and_then(|s| s.files.iter().find(|f| f.id == row.id))
+            else {
+                return;
+            };
+            let mut review = ReviewLines::default();
+            if let Some(reason) = self.reasons.get(&row.id) {
+                review.push(Role::Heading, "推荐理由");
+                review.push(Role::Text, reason);
+            } else if let Some(note) = &file.exclusion {
+                review.push(Role::Note, note);
+            }
+            let diff = if row.staged {
+                &file.staged_diff
+            } else {
+                &file.worktree_diff
+            };
+            for line in diff.lines() {
+                let role = if line.starts_with("@@") || line.starts_with("diff --git ") {
+                    Role::Note
+                } else if line.starts_with('+') {
+                    Role::Added
+                } else if line.starts_with('-') {
+                    Role::Removed
+                } else {
+                    Role::Text
+                };
+                review.push(role, line);
+            }
+            self.diff_preview = Some((row, review.finish()));
+        }
+        let title = if row.staged {
+            "暂存 diff (HEAD → index)"
+        } else {
+            "候选 diff (index → 磁盘)"
+        };
+        let block = Block::default().borders(Borders::ALL).title(title);
+        let body = block.inner(self.diff_area);
+        block.render(self.diff_area, frame);
+        self.diff_preview.as_mut().unwrap().1.render(
+            body,
+            frame,
+            &editor.theme,
+            &mut self.diff_scroll,
+        );
+    }
+}
+
+pub(super) struct DraftPreview {
+    revision: u64,
+    input_cursor: Option<usize>,
+    display_cursor: Option<usize>,
+    text: PreviewText,
+    scroll: usize,
+    page_rows: usize,
+}
+
+impl DraftPreview {
+    fn new(draft: &Draft, input_cursor: Option<usize>) -> Self {
+        let mut text = draft.text.clone();
+        let display_cursor = input_cursor.map(|offset| {
+            text.insert(offset, '▏');
+            sanitized_text(&text[..offset]).len()
+        });
+        Self {
+            revision: draft.revision,
+            input_cursor,
+            display_cursor,
+            text: PreviewText::new(text),
+            scroll: 0,
+            page_rows: 1,
+        }
+    }
+
+    pub(super) fn page(&mut self, down: bool) {
+        self.scroll = if down {
+            self.scroll.saturating_add(self.page_rows)
+        } else {
+            self.scroll.saturating_sub(self.page_rows)
+        };
+    }
+
+    fn render(&mut self, area: Rect, frame: &mut Buffer, editor: &Editor) {
+        if area.width == 0 || area.height == 0 {
+            return;
+        }
+        self.page_rows = usize::from(area.height);
+        if let Some(offset) = self.display_cursor {
+            let row = self.text.row_at_byte(area.width, offset);
+            self.scroll = self
+                .scroll
+                .clamp((row + 1).saturating_sub(self.page_rows), row);
+        }
+        let body = editor.theme.get("ui.text");
+        let subject = body.patch(editor.theme.get("markup.heading"));
+        self.text
+            .render_styled(area, frame, &mut self.scroll, |line| {
+                if line == 0 {
+                    subject
+                } else {
+                    body
+                }
+            });
     }
 }
 

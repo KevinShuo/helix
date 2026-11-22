@@ -205,6 +205,14 @@ impl Markdown {
             .iter()
             .map(|key| get_theme(key))
             .collect();
+        let emphasis = |style: Style, tags: &[Tag<'_>]| {
+            tags.iter().fold(style, |style, tag| match tag {
+                Tag::Emphasis => style.add_modifier(Modifier::ITALIC),
+                Tag::Strong => style.add_modifier(Modifier::BOLD),
+                Tag::Strikethrough => style.add_modifier(Modifier::CROSSED_OUT),
+                _ => style,
+            })
+        };
 
         // Transform text in `<code>` blocks into `Event::Code`
         let mut in_code = false;
@@ -308,27 +316,26 @@ impl Markdown {
                         );
                         lines.extend(tui_text.lines);
                     } else {
-                        let style = match tags.last() {
-                            Some(Tag::Heading { level, .. }) => match level {
-                                HeadingLevel::H1 => heading_styles[0],
-                                HeadingLevel::H2 => heading_styles[1],
-                                HeadingLevel::H3 => heading_styles[2],
-                                HeadingLevel::H4 => heading_styles[3],
-                                HeadingLevel::H5 => heading_styles[4],
-                                HeadingLevel::H6 => heading_styles[5],
-                            },
-                            Some(Tag::Emphasis) => text_style.add_modifier(Modifier::ITALIC),
-                            Some(Tag::Strong) => text_style.add_modifier(Modifier::BOLD),
-                            Some(Tag::Strikethrough) => {
-                                text_style.add_modifier(Modifier::CROSSED_OUT)
-                            }
-                            _ => text_style,
-                        };
-                        spans.push(Span::styled(text, style));
+                        let style = tags
+                            .iter()
+                            .rev()
+                            .find_map(|tag| match tag {
+                                Tag::Heading { level, .. } => Some(match level {
+                                    HeadingLevel::H1 => heading_styles[0],
+                                    HeadingLevel::H2 => heading_styles[1],
+                                    HeadingLevel::H3 => heading_styles[2],
+                                    HeadingLevel::H4 => heading_styles[3],
+                                    HeadingLevel::H5 => heading_styles[4],
+                                    HeadingLevel::H6 => heading_styles[5],
+                                }),
+                                _ => None,
+                            })
+                            .unwrap_or(text_style);
+                        spans.push(Span::styled(text, emphasis(style, &tags)));
                     }
                 }
                 Event::Code(text) | Event::Html(text) => {
-                    spans.push(Span::styled(text, code_style));
+                    spans.push(Span::styled(text, emphasis(code_style, &tags)));
                 }
                 Event::SoftBreak | Event::HardBreak => {
                     push_line(&mut spans, &mut lines);

@@ -522,7 +522,13 @@ impl View {
         text_annotations.add_folds(doc.folds(self.id));
 
         if let Some(annotation) = doc.ai_inline_preview(self.id) {
-            let style = theme.and_then(|t| t.find_highlight_exact("ui.virtual.ai-completion"));
+            let style = theme.and_then(|theme| {
+                doc.ai_generate
+                    .as_ref()
+                    .and_then(|_| theme.find_highlight_exact("ui.virtual.ai-generate"))
+                    .or_else(|| theme.find_highlight_exact("ui.virtual.ai-completion"))
+                    .or_else(|| theme.find_highlight_exact("ui.virtual.inlay-hint"))
+            });
             text_annotations.add_inline_completion(annotation, style);
         }
 

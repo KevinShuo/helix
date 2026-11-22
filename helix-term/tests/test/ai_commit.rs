@@ -334,11 +334,20 @@ async fn ai_commit_pasted_multiline_message_does_not_modify_underlying_source() 
     git(repo.path(), &["add", "--", "b-partial.txt"]);
     let mut app = open(repo.path(), None).await?;
     let original_source = helix_view::current_ref!(app.editor).1.text().to_string();
+    app.test_resize(44, 30).await?;
+    let mut colors: toml::Value = toml::from_str(include_str!("../../../theme.toml"))?;
+    colors["markup.heading"] = "#3f7862".into();
+    app.editor.set_theme(colors.into())?;
+    let draft = format!(
+        "fix(ai): 中文粘贴\n\n保留 `literal` 和 **正文**。\n{}终",
+        "带缩进的中文说明".repeat(22)
+    );
+    let paste = draft.replace('\n', "\r\n");
     keys(&mut app, "e").await?;
     #[cfg(windows)]
-    let event = crossterm::event::Event::Paste("fix(ai): 中文粘贴\r\n\r\n保留完整正文。".into());
+    let event = crossterm::event::Event::Paste(paste);
     #[cfg(not(windows))]
-    let event = termina::event::Event::Paste("fix(ai): 中文粘贴\r\n\r\n保留完整正文。".into());
+    let event = termina::event::Event::Paste(paste);
     app.handle_terminal_events(Ok(event)).await;
     keys(&mut app, "").await?;
     assert_eq!(
@@ -347,12 +356,26 @@ async fn ai_commit_pasted_multiline_message_does_not_modify_underlying_source() 
         "message paste must not reach source buffer"
     );
     assert!(
-        screen(&app).contains("fix(ai): 中文粘贴"),
+        screen(&app).contains("终"),
+        "editing must reveal the wrapped cursor line:\n{}",
+        screen(&app)
+    );
+    keys(&mut app, "<esc>").await?;
+    keys(&mut app, "[[[[").await?;
+    assert!(
+        screen(&app).contains("保留 `literal` 和 **正文**。"),
         "{}",
         screen(&app)
     );
-    assert!(screen(&app).contains("保留完整正文。"), "{}", screen(&app));
-    keys(&mut app, "<esc>").await?;
+    assert!(app
+        .test_screen()
+        .content
+        .iter()
+        .any(|c| c.symbol.as_str() == "粘"
+            && Some(c.fg) == app.editor.theme.get("markup.heading").fg));
+    keys(&mut app, "]]]]").await?;
+    assert!(screen(&app).contains("终"), "{}", screen(&app));
+    assert_eq!(git(repo.path(), &["rev-list", "--count", "HEAD"]), "1");
     #[cfg(windows)]
     let event = crossterm::event::Event::Paste("unwanted source edit".into());
     #[cfg(not(windows))]
@@ -366,10 +389,7 @@ async fn ai_commit_pasted_multiline_message_does_not_modify_underlying_source() 
     assert!(!helix_view::current_ref!(app.editor).1.is_modified());
     keys(&mut app, "C").await?;
     wait_for(&mut app, "已提交").await?;
-    assert_eq!(
-        git(repo.path(), &["log", "-1", "--format=%B"]),
-        "fix(ai): 中文粘贴\n\n保留完整正文。"
-    );
+    assert_eq!(git(repo.path(), &["log", "-1", "--format=%B"]), draft);
     close(app).await
 }
 

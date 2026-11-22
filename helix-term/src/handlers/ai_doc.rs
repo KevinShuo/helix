@@ -185,7 +185,10 @@ pub(crate) fn refresh(editor: &mut Editor, compositor: &mut Compositor) {
         if let Some(text) = &op.text {
             if !op.preview {
                 op.preview = true;
-                compositor.push(Box::new(ui::ai_doc::Preview::new(op.id, &op.target, text)));
+                let tab_width = editor.documents[&op.doc].tab_width();
+                compositor.push(Box::new(ui::ai_doc::Preview::new(
+                    op.id, &op.target, text, tab_width,
+                )));
             }
         }
     }

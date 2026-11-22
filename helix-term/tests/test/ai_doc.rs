@@ -44,6 +44,21 @@ pub(super) async fn server(
     tokio::sync::mpsc::UnboundedReceiver<Value>,
     tokio::task::JoinHandle<()>,
 ) {
+    server_with_status(
+        delay,
+        replies.into_iter().map(|reply| (200, reply)).collect(),
+    )
+    .await
+}
+
+pub(super) async fn server_with_status(
+    delay: u64,
+    replies: Vec<(u16, Value)>,
+) -> (
+    String,
+    tokio::sync::mpsc::UnboundedReceiver<Value>,
+    tokio::task::JoinHandle<()>,
+) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = format!(
         "http://{}/v1/chat/completions",
@@ -51,7 +66,7 @@ pub(super) async fn server(
     );
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let task = tokio::spawn(async move {
-        for reply in replies {
+        for (status, reply) in replies {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut bytes = Vec::new();
             let mut buf = [0; 4096];
@@ -101,7 +116,14 @@ pub(super) async fn server(
             }
             tx.send(request).unwrap();
             tokio::time::sleep(Duration::from_millis(delay)).await;
-            let _ = socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await;
+            let reason = match status {
+                200 => "OK",
+                400 => "Bad Request",
+                401 => "Unauthorized",
+                422 => "Unprocessable Content",
+                _ => "Mock Response",
+            };
+            let _ = socket.write_all(format!("HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await;
         }
     });
     (endpoint, rx, task)
@@ -209,8 +231,9 @@ async fn ai_doc_binds_target_when_command_is_submitted() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn ai_doc_native_command_previews_then_accepts_and_undoes() -> anyhow::Result<()> {
-    let (endpoint, mut requests, task) = server(0, vec![reply(DOC)]).await;
-    let original = "def f(a: int) -> int:\n    return a\n";
+    let content = DOC.replacen("返回输入值。", "返回参数 `a` 的输入值。", 1);
+    let (endpoint, mut requests, task) = server(0, vec![reply(&content)]).await;
+    let original = "def f(a: int) -> int:\n\treturn a\n";
     let (mut app, _file) = app(endpoint, ".py", original)?;
     let version = current_ref!(app.editor).1.version();
     keys(&mut app, ":ai-doc<ret>").await?;
@@ -221,13 +244,23 @@ async fn ai_doc_native_command_previews_then_accepts_and_undoes() -> anyhow::Res
     assert!(request["messages"][1]["content"]
         .as_str()
         .unwrap()
-        .contains("    return a"));
+        .contains("return a"));
     settle(&mut app).await;
     assert_eq!(text(&app), original);
     assert_eq!(current_ref!(app.editor).1.version(), version);
     assert!(!current_ref!(app.editor).1.is_modified());
+    let screen = app
+        .test_screen()
+        .content
+        .iter()
+        .map(|cell| cell.symbol.as_str())
+        .collect::<String>();
+    let indent = " ".repeat(current_ref!(app.editor).1.tab_width());
+    assert!(screen.contains(&format!("{indent}\"\"\"")), "{screen}");
+    assert!(screen.contains("`a`"), "{screen}");
     keys(&mut app, "ixxxx<ret>").await?;
     let accepted = text(&app);
+    assert!(accepted.contains("\t\"\"\"返回参数 `a` 的输入值。"));
     assert!(accepted.contains(":param a: 输入值。"), "{accepted:?}");
     assert!(!accepted.contains("xxxx"));
     keys(&mut app, "u").await?;

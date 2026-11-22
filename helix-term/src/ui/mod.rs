@@ -1,4 +1,5 @@
 pub(crate) mod ai_chat;
+pub(crate) mod ai_optimize;
 pub(crate) mod ai_doc;
 pub(crate) mod ai_generate;
 pub(crate) mod ai_merge;

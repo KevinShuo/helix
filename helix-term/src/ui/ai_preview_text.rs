@@ -1,4 +1,5 @@
 //! Complete preview text with usize row positions and viewport-only rendering.
+pub(super) mod review;
 use helix_core::unicode::{segmentation::UnicodeSegmentation, width::UnicodeWidthStr};
 use helix_view::graphics::{Rect, Style};
 use helix_view::input::KeyEvent;
@@ -10,16 +11,22 @@ pub(super) struct PreviewText {
     // Byte offsets are independent of terminal row counts. Provider artifacts
     // are capped at 16 MiB, so compact u32 offsets also bound the layout cache.
     rows: Vec<u32>,
+    // Only styled previews need logical line numbers for wrapped rows.
+    line_starts: Option<Vec<u32>>,
 }
 
 pub(super) fn scroll_key(key: KeyEvent, scroll: &mut usize) -> bool {
+    scroll_key_by(key, scroll, 10)
+}
+
+pub(super) fn scroll_key_by(key: KeyEvent, scroll: &mut usize, page: usize) -> bool {
     *scroll = match key {
         crate::key!(Home) | crate::ctrl!(Home) => 0,
         crate::key!(End) | crate::ctrl!(End) => usize::MAX,
         crate::key!('j') | crate::key!(Down) => scroll.saturating_add(1),
         crate::key!('k') | crate::key!(Up) => scroll.saturating_sub(1),
-        crate::key!(PageDown) | crate::ctrl!('d') => scroll.saturating_add(10),
-        crate::key!(PageUp) | crate::ctrl!('u') => scroll.saturating_sub(10),
+        crate::key!(PageDown) | crate::ctrl!('d') => scroll.saturating_add(page.max(1)),
+        crate::key!(PageUp) | crate::ctrl!('u') => scroll.saturating_sub(page.max(1)),
         _ => return false,
     };
     true
@@ -43,30 +50,34 @@ pub(super) fn display(text: &str) -> String {
         .collect()
 }
 
+/// Newlines are layout; all other controls are inert display characters.
+pub(super) fn sanitized_text(source: &str) -> String {
+    source
+        .char_indices()
+        .filter_map(|(offset, c)| {
+            if c == '\r' && source.as_bytes().get(offset + 1) == Some(&b'\n') {
+                return None;
+            }
+            Some(if c == '\n' {
+                c
+            } else if c == '\t' {
+                ' '
+            } else if unsafe_control(c) {
+                '�'
+            } else {
+                c
+            })
+        })
+        .collect()
+}
+
 impl PreviewText {
     pub(super) fn new(source: String) -> Self {
-        // Newlines are layout; all other controls are inert display characters.
-        let source = source
-            .char_indices()
-            .filter_map(|(offset, c)| {
-                if c == '\r' && source.as_bytes().get(offset + 1) == Some(&b'\n') {
-                    return None;
-                }
-                Some(if c == '\n' {
-                    c
-                } else if c == '\t' {
-                    ' '
-                } else if unsafe_control(c) {
-                    '�'
-                } else {
-                    c
-                })
-            })
-            .collect();
         Self {
-            source,
+            source: sanitized_text(&source),
             width: 0,
             rows: Vec::new(),
+            line_starts: None,
         }
     }
 
@@ -112,12 +123,45 @@ impl PreviewText {
             return;
         }
         self.layout(area.width);
+        self.render_rows(area, surface, scroll, |_| style);
+    }
+
+    pub(super) fn render_styled(
+        &mut self,
+        area: Rect,
+        surface: &mut Buffer,
+        scroll: &mut usize,
+        style_for_line: impl Fn(usize) -> Style,
+    ) {
+        if area.width == 0 || area.height == 0 {
+            return;
+        }
+        self.layout(area.width);
+        self.line_starts.get_or_insert_with(|| {
+            std::iter::once(0)
+                .chain(self.source.match_indices('\n').map(|(i, _)| (i + 1) as u32))
+                .collect()
+        });
+        let starts = self.line_starts.as_ref().unwrap();
+        self.render_rows(area, surface, scroll, |start| {
+            style_for_line(starts.partition_point(|&line| line <= start as u32) - 1)
+        });
+    }
+
+    fn render_rows(
+        &self,
+        area: Rect,
+        surface: &mut Buffer,
+        scroll: &mut usize,
+        style_at: impl Fn(usize) -> Style,
+    ) {
         *scroll = (*scroll).min(self.rows.len().saturating_sub(area.height as usize));
         for (y, row) in (*scroll..self.rows.len())
             .take(area.height as usize)
             .enumerate()
         {
             let start = self.rows[row] as usize;
+            let style = style_at(start);
             let end = self
                 .rows
                 .get(row + 1)
@@ -136,6 +180,11 @@ impl PreviewText {
         }
     }
 
+    pub(super) fn row_count(&mut self, width: u16) -> usize {
+        self.layout(width.max(1));
+        self.rows.len()
+    }
+
     /// Locate a byte in the display text after wrapping at the given width.
     #[cfg(feature = "git")]
     pub(super) fn row_at_byte(&mut self, width: u16, offset: usize) -> usize {
@@ -149,6 +198,27 @@ impl PreviewText {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn result_style_tracks_logical_lines_across_wrap_resize_and_scroll() {
+        use helix_view::graphics::Color;
+        let mut text = PreviewText::new("abcdef\n中文".into());
+        for width in [3, 2] {
+            let area = Rect::new(0, 0, width, 2);
+            let mut buffer = Buffer::empty(area);
+            let expected = Style::default().fg(Color::Red);
+            let mut scroll = usize::MAX;
+            text.render_styled(area, &mut buffer, &mut scroll, |line| {
+                if line == 1 {
+                    expected
+                } else {
+                    Style::default()
+                }
+            });
+            assert_eq!(buffer[(0, 0)].fg, Color::Red);
+            assert_eq!(buffer[(0, 1)].fg, Color::Red);
+        }
+    }
 
     #[test]
     fn ai_preview_tail_after_u16_rows_is_visible_and_resize_keeps_complete_text() {

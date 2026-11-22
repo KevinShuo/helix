@@ -37,7 +37,7 @@ enum Busy {
     Writing,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct Row {
     id: usize,
     staged: bool,
@@ -53,8 +53,10 @@ pub(crate) struct CommitWorkspace {
     reasons: BTreeMap<usize, String>,
     row: usize,
     diff_scroll: usize,
+    diff_preview: Option<(Row, crate::ui::ai_preview_text::review::ReviewText)>,
     diff_focus: bool,
     draft: Draft,
+    draft_preview: Option<view::DraftPreview>,
     editing: bool,
     intent: String,
     language: CommitLanguage,
@@ -129,8 +131,10 @@ pub(crate) fn open(
         reasons: BTreeMap::new(),
         row: 0,
         diff_scroll: 0,
+        diff_preview: None,
         diff_focus: false,
         draft: Draft::default(),
+        draft_preview: None,
         editing: false,
         intent,
         language: editor.config().ai_commit.language,
@@ -490,6 +494,11 @@ impl Component for CommitWorkspace {
             }
             KeyCode::PageDown => self.diff_scroll = self.diff_scroll.saturating_add(10),
             KeyCode::PageUp => self.diff_scroll = self.diff_scroll.saturating_sub(10),
+            KeyCode::Char('[') | KeyCode::Char(']') => {
+                if let Some(preview) = &mut self.draft_preview {
+                    preview.page(key.code == KeyCode::Char(']'));
+                }
+            }
             _ => {}
         }
         EventResult::Consumed(None)

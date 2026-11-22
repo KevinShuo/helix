@@ -1,5 +1,9 @@
 //! A read-only preview of the exact block replacement, separate from the draft.
-use super::ai_preview_text::{display, scroll_key, PreviewText};
+use super::ai_preview_text::{
+    display,
+    review::{ReviewLines, ReviewText, Role},
+    scroll_key_by,
+};
 use crate::{
     compositor::{Component, Context, Event, EventResult},
     ctrl,
@@ -21,15 +25,16 @@ use tui::{
 pub(crate) struct Preview {
     id: u64,
     title: String,
-    text: PreviewText,
+    text: ReviewText,
     can_accept: bool,
     scroll: usize,
+    page_rows: usize,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use helix_view::graphics::Style;
+    use helix_view::theme::Theme;
 
     fn target() -> Target {
         Target {
@@ -62,7 +67,7 @@ mod tests {
         preview.scroll = 70_000;
         preview
             .text
-            .render(area, &mut buffer, Style::default(), &mut preview.scroll);
+            .render(area, &mut buffer, &Theme::default(), &mut preview.scroll);
         assert!(preview.scroll > u16::MAX as usize);
         assert_eq!(suggestion.code, code);
         assert_eq!(target.result, "old();\n");
@@ -100,54 +105,49 @@ impl Preview {
         } else {
             "需人工处理"
         };
-        let mut lines = vec![status.to_owned(), String::new(), "AI 建议：".into()];
-        lines.extend(suggestion.explanation.lines().map(display));
+        let too_large = "AI 候选过大，无法完整预览；请缩小冲突块或减少 max-tokens，草稿已保留";
+        let mut lines = ReviewLines::default();
+        lines.push(Role::Heading, status);
+        let explanation = suggestion.explanation.trim();
+        // Keep a short explanation beside the change. A long one follows the
+        // candidate so it cannot push the first changed lines off the screen.
+        let short = explanation.lines().count() <= 2 && explanation.chars().count() <= 100;
+        if short || suggestion.code.is_none() {
+            lines.push(Role::Text, explanation);
+        }
         if let Some(code) = &suggestion.code {
-            lines.extend([
-                String::new(),
-                "--- 当前 Result 冲突块".into(),
-                "+++ AI 候选".into(),
-            ]);
-            lines.extend(
+            ensure!(
                 target
                     .result
-                    .split_inclusive('\n')
-                    .map(|line| format!("- {}", display(line.trim_end_matches('\n')))),
+                    .len()
+                    .saturating_add(code.len())
+                    .saturating_add(explanation.len())
+                    <= max_bytes,
+                "{too_large}"
             );
-            if !target.result.is_empty() && !target.result.ends_with('\n') {
-                lines.push("  [当前块末尾无换行]".into());
-            }
+            lines.push(Role::Note, "− 当前 Result   + 候选修改");
             if code.is_empty() {
-                lines.push("+ [删除此冲突块]".into());
-            } else {
-                lines.extend(
-                    code.split_inclusive('\n')
-                        .map(|line| format!("+ {}", display(line.trim_end_matches('\n')))),
-                );
+                lines.push(Role::Removed, "删除此冲突块");
             }
-            if !code.is_empty() && !code.ends_with('\n') {
-                lines.push("  [候选末尾无换行]".into());
+            lines.diff(&target.result, code, true);
+            if !short {
+                lines.push(Role::Heading, "修改说明");
+                lines.push(Role::Text, explanation);
             }
-            lines.extend([
-                String::new(),
-                "接受到 Result 后仍需 Review / Apply。".into(),
-            ]);
+            lines.push(Role::Note, "接受到 Result 后仍需 Review / Apply。");
         }
-        let text = lines.join("\n");
-        ensure!(
-            text.len() <= max_bytes,
-            "AI 候选过大，无法完整预览；请缩小冲突块或减少 max-tokens，草稿已保留"
-        );
+        ensure!(lines.source.len() <= max_bytes, "{too_large}");
         Ok(Self {
             id,
             title: format!(
-                " AI Merge · {} · block {} ",
+                " 冲突建议 · {} · 冲突块 {} ",
                 display(&target.path),
                 target.block + 1
             ),
-            text: PreviewText::new(text),
+            text: lines.finish(),
             can_accept: suggestion.code.is_some(),
             scroll: 0,
+            page_rows: 1,
         })
     }
 }
@@ -172,7 +172,7 @@ impl Component for Preview {
         let Event::Key(key) = event else {
             return EventResult::Consumed(None);
         };
-        if scroll_key(*key, &mut self.scroll) {
+        if scroll_key_by(*key, &mut self.scroll, self.page_rows) {
             return EventResult::Consumed(None);
         }
         let action = match *key {
@@ -264,7 +264,9 @@ impl Component for Preview {
         };
         let footer_height = inner.height.min(help.len() as u16);
         let body = inner.clip_bottom(footer_height);
-        self.text.render(body, surface, style, &mut self.scroll);
+        self.page_rows = usize::from(body.height.saturating_sub(1).max(1));
+        self.text
+            .render(body, surface, &cx.editor.theme, &mut self.scroll);
         for (row, help) in help.into_iter().take(footer_height as usize).enumerate() {
             surface.set_stringn(
                 inner.x,

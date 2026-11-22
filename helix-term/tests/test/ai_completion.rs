@@ -1023,7 +1023,13 @@ async fn ai_completion_renders_gray_before_the_real_suffix() -> anyhow::Result<(
     renderer.render_view(&app.editor, doc, view, area, &mut surface, true);
     let first = surface.get(inner.x + 2, inner.y).unwrap();
     assert_eq!(&*first.symbol, "值");
-    assert_eq!(first.fg, Color::Gray);
+    let theme = &app.editor.theme;
+    let expected = theme
+        .try_get_exact("ui.virtual.ai-completion")
+        .or_else(|| theme.try_get_exact("ui.virtual.inlay-hint"))
+        .map(|style| theme.get("ui.text").patch(style).fg.unwrap_or(Color::Reset))
+        .unwrap_or(Color::Gray);
+    assert_eq!(first.fg, expected);
     assert_eq!(&*surface.get(inner.x, inner.y + 1).unwrap().symbol, "x");
     assert_eq!(&*surface.get(inner.x + 1, inner.y + 1).unwrap().symbol, "Z");
     assert_eq!(

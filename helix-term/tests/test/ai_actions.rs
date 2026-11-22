@@ -13,6 +13,10 @@ use std::{io::Write, time::Duration};
 use tempfile::NamedTempFile;
 use tokio::sync::mpsc::UnboundedReceiver;
 
+mod agent;
+mod agent_lsp;
+mod scopes;
+
 fn reply(content: &str) -> Value {
     json!({"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":content}}]})
 }
@@ -71,7 +75,15 @@ fn screen(app: &Application) -> String {
     buffer
         .content
         .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|c| c.symbol.as_str()).collect::<String>())
+        .map(|row| {
+            let mut visible = String::new();
+            let mut column = 0;
+            while let Some(cell) = row.get(column) {
+                visible.push_str(cell.symbol.as_str());
+                column += cell.width().max(1);
+            }
+            visible
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -87,6 +99,163 @@ async fn wait_for_screen(app: &mut Application, expected: &str) -> Result<()> {
     })
     .await
     .with_context(|| format!("missing {expected:?} in\n{}", screen(app)))
+}
+
+async fn wait_for_turns(app: &mut Application, count: usize) -> Result<()> {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            settle(app).await;
+            if app
+                .editor
+                .ai_chat
+                .as_ref()
+                .is_some_and(|chat| chat.turns.len() >= count)
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .context("chat did not receive the expected answer")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_renders_chinese_markdown_with_theme_styles_and_keeps_code_literal() -> Result<()> {
+    use helix_view::graphics::Modifier;
+
+    let answer = "### 逻辑说明\n\n**重点**在于 `token_id`。\n\n- 检查输入\n- 返回结果\n\n```python\n    # **literal**\n    value = fn(**kwargs)\n```";
+    let (endpoint, mut requests, task) = server(0, vec![reply(answer)]).await;
+    let source = "source_marker\n";
+    let (mut app, _file) = app(endpoint, source)?;
+    let mut colors: toml::Value = toml::from_str(include_str!("../../../theme.toml"))?;
+    let scopes = colors.as_table_mut().unwrap();
+    scopes.insert("markup.heading.3".into(), "#12ab34".into());
+    scopes.insert("markup.raw.inline".into(), "#ab1256".into());
+    app.editor.set_theme(colors.into())?;
+    app.test_resize(75, 50).await?;
+    keys(&mut app, "x:ai-explain<ret>").await?;
+    request(&mut requests).await?;
+    wait_for_turns(&mut app, 1).await?;
+    let rendered = screen(&app);
+    let compact: String = rendered.chars().filter(|c| !c.is_whitespace()).collect();
+    for visible in ["逻辑说明", "重点", "token_id", "检查输入", "返回结果"] {
+        assert!(compact.contains(visible), "{rendered}");
+    }
+    for delimiter in ["###", "**重点**", "`token_id`", "```"] {
+        assert!(
+            !compact.contains(delimiter),
+            "visible Markdown syntax {delimiter}:\n{rendered}"
+        );
+    }
+    let cells = &app.test_screen().content;
+    assert!(
+        cells.iter().any(|c| c.symbol.as_str() == "逻"
+            && Some(c.fg) == app.editor.theme.get("markup.heading.3").fg),
+        "{rendered}"
+    );
+    assert!(
+        cells
+            .iter()
+            .any(|c| c.symbol.as_str() == "重" && c.modifier.contains(Modifier::BOLD)),
+        "{rendered}"
+    );
+    assert!(
+        cells.iter().any(|c| c.symbol.as_str() == "_"
+            && Some(c.fg) == app.editor.theme.get("markup.raw.inline").fg),
+        "{rendered}"
+    );
+    if !rendered.contains("# **literal**") {
+        keys(&mut app, "<pagedown>").await?;
+    }
+    let code_screen = screen(&app);
+    assert!(code_screen.contains("    # **literal**"), "{code_screen}");
+    assert!(
+        code_screen.contains("    value = fn(**kwargs)"),
+        "{code_screen}"
+    );
+    assert_eq!(text(&app), source);
+    assert!(!current_ref!(app.editor).1.is_modified());
+    app.test_resize(19, 12).await?;
+    keys(&mut app, "<pageup><pagedown><esc>").await?;
+    assert_eq!(text(&app), source);
+    app.close().await;
+    task.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_collapses_only_explicit_optional_sections_and_toggles_them_on_a_narrow_screen(
+) -> Result<()> {
+    let answer = "结论：可以返回。\n\n## 更多细节\n\nOPTIONAL-SENTINEL";
+    let (endpoint, mut requests, task) = server(0, vec![reply(answer)]).await;
+    let source = "source_marker\n";
+    let (mut app, _file) = app(endpoint, source)?;
+    app.test_resize(32, 24).await?;
+    keys(&mut app, "x:ai-ask explain<ret>").await?;
+    request(&mut requests).await?;
+    wait_for_turns(&mut app, 1).await?;
+    keys(&mut app, "<pagedown>").await?;
+    let folded = screen(&app);
+    assert!(!folded.contains("OPTIONAL-SENTINEL"), "{folded}");
+    for hint in ["Enter 追问", "Alt+D", "Esc"] {
+        assert!(folded.contains(hint), "{folded}");
+    }
+    keys(&mut app, "<A-d><pagedown>").await?;
+    assert!(
+        screen(&app).contains("OPTIONAL-SENTINEL"),
+        "{}",
+        screen(&app)
+    );
+    keys(&mut app, "<A-d><pagedown>").await?;
+    assert!(!screen(&app).contains("OPTIONAL-SENTINEL"));
+    assert_eq!(text(&app), source);
+    keys(&mut app, "<esc>").await?;
+    app.close().await;
+    task.await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_starts_at_the_new_answer_and_preserves_an_older_passage_while_waiting() -> Result<()>
+{
+    let first = (0..18)
+        .map(|i| format!("OLD-{i:02}"))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let next = (0..18)
+        .map(|i| format!("SECOND-{i:02}"))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let (endpoint, mut requests, task) =
+        server(650, vec![reply(&first), reply(&next), reply("THIRD")]).await;
+    let (mut app, _file) = app(endpoint, "source_marker\n")?;
+    app.test_resize(48, 22).await?;
+    keys(&mut app, "x:ai-ask first<ret>").await?;
+    request(&mut requests).await?;
+    wait_for_turns(&mut app, 1).await?;
+    assert!(screen(&app).contains("OLD-00"), "{}", screen(&app));
+    assert!(!screen(&app).contains("OLD-17"));
+    keys(&mut app, "second<ret>").await?;
+    request(&mut requests).await?;
+    wait_for_turns(&mut app, 2).await?;
+    assert!(screen(&app).contains("SECOND-00"), "{}", screen(&app));
+    assert!(!screen(&app).contains("SECOND-17"));
+    keys(&mut app, "third<ret>").await?;
+    request(&mut requests).await?;
+    keys(&mut app, "<pageup><pageup>").await?;
+    let before = screen(&app);
+    let anchor = before
+        .lines()
+        .find(|line| line.contains("SECOND-"))
+        .context("no previous answer in viewport")?
+        .to_owned();
+    let row = before.lines().position(|line| line == anchor).unwrap();
+    wait_for_turns(&mut app, 3).await?;
+    assert_eq!(screen(&app).lines().nth(row), Some(anchor.as_str()));
+    keys(&mut app, "<esc>").await?;
+    app.close().await;
+    task.await?;
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -180,6 +349,12 @@ async fn generate_command_previews_at_cursor_then_accepts_as_one_undoable_edit()
     let (endpoint, mut requests, task) = server(0, vec![reply("generated()\n  second()")]).await;
     let source = "before\n左right\nafter\n";
     let (mut app, file) = app(endpoint, source)?;
+    let mut colors: toml::Value = toml::from_str(include_str!("../../../theme.toml"))?;
+    let scopes = colors.as_table_mut().unwrap();
+    scopes.insert("ui.virtual.ai-completion".into(), "#a62234".into());
+    scopes.insert("ui.virtual.ai-generate".into(), "#35b282".into());
+    app.editor.set_theme(colors.into())?;
+    let preview_style = app.editor.theme.get("ui.virtual.ai-generate");
     let version = current_ref!(app.editor).1.version();
     keys(&mut app, "jl:ai-generate add call<ret>").await?;
     let generation = request(&mut requests).await?;
@@ -200,7 +375,7 @@ async fn generate_command_previews_at_cursor_then_accepts_as_one_undoable_edit()
     for (x, y, symbol) in [(inner.x + 3, first, "e"), (inner.x + 2, first + 1, "s")] {
         let cell = app.test_screen().get(x, y as u16).unwrap();
         assert_eq!(cell.symbol.as_str(), symbol);
-        assert_eq!(cell.fg, helix_view::graphics::Color::Gray);
+        assert_eq!(Some(cell.fg), preview_style.fg);
     }
     assert!(
         rendered

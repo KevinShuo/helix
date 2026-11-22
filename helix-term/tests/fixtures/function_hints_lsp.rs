@@ -8,6 +8,7 @@ use std::{
 fn main() {
     let log_path = std::env::args_os().nth(1).unwrap();
     let symbols_path = std::path::Path::new(&log_path).with_extension("symbols");
+    let definition_path = std::path::Path::new(&log_path).with_extension("definition");
     let mut log = OpenOptions::new()
         .create(true)
         .append(true)
@@ -49,7 +50,9 @@ fn main() {
         }
         let result = if message.contains("\"method\":\"initialize\"") {
             assert!(message.contains("\"hierarchicalDocumentSymbolSupport\":true"));
-            r#"{"capabilities":{"documentSymbolProvider":true,"referencesProvider":true,"textDocumentSync":1}}"#.to_owned()
+            r#"{"capabilities":{"documentSymbolProvider":true,"definitionProvider":true,"referencesProvider":true,"textDocumentSync":1}}"#.to_owned()
+        } else if message.contains("\"method\":\"textDocument/definition\"") {
+            std::fs::read_to_string(&definition_path).unwrap_or_else(|_| "null".into())
         } else if message.contains("\"method\":\"textDocument/documentSymbol\"") {
             std::fs::read_to_string(&symbols_path).unwrap_or_else(|_| {
                 r#"[{"name":"hello","kind":12,"range":{"start":{"line":0,"character":0},"end":{"line":1,"character":12}},"selectionRange":{"start":{"line":0,"character":4},"end":{"line":0,"character":9}}}]"#.to_owned()

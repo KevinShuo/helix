@@ -3298,21 +3298,49 @@ fn ai_test_cancel(
 
 fn ai_explain(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
     if event == PromptEvent::Validate {
-        crate::handlers::ai_chat::open(
-            cx,
-            Some(if args.is_empty() {
-                crate::handlers::ai_chat::DEFAULT_QUESTION.into()
-            } else {
-                args.join(" ")
-            }),
-        )?;
+        use helix_view::ai_chat::Scope;
+        let scope = args.first().and_then(Scope::parse);
+        let question = args
+            .iter()
+            .skip(usize::from(scope.is_some()))
+            .map(|s| s.as_ref())
+            .collect::<Vec<_>>()
+            .join(" ");
+        crate::handlers::ai_chat::open(cx, scope.unwrap_or(Scope::Auto), false, Some(question))?;
     }
     Ok(())
 }
 
 fn ai_ask(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
     if event == PromptEvent::Validate {
-        crate::handlers::ai_chat::open(cx, (!args.is_empty()).then(|| args.join(" ")))?;
+        crate::handlers::ai_chat::open(
+            cx,
+            helix_view::ai_chat::Scope::Auto,
+            false,
+            (!args.is_empty()).then(|| args.join(" ")),
+        )?;
+    }
+    Ok(())
+}
+
+fn ai_optimize(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    use helix_view::ai_chat::Scope;
+    if event == PromptEvent::Validate {
+        let scope = Scope::parse(args.first().unwrap_or("auto"))
+            .context("请选择 selection、function 或 file")?;
+        crate::handlers::ai_chat::open(cx, scope, true, Some(String::new()))?;
+    }
+    Ok(())
+}
+
+fn ai_optimize_preview(
+    cx: &mut compositor::Context,
+    args: Args,
+    event: PromptEvent,
+) -> anyhow::Result<()> {
+    if event == PromptEvent::Validate {
+        let index = args.first().unwrap_or("1").parse::<usize>().context("请输入建议编号")?;
+        crate::handlers::ai_optimize::preview(cx, index)?;
     }
     Ok(())
 }
@@ -3425,7 +3453,9 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
     TypableCommand { name: "next-problem", aliases: &[], doc: "Go to next problem, optionally setting source, minimum severity and scope filters", fun: problem_commands::next, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
     TypableCommand { name: "previous-problem", aliases: &[], doc: "Go to previous problem, optionally setting source, minimum severity and scope filters", fun: problem_commands::previous, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
     TypableCommand { name: "problems", aliases: &[], doc: "Show filtered live diagnostics and compiler problems", fun: problem_commands::list, completer: CommandCompleter::none(), signature: problem_commands::SIGNATURE },
-    TypableCommand { name: "ai-explain", aliases: &[], doc: "Explain selected code and ask follow-up questions", fun: ai_explain, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-explain", aliases: &[], doc: "Explain the selection, function, file, or project (optional scope and question)", fun: ai_explain, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-optimize", aliases: &[], doc: "Review the selection, function, or file for improvements", fun: ai_optimize, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(1)), ..Signature::DEFAULT } },
+    TypableCommand { name: "ai-optimize-preview", aliases: &[], doc: "Preview an optimization suggestion by number", fun: ai_optimize_preview, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(1)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-ask", aliases: &[], doc: "Ask a question about the current selection", fun: ai_ask, completer: CommandCompleter::none(), signature: Signature { positionals: (0, None), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-explain-show", aliases: &[], doc: "Resume the latest selection conversation", fun: ai_explain_show, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },
     TypableCommand { name: "ai-explain-cancel", aliases: &[], doc: "Stop the current answer and keep the conversation", fun: ai_explain_cancel, completer: CommandCompleter::none(), signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT } },

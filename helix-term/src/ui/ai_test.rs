@@ -1,5 +1,11 @@
 //! Scrollable multi-file test/build preview and execution report.
-use super::ai_preview_text::{scroll_key, PreviewText};
+mod report;
+
+use super::ai_preview_text::{
+    display,
+    review::{ReviewLines, ReviewText, Role},
+    scroll_key_by, PreviewText,
+};
 use crate::{
     compositor::{Component, Context, Event, EventResult},
     ctrl,
@@ -10,6 +16,7 @@ use helix_core::Position;
 use helix_view::{
     ai_test::Operation,
     graphics::{CursorKind, Rect},
+    input::KeyEvent,
     Editor,
 };
 use tui::{
@@ -19,56 +26,44 @@ use tui::{
 
 pub(crate) struct Preview {
     id: u64,
-    text: PreviewText,
+    file: String,
+    text: ReviewText,
+    log: Option<PreviewText>,
+    show_log: bool,
+    log_scroll: usize,
     scroll: usize,
+    page_rows: usize,
     applied: bool,
-}
-
-fn diff(before: &str, after: &str) -> String {
-    let old = before.lines().collect::<Vec<_>>();
-    let new = after.lines().collect::<Vec<_>>();
-    let prefix = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
-    let suffix = old[prefix..]
-        .iter()
-        .rev()
-        .zip(new[prefix..].iter().rev())
-        .take_while(|(a, b)| a == b)
-        .count();
-    let start = prefix.saturating_sub(3);
-    let mut out = format!(
-        "@@ -{},{} +{},{} @@\n",
-        start + 1,
-        old.len() - suffix - start,
-        start + 1,
-        new.len() - suffix - start
-    );
-    for line in &old[start..prefix] {
-        out.push_str(&format!(" {line}\n"));
-    }
-    for line in &old[prefix..old.len() - suffix] {
-        out.push_str(&format!("-{line}\n"));
-    }
-    for line in &new[prefix..new.len() - suffix] {
-        out.push_str(&format!("+{line}\n"));
-    }
-    for line in new[new.len() - suffix..].iter().take(3) {
-        out.push_str(&format!(" {line}\n"));
-    }
-    out
 }
 
 impl Preview {
     pub(crate) fn new(op: &Operation) -> Self {
-        let mut text = format!(
-            "目标：{}\n测试：{}\n",
-            op.target.name,
-            op.project.test_file.display()
-        );
-        for note in op.project.notes.iter().chain(op.assumptions.iter()) {
-            text.push_str(&format!("• {note}\n"));
+        let path = op
+            .project
+            .test_file
+            .strip_prefix(&op.project.root)
+            .unwrap_or(&op.project.test_file);
+        let file = display(&path.to_string_lossy());
+        let mut text = ReviewLines::default();
+        if let Some(report) = &op.report {
+            if !op.applied {
+                text.push(Role::Note, "上次运行");
+            }
+            report::summary(report, &mut text);
         }
+        text.push(
+            Role::Heading,
+            &format!("目标   {}", display(&op.target.name)),
+        );
         if !op.applied {
-            text.push_str("\n以下修改将应用到缓冲区，保存后才能运行。\n");
+            text.push(
+                Role::Note,
+                if op.repairs > 0 {
+                    "修复待确认 · 接受后请保存并重新运行"
+                } else {
+                    "待确认 · 接受后请保存并运行"
+                },
+            );
             if let Some(changes) = &op.changes {
                 for change in changes {
                     let path = change
@@ -77,31 +72,59 @@ impl Preview {
                         .strip_prefix(&op.project.root)
                         .unwrap_or(&change.before.path)
                         .display();
-                    text.push_str(&format!(
-                        "\n--- {path}\n+++ {path}\n{}",
-                        diff(change.before.text.as_deref().unwrap_or(""), &change.after)
-                    ));
+                    let kind = if change.before.text.is_none() {
+                        "新建"
+                    } else {
+                        "修改"
+                    };
+                    text.push(
+                        Role::Heading,
+                        &format!("\n{kind}   {}", display(&path.to_string())),
+                    );
+                    text.diff(
+                        change.before.text.as_deref().unwrap_or(""),
+                        &change.after,
+                        false,
+                    );
                 }
             }
+        } else {
+            text.push(Role::Note, &file);
+            if op.report.is_none() {
+                text.push(Role::Text, "修改已接受 · 保存后可运行测试");
+            }
         }
-        if let Some(report) = &op.report {
-            text.push_str(&format!(
-                "\n运行阶段：{:?}；结果：{}\n{}\n",
-                report.stage,
-                if report.success {
-                    "通过（不代表覆盖充分）"
-                } else {
-                    "失败"
-                },
-                report.log
-            ));
+        for note in op.project.notes.iter().chain(op.assumptions.iter()) {
+            text.push(Role::Note, &format!("• {note}"));
         }
         Self {
             id: op.id,
-            text: PreviewText::new(text),
+            file,
+            text: text.finish(),
+            log: op.report.as_ref().map(|r| PreviewText::new(r.log.clone())),
+            show_log: false,
+            log_scroll: 0,
             scroll: 0,
+            page_rows: 1,
             applied: op.applied,
         }
+    }
+
+    fn read_key(&mut self, key: KeyEvent) -> bool {
+        if key == key!('l') && self.log.is_some() {
+            self.show_log = !self.show_log;
+            return true;
+        }
+        if self.show_log && !self.applied && key == key!(Enter) {
+            self.show_log = false;
+            return true;
+        }
+        let scroll = if self.show_log {
+            &mut self.log_scroll
+        } else {
+            &mut self.scroll
+        };
+        scroll_key_by(key, scroll, self.page_rows)
     }
 }
 
@@ -120,7 +143,7 @@ impl Component for Preview {
         let Event::Key(key) = event else {
             return EventResult::Consumed(None);
         };
-        if scroll_key(*key, &mut self.scroll) {
+        if self.read_key(*key) {
             return EventResult::Consumed(None);
         }
         let applied = self.applied;
@@ -153,8 +176,21 @@ impl Component for Preview {
         if area.area() == 0 {
             return;
         }
-        let width = area.width.saturating_sub(4).clamp(1, 120).min(area.width);
-        let height = area.height.saturating_sub(4).clamp(1, 40).min(area.height);
+        let margin = if area.width < 50 || area.height < 12 {
+            0
+        } else {
+            4
+        };
+        let width = area
+            .width
+            .saturating_sub(margin)
+            .clamp(1, 100)
+            .min(area.width);
+        let height = area
+            .height
+            .saturating_sub(margin)
+            .clamp(1, 40)
+            .min(area.height);
         let popup = Rect::new(
             area.x + area.width.saturating_sub(width) / 2,
             area.y + area.height.saturating_sub(height) / 2,
@@ -162,25 +198,130 @@ impl Component for Preview {
             height,
         );
         surface.clear_with(popup, cx.editor.theme.get("ui.popup"));
-        let title = if self.applied {
-            " AI 测试结果 | Enter/Esc 关闭 · v 再次运行 "
+        let scope = if self.show_log {
+            "测试 · 原始输出"
+        } else if self.applied {
+            "测试结果"
         } else {
-            " AI 单元测试 | Enter 接受全部 · Esc 取消 · r 重试 "
+            "测试修改"
         };
-        let block = Block::default().borders(Borders::ALL).title(title);
-        let body = block.inner(popup);
+        let title = format!(" {scope} · {} ", self.file);
+        let style = cx.editor.theme.get("ui.popup");
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title.as_str())
+            .style(style);
+        let inner = block.inner(popup);
         block.render(popup, surface);
-        self.text.render(
-            body,
-            surface,
-            cx.editor.theme.get("ui.popup"),
-            &mut self.scroll,
-        );
+        let mut hints = Vec::new();
+        let short = inner.width < 28;
+        if self.applied {
+            hints.extend([
+                if short {
+                    "Esc 关闭"
+                } else {
+                    "Enter/Esc 关闭"
+                },
+                if short { "v 重跑" } else { "v 再次运行" },
+            ]);
+        } else {
+            hints.extend([
+                if self.show_log {
+                    if short {
+                        "Enter 返回"
+                    } else {
+                        "Enter 返回修改"
+                    }
+                } else if short {
+                    "Enter 接受"
+                } else {
+                    "Enter 接受全部"
+                },
+                "Esc 取消",
+            ]);
+        }
+        if self.log.is_some() {
+            hints.push(if self.show_log {
+                "l 返回"
+            } else if short {
+                "l 日志"
+            } else {
+                "l 原始输出"
+            });
+        }
+        if !self.applied {
+            hints.push("r 重试");
+        }
+        let footer = footer_lines(&hints, inner.width);
+        let visible = inner.height.saturating_sub(1).min(footer.len() as u16);
+        let body = inner.clip_bottom(visible);
+        self.page_rows = usize::from(body.height.saturating_sub(1).max(1));
+        if let Some(log) = self.log.as_mut().filter(|_| self.show_log) {
+            log.render(body, surface, style, &mut self.log_scroll);
+        } else {
+            self.text
+                .render(body, surface, &cx.editor.theme, &mut self.scroll);
+        }
+        for (i, line) in footer.iter().take(visible as usize).enumerate() {
+            surface.set_stringn(
+                inner.x,
+                inner.bottom() - visible + i as u16,
+                line,
+                inner.width as usize,
+                style.patch(cx.editor.theme.get("ui.text.info")),
+            );
+        }
     }
     fn cursor(&self, _area: Rect, _editor: &Editor) -> (Option<Position>, CursorKind) {
         (Some(Position::new(0, 0)), CursorKind::Hidden)
     }
     fn id(&self) -> Option<&'static str> {
         Some("ai-test")
+    }
+}
+
+fn footer_lines(hints: &[&str], width: u16) -> Vec<String> {
+    use helix_core::unicode::width::UnicodeWidthStr;
+    let mut rows = vec![String::new()];
+    for hint in hints {
+        let row = rows.last_mut().unwrap();
+        if !row.is_empty() && row.width() + 2 + hint.width() > width as usize {
+            rows.push(hint.to_string());
+        } else {
+            if !row.is_empty() {
+                row.push_str("  ");
+            }
+            row.push_str(hint);
+        }
+    }
+    rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repair_log_returns_to_review_before_enter_can_accept() {
+        let mut preview = Preview {
+            id: 1,
+            file: "test.py".into(),
+            text: ReviewLines::default().finish(),
+            log: Some(PreviewText::new("compiler output".into())),
+            show_log: false,
+            log_scroll: 0,
+            scroll: 5,
+            page_rows: 3,
+            applied: false,
+        };
+        assert!(preview.read_key(key!('l')) && preview.show_log);
+        assert!(preview.read_key(key!(PageDown)));
+        assert_eq!((preview.log_scroll, preview.scroll), (3, 5));
+        assert!(preview.read_key(key!(Enter)) && !preview.show_log);
+        assert!(!preview.read_key(key!(Enter)));
+        assert!(preview.read_key(key!('l')) && preview.show_log);
+        assert_eq!(preview.log_scroll, 3);
+        assert!(preview.read_key(key!('l')) && !preview.show_log);
+        assert_eq!(preview.scroll, 5);
     }
 }

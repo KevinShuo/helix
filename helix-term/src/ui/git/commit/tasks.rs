@@ -109,6 +109,7 @@ impl CommitWorkspace {
             self.draft.invalidate();
         }
         self.snapshot = Some(snapshot);
+        self.diff_preview = None;
         self.selected.clear();
         self.reasons.clear();
         self.row = 0;
@@ -319,6 +320,7 @@ impl CommitWorkspace {
                             })
                             .collect();
                         p.reasons = r.reasons;
+                        p.diff_preview = None;
                         p.message = if r.excluded > 0 {
                             format!(
                                 "推荐完成，已排除 {} 项不可自动暂存的建议；请核对文件说明后手动调整",
@@ -482,6 +484,7 @@ impl CommitWorkspace {
                             Ok((_, Some(out))) => {
                                 p.draft = Draft::default();
                                 p.draft.text = out.message;
+                                p.draft_preview = None;
                             }
                             _ => {}
                         }

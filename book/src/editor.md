@@ -233,7 +233,10 @@ candidate files, Tab switches file/diff navigation, and j/k or arrows move.
 file without changing disk contents. Existing staged files are all included;
 remaining edits of partially staged files are never selected automatically.
 
-`g` generates a message from the actual staged diff. `l` switches Chinese/English
+`g` generates a message from the actual staged diff. The draft highlights its
+subject and wraps long lines to fit the pane. Press `[` or `]` to page through
+the draft. Visual wraps do not introduce newlines in the commit message.
+`l` switches Chinese/English
 for the next generation while preserving the draft. `e` edits the message;
 Enter inserts a newline, Escape or Ctrl-s ends editing. `i` edits the intent.
 `C` commits the reviewed Conventional Commits message. `v` explicitly retains a
@@ -858,18 +861,49 @@ To persist the setting, set `enabled` in `[editor.ai]`. It
 defaults to `true` and respects each feature's individual switch. Turning it off
 cancels current AI work and releases this editor's local model leases.
 
-#### Ask about selected code
+#### Explain code and review improvements
 
-Select one contiguous range and run `:ai-explain` for an explanation, or
-`:ai-ask` to type a question first. Both commands also accept a question on
+Run `:ai-explain` to explain the selection or the function at the cursor.
+Use `:ai-explain file` for the current buffer, including unsaved changes, or
+`:ai-explain project` for an overview of the project's entry points and modules.
+Project questions send bounded source excerpts to the active explanation provider.
+The provider can ask the editor to search that project, read source lines and
+look up symbol definitions or references. An open buffer's language server can
+resolve a symbol at a specific source location. Text matches are reported as
+candidates when semantic results are unavailable.
+In a selection, function or file conversation, press Alt-e to enable project
+lookup for that conversation. This also works after receiving an optimization
+review. Alt-e sends the question in the input box, or investigates the previous
+question when the input is empty. Follow-ups can retrieve more evidence from
+the same root. The panel shows the current step. Press Alt-t to read the lookup
+history, Alt-t or Esc to return, and Alt-g to jump to an available source
+location. Ctrl-c stops an active lookup in either view.
+Local providers and DeepSeek both use the active explanation model. The
+conversation keeps the original code snapshot. A later lookup sees open
+buffers as they stood at the start of that turn, including unsaved edits, so
+its evidence can refer to a newer version of the code.
+Use `:ai-ask` to type a question first. Both commands also accept a question on
 the command line, for example `:ai-ask What happens if the input is empty?`.
-Press Enter to send a follow-up about the same selection snapshot. Page Up and
+Answers use the current theme for headings, emphasis, line references and code.
+The reading pane wraps at 80 terminal columns and narrows with the window.
+When an answer contains an optional section titled `补充示例` or `更多细节`,
+Alt-d expands or folds those details in the visible turn. New replies open
+at the beginning of the current exchange. Paging back holds your reading position.
+Press Enter to send a follow-up about the same scope. Page Up and
 Page Down scroll the conversation. Esc hides it while a pending answer
 continues. Use `:ai-explain-show` to reopen the most recent conversation after
 editing or switching files. Starting another `:ai-ask` or `:ai-explain`
 replaces that conversation. Ctrl-c in the conversation or
 `:ai-explain-cancel` from the editor stops a pending answer and restores the
 question for editing.
+
+Run `:ai-optimize` to review the selection or enclosing function, or
+`:ai-optimize file` to review a file that fits the model context. The review
+uses the explanation model and lists up to three suggestions. Ask follow-up
+questions in the same conversation. To inspect an edit, use the preview action
+or run `:ai-optimize-preview 2` for suggestion 2. Enter applies the displayed
+edit, Esc returns to the conversation, and a single undo restores the original
+text. If the document has changed, run the review again.
 
 #### Generate code at the cursor
 
@@ -881,6 +915,10 @@ as `:ai-generate Add a check for an empty input`. The generated text appears
 in grey at the cursor. Press Shift-Right to insert it in one undo step,
 `Ctrl-\` to refine the draft, or Esc to discard it. Moving the cursor or changing
 the document discards the preview. Use `:ai-generate-cancel` to stop a request.
+Themes can set `ui.virtual.ai-generate` for prompted code and
+`ui.virtual.ai-completion` for automatic suggestions. Generated code inherits
+the completion style if it has no separate style. Both can use the theme's
+inlay hint color.
 
 Both features default to off. Enable them in session settings or persist them
 in your configuration. In automatic mode a shared desktop selection applies
@@ -1648,6 +1686,10 @@ in its buffer. `:ai-test-show` reopens the latest preview/report;
 `:ai-test-cancel` cancels generation or the running process tree and preserves
 accepted modifications. Changes to source, configuration, supporting files or
 unsaved buffers prevent applying/running stale results.
+
+Run reports open on the failing stage or the test summary. When the runner
+supplies them, the summary includes failed test names and assertion values.
+Press `l` to switch between the summary and collected output.
 
 Generated Python files are named `tests/test_helix_<function>_<identity>.py`;
 the interpreter comes from `python`, the project's `.venv`/`venv`, the active

@@ -89,10 +89,8 @@ fn git(root: &Path, args: &[&str]) {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn function_hints_flow_from_lsp_and_git_to_virtual_text() -> anyhow::Result<()> {
-    let temp = tempfile::tempdir()?;
-    let executable = temp.path().join(if cfg!(windows) {
+pub(super) fn fixture_config(directory: &Path) -> anyhow::Result<(String, std::path::PathBuf)> {
+    let executable = directory.join(if cfg!(windows) {
         "fixture.exe"
     } else {
         "fixture"
@@ -112,16 +110,7 @@ async fn function_hints_flow_from_lsp_and_git_to_virtual_text() -> anyhow::Resul
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let text = format!(
-        "def hello():\n    return 1\n\nhello()\nhello()\n{}",
-        "\n".repeat(80)
-    );
-    let file = temp.path().join("example.py");
-    fs::write(&file, &text)?;
-    git(temp.path(), &["init", "--initial-branch=main"]);
-    git(temp.path(), &["add", "example.py"]);
-    git(temp.path(), &["commit", "-m", "Define hello"]);
-    let log_path = temp.path().join("requests.jsonl");
+    let log_path = directory.join("requests.jsonl");
     let overrides = format!(
         r#"
 [language-server.function-hints-fixture]
@@ -134,6 +123,22 @@ language-servers = ["function-hints-fixture"]
         toml::Value::String(executable.to_string_lossy().into_owned()),
         toml::Value::String(log_path.to_string_lossy().into_owned())
     );
+    Ok((overrides, log_path))
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn function_hints_flow_from_lsp_and_git_to_virtual_text() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let (overrides, log_path) = fixture_config(temp.path())?;
+    let text = format!(
+        "def hello():\n    return 1\n\nhello()\nhello()\n{}",
+        "\n".repeat(80)
+    );
+    let file = temp.path().join("example.py");
+    fs::write(&file, &text)?;
+    git(temp.path(), &["init", "--initial-branch=main"]);
+    git(temp.path(), &["add", "example.py"]);
+    git(temp.path(), &["commit", "-m", "Define hello"]);
     let mut config = test_config();
     config.editor.lsp.enable = true;
     config.editor.function_hints = FunctionHintsConfig {

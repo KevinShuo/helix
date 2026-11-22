@@ -464,9 +464,19 @@ async fn preview(app: &mut Application) -> anyhow::Result<()> {
     anyhow::bail!("AI preview did not open: {}", screen(app))
 }
 
-// Test buffers represent the second cell of a wide glyph as whitespace.
+// A terminal overwrites the following column when it draws a wide glyph.
+// The test backend retains that hidden cell when applying a differential draw.
 fn compact_screen(app: &Application) -> String {
-    screen(app).chars().filter(|c| !c.is_whitespace()).collect()
+    let buffer = app.test_screen();
+    let mut visible = String::new();
+    for row in buffer.content.chunks(buffer.area.width.max(1) as usize) {
+        let mut x = 0;
+        while let Some(cell) = row.get(x) {
+            visible.extend(cell.symbol.chars().filter(|c| !c.is_whitespace()));
+            x += cell.width().max(1);
+        }
+    }
+    visible
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

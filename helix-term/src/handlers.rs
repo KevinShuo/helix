@@ -16,7 +16,12 @@ use self::document_colors::DocumentColorsHandler;
 use self::document_links::DocumentLinksHandler;
 
 pub(crate) mod ai;
+mod ai_agent;
+mod ai_agent_tools;
+mod ai_agent_lsp;
 pub(crate) mod ai_chat;
+pub(crate) mod ai_scope;
+pub(crate) mod ai_optimize;
 pub(crate) mod ai_generate;
 pub(crate) mod ai_commit;
 pub mod ai_completion;

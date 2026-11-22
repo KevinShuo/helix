@@ -50,7 +50,7 @@ impl Component for Panel {
             }
             return self.settings.handle_event(event, cx);
         }
-        if matches!(*key, key!(Tab) | key!('s')) {
+        if *key == key!('s') || (*key == key!(Tab) && !self.actions.has_scopes()) {
             self.show_settings = true;
             self.settings.message.clear();
             return EventResult::Consumed(None);
@@ -321,7 +321,7 @@ impl Component for Settings {
                 AiFeature::Commit => "Git 提交",
                 AiFeature::Test => "测试生成",
                 AiFeature::Merge => "合并辅助",
-                AiFeature::Explain => "选区问答",
+                AiFeature::Explain => "代码问答与优化",
                 AiFeature::Generate => "光标生成",
             };
             let state = if enabled { "开" } else { "关" };

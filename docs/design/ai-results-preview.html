@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helix · AI 结果阅读设计</title>
+<style>
+  :root {color-scheme:dark; --bg:#32302f; --dark:#282828; --text:#ebdbb2; --muted:#bdae93; --line:#665c54; --accent:#fabd2f; --code:#8ec07c; --ref:#83a598}
+  * {box-sizing:border-box}
+  body {margin:0; background:#211f1e; color:var(--text); font:16px/1.65 Consolas,"Microsoft YaHei UI",monospace}
+  main {max-width:1010px; margin:6vh auto; padding:0 clamp(12px,4vw,46px)}
+  header, .bar, footer {display:flex; align-items:baseline; gap:.65em 1em; flex-wrap:wrap}
+  header {margin-bottom:1.2em; justify-content:space-between}
+  h1 {font-size:1.12rem; font-weight:600; margin:0}
+  select,button {font:inherit; color:var(--text); background:var(--dark); border:1px solid var(--line); padding:.2em .6em}
+  :focus-visible {outline:2px solid var(--accent); outline-offset:2px}
+  label,footer,.context,.role {color:var(--muted); font-size:.9rem}
+  article {border:1px solid var(--line); background:var(--bg)}
+  .bar,footer {padding:.55em 1.2em; background:var(--dark)}
+  .bar {border-bottom:1px solid var(--line)}
+  .bar strong {color:var(--accent)}
+  .context {overflow-wrap:anywhere}
+  .page {padding:1.2em clamp(14px,3vw,36px); max-height:68vh; overflow:auto; scrollbar-color:var(--line) var(--bg)}
+  .body {max-width:80ch}
+  p {margin:0 0 .9em; overflow-wrap:anywhere}
+  h2 {font-size:1em; margin:.95em 0 .3em; color:var(--accent)}
+  .question {color:var(--muted); margin-bottom:1.15em}
+  code,pre {font-family:Consolas,"Courier New",monospace}
+  code,.kw {color:var(--code)}
+  pre {max-width:100%; overflow:auto; margin:.4em 0 .8em; padding:.7em 1em; border-left:2px solid var(--line); background:var(--dark); line-height:1.6; tab-size:4}
+  .line {display:grid; grid-template-columns:5em 1fr; gap:.7em; margin:.35em 0}
+  .ref {color:var(--ref); font-variant-numeric:tabular-nums}
+  .add,.pass {color:#b8bb26}
+  .del,.fail {color:#fb9c83}
+  .ghost {color:var(--muted); font-style:italic}
+  details {margin:.9em 0 0}
+  summary {color:var(--ref); cursor:pointer; width:fit-content}
+  footer {border-top:1px solid var(--line); justify-content:space-between}
+  kbd {font:inherit; color:var(--text)}
+  [hidden] {display:none}
+  @media(max-width:540px){body{font-size:14px}main{margin:3vh auto}.bar,footer{padding:.5em .8em}.line{grid-template-columns:4em 1fr}pre{padding:.55em}}
+</style>
+<main>
+  <header><h1>Helix · AI 阅读原型</h1>
+    <label>预览场景 <select id="scene">
+      <option value="ask">选区问答</option><option value="generate">光标处生成</option>
+      <option value="inline">行内补全</option><option value="doc">文档注释</option>
+      <option value="test">测试结果</option><option value="merge">冲突建议</option><option value="commit">提交说明</option>
+    </select></label>
+  </header>
+  <article><div class="bar"><strong id="title">选区问答</strong><span class="context" id="context">arrayQueue.hpp · 第 67–75 行</span></div>
+    <div class="page" id="page" tabindex="0" aria-label="示例结果">
+      <section class="body" id="ask" data-context="arrayQueue.hpp · 第 67–75 行">
+        <p class="question"><span class="role">你　</span>请解释这段代码的逻辑。</p>
+        <p><strong><code>growup()</code> 为队列扩容做了两步准备。</strong>它申请了一块两倍容量的数组，并算出了队首元素在旧数组里的位置。</p>
+        <div class="line"><span class="ref">第 70 行</span><span><code>new T[this-&gt;capacity * 2]</code> 分配新数组。已有元素仍在旧数组里。</span></div>
+        <div class="line"><span class="ref">第 71 行</span><span><code>(theFront + 1) % this-&gt;capacity</code> 计算起点。队首越过数组末尾时，下标会回到 0。</span></div>
+        <p style="margin-top:1em">这段选区里还看不到元素搬移、数组指针替换和容量更新。</p>
+        <details><summary>查看下标回绕示例</summary><p>假设容量为 5，<code>theFront</code> 为 4，那么队首下标是 <code>(4 + 1) % 5 = 0</code>。</p></details>
+      </section>
+      <section class="body" id="generate" hidden data-context="arrayQueue.hpp · 光标处 · 待确认">
+        <p class="question">生成需求　计算队首元素在环形数组中的下标。</p>
+        <pre><span class="kw">void</span> arrayQueue&lt;T&gt;::growup() {
+    <span class="ghost">const auto start = (theFront + 1) % this-&gt;capacity;</span>
+}</pre>
+        <p class="role">灰字是待插入内容。</p>
+      </section>
+      <section class="body" id="inline" hidden data-context="arrayQueue.hpp · 正在输入">
+        <pre><span class="kw">return</span> elements[<span class="ghost">start];</span></pre>
+      </section>
+      <section class="body" id="doc" hidden data-context="arrayQueue.hpp · front() · 待插入">
+        <pre>/// 返回队首元素的引用。
+/// 调用前须保证队列非空。</pre>
+      </section>
+      <section class="body" id="test" hidden data-context="arrayQueue_test.cpp · 示例运行">
+        <p><strong class="fail">1 项失败</strong>　<span class="pass">2 项通过</span></p>
+        <h2>队首下标在数组末尾回绕</h2>
+        <div class="line"><span class="ref">期望</span><code>0</code></div>
+        <div class="line"><span class="ref">实际</span><code>5</code></div>
+        <details><summary>查看原始输出</summary><pre>[ RUN      ] ArrayQueue.FrontWraps
+Expected equality of these values:
+  front_index()
+    Which is: 5
+  0
+[  FAILED  ] ArrayQueue.FrontWraps</pre></details>
+      </section>
+      <section class="body" id="merge" hidden data-context="arrayQueue.hpp · 冲突块 1 · 待确认">
+        <p>候选修改保留现有的队首偏移，并补上末尾回绕。</p>
+        <pre><span class="del">- const auto start = theFront + 1;</span>
+<span class="add">+ const auto start = (theFront + 1) % capacity;</span></pre>
+      </section>
+      <section class="body" id="commit" hidden data-context="Git · 提交信息草稿">
+        <pre>fix: 修复队首下标在数组末尾的回绕
+
+按容量对队首偏移取模，并补充末尾回绕的测试。</pre>
+      </section>
+    </div>
+    <footer><span id="hint">Enter 追问　 PgUp/PgDn 翻页　 Esc 收起</span><span>示例预览</span></footer>
+  </article>
+</main>
+<script>
+  const scenes = document.querySelector('#scene');
+  const hints = {
+    ask:'Enter 追问　 PgUp/PgDn 翻页　 Esc 收起',
+    generate:'Shift+Right 插入　 Ctrl+\\ 修改需求　 Esc 放弃',
+    inline:'光标后的灰字为补全建议',
+    doc:'Enter 插入　 r 重试　 Esc 取消',
+    test:'v 再次运行　 Esc 关闭',
+    merge:'Enter 接受　 r 重试　 Esc 取消',
+    commit:'编辑草稿后确认提交'
+  };
+  function showScene() {
+    const selected = document.getElementById(scenes.value);
+    for (const section of document.querySelectorAll('.body')) section.hidden = section !== selected;
+    document.getElementById('title').textContent = scenes.selectedOptions[0].textContent;
+    document.getElementById('context').textContent = selected.dataset.context;
+    document.getElementById('hint').textContent = hints[scenes.value];
+    document.getElementById('page').scrollTop = 0;
+  }
+  scenes.addEventListener('change', showScene);
+  showScene();
+</script>
+</html>
