@@ -376,3 +376,122 @@ pub(super) fn previous_problem(cx: &mut Context) {
 pub(super) fn problems_picker(_cx: &mut Context) {
     job::dispatch_blocking(picker);
 }
+
+/// Jump to the compiler error at the cursor's log line in a `*compilation*` buffer.
+/// Mirrors Emacs `M-x compile` / `<ret>` on a compiler output line.
+pub(super) fn open_problem_at_cursor(cx: &mut Context) {
+    let editor = &mut cx.editor;
+
+    // Verify we're in the compilation log buffer.
+    let log_doc_id = editor.problems.compilation.log_document;
+    let (view, doc) = current_ref!(editor);
+    if log_doc_id != Some(doc.id()) {
+        editor.set_error("Not in compilation log; use :compile-log to open it");
+        return;
+    }
+
+    let cursor = doc
+        .selection(view.id)
+        .primary()
+        .cursor(doc.text().slice(..));
+    let buffer_line = doc.text().char_to_line(cursor);
+
+    // The log buffer header occupies lines 0-4; raw compiler output starts at line 5.
+    // Format (from compilation::log_text):
+    //   line 0  "*compilation* — {status}"
+    //   line 1  "{cwd}"
+    //   line 2  "$ {command}"
+    //   line 3  "[output truncated…]" or ""
+    //   line 4  ""  (blank separator)
+    //   line 5+ raw compiler output
+    const HEADER_LINES: usize = 5;
+    if buffer_line < HEADER_LINES {
+        editor.set_error("Cursor is in the log header, not on a compiler output line");
+        return;
+    }
+    let log_line_idx = buffer_line - HEADER_LINES;
+
+    let run = match &editor.problems.compilation.current {
+        Some(r) => r,
+        None => {
+            editor.set_error("No compilation log available");
+            return;
+        }
+    };
+
+    let log_lines: Vec<&str> = run.log.lines().collect();
+    let Some(&current_text) = log_lines.get(log_line_idx) else {
+        editor.set_error("Log line out of range");
+        return;
+    };
+    let prev_text = log_line_idx
+        .checked_sub(1)
+        .and_then(|i| log_lines.get(i))
+        .copied();
+    let next_text = log_lines.get(log_line_idx + 1).copied();
+    let cwd = run.cwd.clone();
+
+    // Pass previous line first so the Rust 2-line pattern (error header → arrow line)
+    // works when the cursor is on the arrow (`  --> file:line:col`) line.
+    let problems = {
+        use crate::handlers::compilation::parser::Parser;
+        let mut p = Parser::new(cwd.clone());
+        if let Some(prev) = prev_text {
+            p.push(prev);
+        }
+        p.push(current_text)
+    };
+
+    // Lookahead fallback: cursor is on the Rust error header line; the location
+    // is on the following arrow line.
+    let problems = if problems.is_empty() {
+        if let Some(next) = next_text {
+            use crate::handlers::compilation::parser::Parser;
+            let mut p = Parser::new(cwd.clone());
+            p.push(current_text);
+            p.push(next)
+        } else {
+            problems
+        }
+    } else {
+        problems
+    };
+
+    // Python `  File "..."` fallback: cursor is directly on a frame line.
+    // The multi-line parser above only emits on the exception line, which may be
+    // several lines away; this lets the user jump to any individual frame with <ret>.
+    let problems = if problems.is_empty() {
+        use crate::handlers::compilation::parser::parse_single_line;
+        parse_single_line(&cwd, current_text)
+            .into_iter()
+            .collect::<Vec<_>>()
+    } else {
+        problems
+    };
+
+    if problems.is_empty() {
+        editor.set_error("No error location found on this line");
+        return;
+    }
+
+    let first = problems.into_iter().next().unwrap();
+
+    // Locate the problem in the run's list for accurate [n/total] status display.
+    let (index, problem, total) = {
+        let run = editor.problems.compilation.current.as_ref().unwrap();
+        let total = run.problems.len().max(1);
+        match run
+            .problems
+            .iter()
+            .enumerate()
+            .find(|(_, p)| p.path == first.path && p.range.start == first.range.start)
+        {
+            Some((i, p)) => (i, p.clone(), total),
+            None => (0, first, 1),
+        }
+    };
+
+    if let Err(err) = jump(editor, &problem, Action::Replace, index, total) {
+        editor.set_error(err.to_string());
+    }
+}

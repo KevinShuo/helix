@@ -20,10 +20,18 @@ static ARROW: LazyLock<Regex> =
 static ANSI: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)").unwrap()
 });
+static PYTHON_FILE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^\s+File "(.+)", line ([0-9]+)"#).unwrap());
+// Covers all built-in Python exception base classes and the common *Error/*Exception suffix.
+static PYTHON_EXC: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^([A-Za-z][A-Za-z0-9_.]*(?:Error|Exception|Warning|Interrupt|StopIteration|KeyboardInterrupt|SystemExit|GeneratorExit)): (.*)$").unwrap()
+});
 
-pub(super) struct Parser {
+pub(crate) struct Parser {
     cwd: PathBuf,
     pending: Option<(Severity, String)>,
+    /// Innermost `File "path", line N` frame of an in-flight Python traceback.
+    python_frame: Option<(PathBuf, u32)>,
 }
 
 fn level(value: &str) -> Severity {
@@ -79,20 +87,26 @@ fn problem(
 }
 
 impl Parser {
-    pub(super) fn new(cwd: PathBuf) -> Self {
-        Self { cwd, pending: None }
+    pub(crate) fn new(cwd: PathBuf) -> Self {
+        Self {
+            cwd,
+            pending: None,
+            python_frame: None,
+        }
     }
 
-    pub(super) fn push(&mut self, line: &str) -> Vec<Problem> {
+    pub(crate) fn push(&mut self, line: &str) -> Vec<Problem> {
         let clean = ANSI.replace_all(line.trim_end_matches('\r'), "");
         let line = clean.as_ref();
         if line.starts_with('{') {
             self.pending = None;
+            self.python_frame = None;
             return self.json(line);
         }
         for pattern in [&*MSVC, &*GCC] {
             if let Some(c) = pattern.captures(line) {
                 self.pending = None;
+                self.python_frame = None;
                 let Some(row) = coordinate(&c[2]) else {
                     return vec![];
                 };
@@ -113,6 +127,7 @@ impl Parser {
             }
         }
         if let Some(c) = RUST.captures(line) {
+            self.python_frame = None;
             self.pending = Some((
                 level(&c[1]),
                 match c.get(2) {
@@ -121,6 +136,7 @@ impl Parser {
                 },
             ));
         } else if let Some(c) = ARROW.captures(line) {
+            self.python_frame = None;
             if let Some((severity, message)) = self.pending.take() {
                 if let (Some(row), Some(col)) = (coordinate(&c[2]), coordinate(&c[3])) {
                     return problem(
@@ -136,8 +152,30 @@ impl Parser {
                     .collect();
                 }
             }
+        } else if let Some(c) = PYTHON_FILE.captures(line) {
+            // Track the innermost frame; keep updating on each successive File line.
+            self.pending = None;
+            if let Some(row) = coordinate(&c[2]) {
+                self.python_frame = absolute(&self.cwd, &c[1]).map(|p| (p, row));
+            }
+        } else if let Some(c) = PYTHON_EXC.captures(line) {
+            // The exception line that closes the traceback — emit from the stored frame.
+            if let Some((path, row)) = self.python_frame.take() {
+                self.pending = None;
+                let position = lsp::Position::new(row, 0);
+                return vec![Problem {
+                    path,
+                    range: lsp::Range::new(position, position),
+                    encoding: OffsetEncoding::Utf8,
+                    severity: Severity::Error,
+                    source: ProblemSource::Build,
+                    origin: "python".into(),
+                    message: format!("{}: {}", &c[1], &c[2]),
+                }];
+            }
         } else if !line.trim().is_empty() && !line.starts_with(' ') && !line.starts_with('\t') {
             self.pending = None;
+            self.python_frame = None;
         }
         vec![]
     }
@@ -207,6 +245,43 @@ impl Parser {
             })
             .collect()
     }
+}
+
+/// Parse a single line for a directly locatable error (GCC, MSVC, or a Python
+/// `  File "..."` frame). Used by interactive cursor-jump in the log buffer where
+/// multi-line context is unavailable.
+pub(crate) fn parse_single_line(cwd: &Path, raw: &str) -> Option<Problem> {
+    let clean = ANSI.replace_all(raw.trim_end_matches('\r'), "");
+    let line = clean.as_ref();
+    for pattern in [&*MSVC, &*GCC] {
+        if let Some(c) = pattern.captures(line) {
+            let row = coordinate(&c[2])?;
+            let col = c.get(3).map_or(Some(0), |c| coordinate(c.as_str()))?;
+            return problem(
+                cwd,
+                &c[1],
+                row,
+                col,
+                level(&c[4]),
+                c[5].to_owned(),
+                OffsetEncoding::Utf8,
+            );
+        }
+    }
+    if let Some(c) = PYTHON_FILE.captures(line) {
+        let row = coordinate(&c[2])?;
+        let position = lsp::Position::new(row, 0);
+        return Some(Problem {
+            path: absolute(cwd, &c[1])?,
+            range: lsp::Range::new(position, position),
+            encoding: OffsetEncoding::Utf8,
+            severity: Severity::Info,
+            source: ProblemSource::Build,
+            origin: "python".into(),
+            message: String::new(),
+        });
+    }
+    None
 }
 
 #[cfg(test)]
@@ -327,5 +402,55 @@ mod tests {
         ] {
             assert!(parser.push(line).is_empty(), "{line}");
         }
+    }
+
+    #[test]
+    fn python_traceback_innermost_frame_and_exception() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("pkg")).unwrap();
+        let mut parser = Parser::new(dir.path().to_owned());
+        for line in [
+            "Traceback (most recent call last):",
+            &format!(r#"  File "pkg/main.py", line 10, in <module>"#),
+            "    result = compute(x)",
+            &format!(r#"  File "pkg/inner.py", line 5, in compute"#),
+            "    return helper(val)",
+            &format!(r#"  File "pkg/deep.py", line 2, in helper"#),
+            "    raise ValueError(f\"bad value: 42\")",
+            "ValueError: bad value: 42",
+        ] {
+            let entries = parser.push(line);
+            if line.starts_with("ValueError") {
+                assert_eq!(entries.len(), 1);
+                let p = &entries[0];
+                assert!(p.path.ends_with("pkg/deep.py"));
+                assert_eq!(p.range.start.line, 1);
+                assert_eq!(p.severity, Severity::Error);
+                assert_eq!(p.message, "ValueError: bad value: 42");
+                assert_eq!(p.origin, "python");
+            } else {
+                assert!(entries.is_empty(), "{line}");
+            }
+        }
+    }
+
+    #[test]
+    fn python_frame_cleared_by_unrelated_toplevel_output() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut parser = Parser::new(dir.path().to_owned());
+        assert!(parser.push(r#"  File "foo.py", line 3, in bar"#).is_empty());
+        assert!(parser.push("Compiling something else").is_empty());
+        assert!(parser.push("ValueError: late exception").is_empty());
+    }
+
+    #[test]
+    fn python_single_line_frame_jump() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = parse_single_line(dir.path(), r#"  File "run.py", line 12, in main"#)
+            .expect("frame should parse");
+        assert!(p.path.ends_with("run.py"));
+        assert_eq!(p.range.start.line, 11);
+        assert!(parse_single_line(dir.path(), "Traceback (most recent call last):").is_none());
+        assert!(parse_single_line(dir.path(), "ValueError: message").is_none());
     }
 }

@@ -33,12 +33,21 @@ directory (set with `:cd` if necessary):
 :compile-cancel
 ```
 
+To recall a build command, type `:compile` and press ↑. Press ↑ again for an
+older build or ↓ for a newer one. Moving past the newest build restores what
+you were typing. You can edit a recalled command before pressing Enter to run
+it. This history lasts for the current editor session.
+
 Builds run asynchronously and never save buffers or move the editing cursor
 automatically. Use `:compile-log` for a read-only split containing streamed stdout,
 stderr, command, directory and exit status. Cancellation stops the owned process
 tree while retaining received output. Recompile remembers both command and working
 directory; a second concurrent build is rejected. Failed shell startup preserves
 the previous results; after successful startup a new run replaces them.
+
+In the compilation log, press Enter on a diagnostic to open its source location.
+For Python tracebacks, you can also press Enter on a `File` line to open that
+frame. The problems list reports the innermost frame for recognized exceptions.
 
 GCC/Clang `file:line[:column]`, MSVC `file(line[,column])`, Rust human diagnostics
 and Cargo JSON primary spans become navigable entries. Unlocated failures such

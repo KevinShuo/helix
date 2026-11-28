@@ -131,6 +131,7 @@
 | `next_problem` | Go to next problem across files | normal: `` ]q ``, select: `` ]q `` |
 | `previous_problem` | Go to previous problem across files | normal: `` [q ``, select: `` [q `` |
 | `problems_picker` | Open problems picker | normal: `` <space>E ``, select: `` <space>E `` |
+| `open_problem_at_cursor` | Jump to compiler error at cursor line in compilation log | normal: `` <ret> ``, select: `` <ret> `` |
 | `last_picker` | Open last picker | normal: `` <space>' ``, select: `` <space>' `` |
 | `insert_at_line_start` | Insert at start of line | normal: `` I ``, select: `` I `` |
 | `insert_at_line_end` | Insert at end of line | normal: `` A ``, select: `` A `` |

@@ -18,7 +18,7 @@ use helix_stdx::{
 };
 use helix_vcs::{FileChange, Hunk};
 pub use lsp::*;
-use problems::{next_problem, previous_problem, problems_picker};
+use problems::{next_problem, open_problem_at_cursor, previous_problem, problems_picker};
 pub use syntax::*;
 use tui::{
     text::{Span, Spans},
@@ -468,6 +468,7 @@ impl MappableCommand {
         next_problem, "Go to next problem across files",
         previous_problem, "Go to previous problem across files",
         problems_picker, "Open problems picker",
+        open_problem_at_cursor, "Jump to compiler error at cursor line in compilation log",
         last_picker, "Open last picker",
         insert_at_line_start, "Insert at start of line",
         insert_at_line_end, "Insert at end of line",

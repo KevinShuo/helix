@@ -337,6 +337,77 @@ async fn wait_build(
     Ok(())
 }
 
+async fn assert_prompt(app: &mut Application, expected: &str) -> anyhow::Result<()> {
+    app.test_resize(80, 24).await?;
+    let screen = app.test_screen();
+    let line = screen
+        .content
+        .chunks_exact(screen.area.width as usize)
+        .next_back()
+        .unwrap()
+        .iter()
+        .map(|cell| cell.symbol.as_str())
+        .collect::<String>();
+    assert_eq!(line.trim_end(), expected);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn compile_history_arrows_recall_builds_and_restore_the_draft() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new().build()?;
+    for command in ["echo first", "echo second"] {
+        keys(&mut app, &format!(":compile {command}<ret>")).await?;
+        wait_build(&mut app, |app| {
+            app.editor
+                .problems
+                .compilation
+                .current
+                .as_ref()
+                .is_some_and(|run| !run.running)
+        })
+        .await?;
+    }
+    keys(&mut app, ":compile-log<ret>").await?;
+    keys(&mut app, ":echo unrelated<ret>").await?;
+    keys(&mut app, ":compile echo café").await?;
+    assert_prompt(&mut app, ":compile echo café").await?;
+
+    for (key, expected) in [
+        ("<up>", ":compile echo second"),
+        ("<up>", ":compile echo first"),
+        ("<up>", ":compile echo first"),
+        ("<down>", ":compile echo second"),
+        ("<down>", ":compile echo café"),
+        ("<down>", ":compile echo café"),
+    ] {
+        keys(&mut app, key).await?;
+        assert_prompt(&mut app, expected).await?;
+    }
+
+    keys(&mut app, "<esc>:compile<up> edited<ret>").await?;
+    let run = app.editor.problems.compilation.current.as_ref().unwrap();
+    assert_eq!(run.command, "echo second edited");
+    keys(&mut app, ":quit-all!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn compile_history_without_builds_preserves_input() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new().build()?;
+    keys(
+        &mut app,
+        ":echo unrelated<ret>:compile <down><up>echo draft",
+    )
+    .await?;
+    assert_prompt(&mut app, ":compile echo draft").await?;
+    keys(&mut app, "<esc>:<up>").await?;
+    assert_prompt(&mut app, ":echo unrelated").await?;
+    keys(&mut app, "<esc>:quit-all!<ret>").await?;
+    app.close().await;
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn compilation_streams_both_pipes_and_navigates_without_stealing_focus() -> anyhow::Result<()>
 {

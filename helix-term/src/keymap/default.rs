@@ -370,6 +370,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "C-a" => increment,
         "C-x" => decrement,
+
+        "ret" => open_problem_at_cursor,
     });
     let mut select = normal.clone();
     select.merge_nodes(keymap!({ "Select mode"

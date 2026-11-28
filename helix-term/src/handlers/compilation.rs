@@ -1,5 +1,5 @@
 //! Asynchronous compilation and compiler diagnostics.
-mod parser;
+pub(crate) mod parser;
 mod runner;
 
 use anyhow::{ensure, Context, Result};

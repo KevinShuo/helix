@@ -43,6 +43,7 @@ pub struct Prompt {
     selection: Option<usize>,
     history_register: Option<char>,
     history_pos: Option<usize>,
+    compile_history_draft: Option<String>,
     completion_fn: CompletionFn,
     callback_fn: CallbackFn,
     pub doc_fn: DocFn,
@@ -100,6 +101,7 @@ impl Prompt {
             selection: None,
             history_register,
             history_pos: None,
+            compile_history_draft: None,
             completion_fn: Box::new(completion_fn),
             callback_fn: Box::new(callback_fn),
             doc_fn: Box::new(|_| None),
@@ -170,6 +172,12 @@ impl Prompt {
     }
 
     pub fn recalculate_completion(&mut self, editor: &Editor) {
+        if self.history_register == Some(':')
+            && (self.compile_history_draft.take().is_some()
+                || helix_core::command_line::split(&self.line).0 == "compile")
+        {
+            self.history_pos = None;
+        }
         self.exit_selection();
         self.completion = (self.completion_fn)(editor, &self.line);
     }
@@ -361,30 +369,57 @@ impl Prompt {
     ) {
         (self.callback_fn)(cx, &self.line, PromptEvent::Abort);
         let mut values = match cx.editor.registers.read(register, cx.editor) {
-            Some(values) if values.len() > 0 => values.rev(),
+            Some(values) if values.len() > 0 => values.rev().enumerate(),
             _ => return,
         };
 
-        let end = values.len().saturating_sub(1);
-
-        let index = match direction {
-            CompletionDirection::Forward => self.history_pos.map_or(0, |i| i + 1),
-            CompletionDirection::Backward => self
-                .history_pos
-                .unwrap_or_else(|| values.len())
-                .saturating_sub(1),
-        }
-        .min(end);
-
-        self.line = values.nth(index).unwrap().to_string();
-        // Appease the borrow checker.
+        // A history walk started at a bare ':' keeps browsing every command,
+        // even when it happens to land on a compilation.
+        let scoped = register == ':'
+            && helix_core::command_line::split(&self.line).0 == "compile"
+            && (self.history_pos.is_none() || self.compile_history_draft.is_some());
+        let len = values.len();
+        let entry = if scoped {
+            let cursor = self.history_pos.unwrap_or(len);
+            let mut builds = values.by_ref().filter(|(_, line)| {
+                let (command, args, _) = helix_core::command_line::split(line);
+                command == "compile" && !args.trim().is_empty()
+            });
+            match direction {
+                CompletionDirection::Backward => builds.rfind(|(i, _)| *i < cursor),
+                CompletionDirection::Forward => builds.find(|(i, _)| *i > cursor),
+            }
+        } else {
+            let index = match direction {
+                CompletionDirection::Forward => self.history_pos.map_or(0, |i| i + 1),
+                CompletionDirection::Backward => self.history_pos.unwrap_or(len).saturating_sub(1),
+            };
+            values.nth(index.min(len - 1))
+        };
         drop(values);
 
-        self.history_pos = Some(index);
-
+        let (index, draft) = if let Some((i, value)) = entry {
+            let draft = scoped.then(|| {
+                self.compile_history_draft
+                    .take()
+                    .unwrap_or_else(|| self.line.clone())
+            });
+            self.line = value.into_owned();
+            (Some(i), draft)
+        } else if matches!(direction, CompletionDirection::Forward) {
+            let Some(draft) = self.compile_history_draft.take() else {
+                return;
+            };
+            self.line = draft;
+            (None, None)
+        } else {
+            return;
+        };
         self.move_end();
         (self.callback_fn)(cx, &self.line, PromptEvent::Update);
         self.recalculate_completion(cx.editor);
+        self.history_pos = index;
+        self.compile_history_draft = draft;
     }
 
     pub fn change_completion_selection(&mut self, direction: CompletionDirection) {
